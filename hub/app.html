@@ -1,0 +1,2490 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Server Hub</title>
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; scrollbar-width: none; }
+*::-webkit-scrollbar { display: none; }
+:root {
+  --bg:        #0d1117;
+  --panel:     #161b22;
+  --panel2:    #1c2128;
+  --border:    #21262d;
+  --border2:   #30363d;
+  --text:      #e6edf3;
+  --muted:     #7d8590;
+  --muted2:    #4d5566;
+  --accent:    #58a6ff;
+  --acdim:     #1f3a5c;
+  --green:     #3fb950;
+  --gdim:      #0d2a12;
+  --red:       #f85149;
+  --rdim:      #3d1a1a;
+  --yellow:    #d29922;
+  --ydim:      #2d2008;
+  --teal:      #39d0c4;
+  --mono:      'Cascadia Code','Fira Code','JetBrains Mono',Consolas,monospace;
+  --ui:        -apple-system,BlinkMacSystemFont,'Segoe UI',system-ui,sans-serif;
+  --r:         5px;
+  --t:         .14s ease;
+  --cat-w:     52px;
+  --sec-w:     176px;
+  --wpanel-w:  176px;
+  --wdock-w:   52px;
+  --top-h:     36px;
+  --tab-h:     34px;
+  --bk-h:      28px;
+  --foot-h:    24px;
+}
+body { font-family:var(--ui); background:var(--bg); color:var(--text); height:100vh; display:flex; flex-direction:column; overflow:hidden; font-size:13px; }
+
+/* ── TOP BAR ────────────────────────────────────── */
+#top { height:var(--top-h); background:var(--panel); border-bottom:1px solid var(--border); display:flex; align-items:center; padding:0 10px; gap:12px; flex-shrink:0; font-size:11px; font-family:var(--mono); }
+.brand { font-size:13px; font-weight:700; color:var(--accent); }
+#sdot { width:7px; height:7px; border-radius:50%; background:var(--muted2); flex-shrink:0; transition:background .4s; }
+#sdot.on { background:var(--green); box-shadow:0 0 5px var(--green); }
+#sdot.off { background:var(--red); }
+.chip { color:var(--muted); display:flex; gap:4px; white-space:nowrap; }
+.chip span { color:var(--text); }
+#top-r { margin-left:auto; display:flex; align-items:center; gap:8px; }
+.tbtn { background:none; border:1px solid var(--border2); border-radius:var(--r); color:var(--muted); cursor:pointer; padding:2px 8px; font-size:11px; font-family:var(--mono); transition:border-color var(--t),color var(--t); }
+.tbtn:hover { border-color:var(--accent); color:var(--text); }
+
+/* ── WORKSPACE TAB BAR ──────────────────────────── */
+#wsbar { height:var(--tab-h); background:var(--panel2); border-bottom:1px solid var(--border); display:flex; align-items:stretch; overflow-x:auto; overflow-y:hidden; flex-shrink:0; scrollbar-width:none; padding-left:calc(var(--cat-w) + var(--sec-w)); padding-right:calc(22px + var(--wdock-w)); }
+#wsbar::-webkit-scrollbar { display:none; }
+
+/* ── BOOKMARK BAR ───────────────────────────────── */
+#bkbar { height:var(--bk-h); background:var(--panel); border-bottom:1px solid var(--border); display:flex; align-items:center; padding:0 8px 0 calc(var(--cat-w) + 8px); gap:3px; flex-shrink:0; overflow-x:auto; scrollbar-width:none; }
+#bkbar::-webkit-scrollbar { display:none; }
+.bk-chip { display:flex; align-items:center; gap:4px; padding:2px 8px 2px 6px; border-radius:10px; background:var(--panel2); border:1px solid var(--border); font-size:10px; color:var(--muted); cursor:pointer; white-space:nowrap; flex-shrink:0; transition:border-color var(--t),color var(--t); }
+.bk-chip:hover { border-color:var(--accent); color:var(--text); }
+.bk-chip-x { color:var(--muted2); margin-left:2px; font-size:9px; }
+.bk-chip-x:hover { color:var(--red); }
+.bk-add { display:flex; align-items:center; gap:3px; padding:2px 7px; border-radius:10px; border:1px dashed var(--border2); font-size:10px; color:var(--muted2); cursor:pointer; white-space:nowrap; flex-shrink:0; transition:border-color var(--t),color var(--t); background:none; }
+.bk-add:hover { border-color:var(--accent); color:var(--accent); }
+.ws-tab { display:flex; align-items:center; gap:6px; padding:0 12px; font-size:12px; color:var(--muted); cursor:pointer; border-bottom:2px solid transparent; white-space:nowrap; flex-shrink:0; min-width:90px; max-width:160px; transition:color var(--t),background var(--t),border-color var(--t); user-select:none; }
+.ws-tab:hover { color:var(--text); background:rgba(255,255,255,.04); }
+.ws-tab.active { color:var(--text); border-bottom-color:var(--accent); background:var(--bg); }
+.ws-tab-icon { font-size:13px; flex-shrink:0; }
+.ws-tab-title { overflow:hidden; text-overflow:ellipsis; flex:1; }
+.ws-tab-close { width:15px; height:15px; border-radius:3px; border:none; background:none; color:var(--muted2); cursor:pointer; font-size:11px; display:flex; align-items:center; justify-content:center; flex-shrink:0; transition:background var(--t),color var(--t); }
+.ws-tab-close:hover { background:var(--border2); color:var(--red); }
+#ws-add { display:flex; align-items:center; padding:0 10px; color:var(--muted); cursor:pointer; font-size:16px; flex-shrink:0; border:none; background:none; transition:color var(--t); }
+#ws-add:hover { color:var(--text); }
+
+/* ── MAIN AREA ──────────────────────────────────── */
+#main { flex:1; display:flex; overflow:hidden; }
+
+/* ── CATEGORY NAV (far left) ────────────────────── */
+#catnav { width:var(--cat-w); background:var(--panel); border-right:1px solid var(--border); display:flex; flex-direction:column; align-items:center; padding:8px 0; gap:2px; flex-shrink:0; overflow-y:auto; scrollbar-width:none; }
+#catnav::-webkit-scrollbar { display:none; }
+.cat-item { width:40px; height:44px; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:2px; border-radius:var(--r); cursor:pointer; color:var(--muted); transition:background var(--t),color var(--t); border:none; background:none; position:relative; }
+.cat-item:hover { background:var(--panel2); color:var(--text); }
+.cat-item.active { background:var(--acdim); color:var(--accent); }
+.cat-item.active::after { content:''; position:absolute; left:0; top:50%; transform:translateY(-50%); width:3px; height:26px; background:var(--accent); border-radius:0 3px 3px 0; }
+.cat-icon { font-size:18px; line-height:1; }
+.cat-label { font-size:8px; font-weight:600; letter-spacing:.3px; text-transform:uppercase; }
+.cat-sep { width:28px; height:1px; background:var(--border); margin:3px 0; flex-shrink:0; }
+
+/* ── SECTION NAV scrollbar hidden ──────────────── */
+#secnav-body { scrollbar-width:none; }
+#secnav-body::-webkit-scrollbar { display:none; }
+
+/* ── SECTION NAV (inner left) ───────────────────── */
+#secnav { width:var(--sec-w); background:var(--panel); border-right:1px solid var(--border); display:flex; flex-direction:column; flex-shrink:0; overflow:hidden; transition:width var(--t); }
+#secnav.collapsed { width:22px; }
+#secnav.collapsed #secnav-title,
+#secnav.collapsed #secnav-body { display:none; }
+#secnav.collapsed #secnav-header { padding:8px 0; justify-content:center; align-items:flex-start; }
+#secnav-header { padding:10px 12px 6px; display:flex; align-items:center; justify-content:space-between; flex-shrink:0; }
+#secnav-title { font-size:10px; font-weight:700; letter-spacing:.6px; text-transform:uppercase; color:var(--muted); }
+#secnav-toggle { background:none; border:none; color:var(--muted2); cursor:pointer; font-size:13px; padding:2px 4px; transition:color var(--t); border-radius:3px; }
+#secnav-toggle:hover { color:var(--text); background:var(--panel2); }
+#secnav-body { flex:1; overflow-y:auto; padding:0 6px 8px; }
+.sec-group { margin-bottom:10px; }
+.sec-group-label { font-size:9px; font-weight:700; letter-spacing:.5px; text-transform:uppercase; color:var(--muted2); padding:6px 6px 4px; }
+.sec-item { display:flex; align-items:center; gap:8px; padding:6px 8px; border-radius:var(--r); cursor:pointer; font-size:12px; color:var(--muted); transition:background var(--t),color var(--t); }
+.sec-item:hover { background:var(--panel2); color:var(--text); }
+.sec-item.active { background:var(--panel2); color:var(--accent); }
+.sec-item-icon { font-size:13px; flex-shrink:0; width:18px; text-align:center; }
+.sec-item-badge { margin-left:auto; font-size:9px; font-weight:600; padding:1px 5px; border-radius:8px; }
+.badge-up  { background:var(--gdim); color:var(--green); }
+.badge-off { background:var(--panel); color:var(--muted); }
+.badge-na  { background:var(--ydim); color:var(--yellow); }
+.sec-add { display:flex; align-items:center; gap:6px; padding:5px 8px; border-radius:var(--r); cursor:pointer; font-size:11px; color:var(--muted2); transition:color var(--t); border:none; background:none; width:100%; }
+.sec-add:hover { color:var(--accent); }
+.sec-star { background:none; border:none; color:var(--muted2); cursor:pointer; font-size:12px; padding:0 2px; margin-left:auto; flex-shrink:0; opacity:0; transition:opacity var(--t),color var(--t); line-height:1; }
+.sec-item:hover .sec-star { opacity:1; }
+.sec-star.fav { color:var(--yellow); opacity:1; }
+
+/* ── RIGHT WIDGET PANEL (inner right, collapsible) ── */
+#wpanel { width:var(--wpanel-w); background:var(--panel); border-left:1px solid var(--border); display:flex; flex-direction:column; flex-shrink:0; overflow:hidden; transition:width var(--t); }
+#wpanel.collapsed { width:22px; }
+#wpanel.collapsed #wpanel-title, #wpanel.collapsed #wpanel-body, #wpanel.collapsed #wpanel-tabs { display:none; }
+#wpanel.collapsed #wpanel-header { padding:8px 0; justify-content:center; align-items:flex-start; }
+#wpanel-header { padding:6px 8px 0; display:flex; align-items:center; justify-content:space-between; flex-shrink:0; border-bottom:1px solid var(--border); gap:4px; }
+#wpanel-title { font-size:10px; font-weight:700; letter-spacing:.6px; text-transform:uppercase; color:var(--muted); }
+#wpanel-tabs { display:flex; gap:1px; padding-bottom:0; }
+.wp-tab { background:none; border:none; border-bottom:2px solid transparent; color:var(--muted); font-size:10px; font-family:var(--ui); font-weight:600; padding:4px 8px 5px; cursor:pointer; letter-spacing:.3px; transition:all var(--t); white-space:nowrap; border-radius:3px 3px 0 0; }
+.wp-tab:hover { color:var(--text); }
+.wp-tab.active { color:var(--accent); border-bottom-color:var(--accent); }
+#wpanel-toggle { background:none; border:none; color:var(--muted2); cursor:pointer; font-size:13px; padding:2px 4px; transition:color var(--t); border-radius:3px; }
+#wpanel-toggle:hover { color:var(--text); background:var(--panel2); }
+#wpanel-body { flex:1; overflow-y:auto; scrollbar-width:none; padding:0 6px 8px; }
+#wpanel-body::-webkit-scrollbar { display:none; }
+.w-type-item { display:flex; align-items:center; gap:8px; padding:7px 8px; border-radius:var(--r); cursor:pointer; font-size:12px; color:var(--muted); transition:background var(--t),color var(--t); }
+.w-type-item:hover { background:var(--panel2); color:var(--text); }
+.w-active-section { margin-top:10px; }
+.w-active-item { display:flex; align-items:center; gap:6px; padding:5px 8px; border-radius:var(--r); font-size:11px; color:var(--muted); background:var(--panel2); margin-bottom:3px; }
+.w-active-item .wa-title { flex:1; }
+.wa-btn { background:none; border:none; color:var(--muted2); cursor:pointer; font-size:10px; padding:1px 4px; border-radius:3px; }
+.wa-btn:hover { background:var(--border2); color:var(--text); }
+
+/* ── RIGHT WIDGET DOCK (far right, always visible) ── */
+#wdock { width:var(--wdock-w); background:var(--panel); border-left:1px solid var(--border); display:flex; flex-direction:column; align-items:center; padding:8px 0; gap:2px; flex-shrink:0; overflow-y:auto; scrollbar-width:none; }
+#wdock::-webkit-scrollbar { display:none; }
+.wdock-item { width:40px; height:44px; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:2px; border-radius:var(--r); cursor:pointer; color:var(--muted); transition:background var(--t),color var(--t); border:none; background:none; position:relative; }
+.wdock-item:hover { background:var(--panel2); color:var(--text); }
+.wdock-item.active { background:rgba(57,208,196,.1); color:var(--teal); }
+.wdock-item.active::after { content:''; position:absolute; right:0; top:50%; transform:translateY(-50%); width:3px; height:26px; background:var(--teal); border-radius:3px 0 0 3px; }
+.wdock-icon { font-size:18px; line-height:1; }
+.wdock-label { font-size:7.5px; font-weight:600; letter-spacing:.3px; text-transform:uppercase; }
+.wdock-sep { width:28px; height:1px; background:var(--border); margin:3px 0; flex-shrink:0; }
+
+/* ── WIDGET LAYER (always on top of everything) ── */
+#widget-layer { position:fixed; inset:0; pointer-events:none; z-index:100; overflow:hidden; }
+.widget { position:absolute; pointer-events:all; background:var(--panel); border:1px solid var(--border2); border-radius:7px; box-shadow:0 12px 40px rgba(0,0,0,.7); display:flex; flex-direction:column; min-width:260px; min-height:180px; }
+.widget.minimized .widget-body { display:none; }
+.widget-hdr { height:28px; background:var(--panel2); border-bottom:1px solid var(--border); border-radius:7px 7px 0 0; display:flex; align-items:center; padding:0 6px 0 10px; cursor:grab; gap:6px; user-select:none; flex-shrink:0; }
+.widget-hdr:active { cursor:grabbing; }
+.widget-hdr-title { flex:1; font-size:11px; font-weight:600; color:var(--muted); }
+.widget-hdr-btns { display:flex; gap:2px; }
+.whb { width:14px; height:14px; border-radius:3px; border:none; background:none; color:var(--muted2); cursor:pointer; font-size:10px; display:flex; align-items:center; justify-content:center; }
+.whb:hover { background:var(--border2); color:var(--text); }
+.widget-body { flex:1; overflow:hidden; border-radius:0 0 7px 7px; position:relative; }
+.widget-resize { position:absolute; bottom:0; right:0; width:12px; height:12px; cursor:se-resize; }
+.widget-resize::after { content:''; position:absolute; bottom:2px; right:2px; width:6px; height:6px; border-right:2px solid var(--border2); border-bottom:2px solid var(--border2); }
+
+/* Terminal widget */
+.wterm-out { flex:1; background:#010409; padding:8px; font-family:var(--mono); font-size:10.5px; overflow-y:auto; white-space:pre-wrap; word-break:break-all; line-height:1.55; height:0; }
+.wterm-row { display:flex; gap:4px; align-items:center; padding:4px 6px; background:var(--panel2); border-top:1px solid var(--border); flex-shrink:0; }
+.wterm-inp { flex:1; background:var(--bg); border:1px solid var(--border); border-radius:3px; color:var(--text); font-family:var(--mono); font-size:10.5px; padding:3px 6px; }
+.wterm-inp:focus { outline:none; border-color:var(--accent); }
+
+/* Whiteboard widget */
+.wboard { width:100%; height:100%; position:relative; overflow:hidden; cursor:crosshair; background:#0a0f16; }
+.wboard canvas { position:absolute; inset:0; }
+.sticky { position:absolute; width:130px; min-height:90px; background:#2a2408; border:1px solid #5a4a0a; border-radius:4px; padding:6px 8px; font-family:var(--ui); font-size:11px; color:#e6d080; cursor:move; user-select:none; resize:both; overflow:auto; line-height:1.5; box-shadow:2px 4px 12px rgba(0,0,0,.4); }
+.sticky[contenteditable=true]:focus { outline:none; border-color:#d29922; }
+.sticky-del { position:absolute; top:3px; right:4px; font-size:9px; color:#5a4a0a; cursor:pointer; line-height:1; }
+.sticky-del:hover { color:var(--red); }
+.wboard-toolbar { position:absolute; top:6px; left:6px; display:flex; gap:4px; z-index:5; }
+.wbt { padding:3px 8px; border-radius:3px; border:1px solid var(--border2); background:rgba(22,27,34,.9); color:var(--muted); font-size:10px; cursor:pointer; }
+.wbt:hover { color:var(--text); border-color:var(--accent); }
+.wbt.active { color:var(--accent); border-color:var(--accent); background:var(--acdim); }
+.wbt-color { width:20px; height:20px; border-radius:3px; border:2px solid var(--border2); cursor:pointer; }
+
+/* Stats widget */
+.wstats { padding:10px; display:flex; flex-direction:column; gap:8px; overflow-y:auto; height:100%; }
+.stat-row { display:flex; flex-direction:column; gap:3px; }
+.stat-label { font-size:9px; font-weight:700; text-transform:uppercase; letter-spacing:.5px; color:var(--muted); display:flex; justify-content:space-between; }
+.stat-bar { height:4px; background:var(--panel2); border-radius:2px; overflow:hidden; }
+.stat-fill { height:100%; border-radius:2px; background:var(--accent); transition:width .4s; }
+.stat-val { font-family:var(--mono); font-size:11px; color:var(--text); }
+
+/* ── WORKSPACE AREA ─────────────────────────────── */
+#wsarea { flex:1; display:flex; flex-direction:column; overflow:hidden; position:relative; }
+.workspace { flex:1; display:none; overflow:hidden; }
+.workspace.active { display:flex; }
+
+/* ── PANE GRID ──────────────────────────────────── */
+.pane-grid { flex:1; display:grid; overflow:hidden; gap:2px; background:var(--border); }
+.pane-grid.l1  { grid-template: 1fr / 1fr; }
+.pane-grid.l2h { grid-template: 1fr / 1fr 1fr; }
+.pane-grid.l2v { grid-template: 1fr 1fr / 1fr; }
+.pane-grid.l4  { grid-template: 1fr 1fr / 1fr 1fr; }
+
+/* ── PANE ───────────────────────────────────────── */
+.pane { display:flex; flex-direction:column; background:var(--bg); overflow:hidden; }
+.pane-bar { height:30px; background:var(--panel2); border-bottom:1px solid var(--border); display:flex; align-items:center; padding:0 6px; gap:4px; flex-shrink:0; }
+.pane-view-btn { background:none; border:none; color:var(--muted); cursor:pointer; font-size:12px; font-family:var(--ui); display:flex; align-items:center; gap:5px; padding:2px 6px; border-radius:3px; transition:background var(--t),color var(--t); }
+.pane-view-btn:hover { background:var(--panel); color:var(--text); }
+.pane-view-btn .pv-icon { font-size:13px; }
+.pane-split-btns { margin-left:auto; display:flex; gap:2px; }
+.psb { background:none; border:none; color:var(--muted2); cursor:pointer; font-size:11px; padding:2px 4px; border-radius:3px; transition:background var(--t),color var(--t); }
+.psb:hover { background:var(--panel); color:var(--text); }
+.pane-body { flex:1; overflow:hidden; position:relative; }
+
+/* ── DESK MODE ──────────────────────────────────── */
+#desk-overlay { display:none; position:fixed; inset:0; z-index:48;
+  background-color:rgba(5,10,18,.9);
+  background-image:radial-gradient(circle, rgba(88,166,255,.07) 1px, transparent 1px);
+  background-size:24px 24px;
+  backdrop-filter:blur(8px);
+  -webkit-backdrop-filter:blur(8px); }
+body.desk-mode #desk-overlay { display:block; }
+body.desk-mode #widget-layer { z-index:60; }
+#desk-exit { display:none; position:fixed; top:12px; right:16px; z-index:70;
+  background:rgba(22,27,34,.95); border:1px solid var(--border2); border-radius:20px;
+  color:var(--muted); font-size:11px; padding:5px 14px; cursor:pointer;
+  font-family:var(--ui); transition:border-color var(--t),color var(--t); }
+#desk-exit:hover { border-color:var(--accent); color:var(--text); }
+body.desk-mode #desk-exit { display:flex; align-items:center; gap:6px; }
+#desk-btn { display:flex; align-items:center; gap:5px; }
+
+/* ── PANE PICKER MENU + POPUPS ──────────────────── */
+#picker, #tab-ctx { display:none; position:fixed; z-index:200; background:var(--panel); border:1px solid var(--border2); border-radius:var(--r); box-shadow:0 8px 24px rgba(0,0,0,.5); width:210px; padding:6px; max-height:min(340px,calc(100vh - 80px)); overflow-y:auto; }
+#picker.show, #tab-ctx.show { display:block; }
+.pick-item { display:flex; align-items:center; gap:8px; padding:7px 10px; border-radius:4px; cursor:pointer; font-size:12px; color:var(--muted); transition:background var(--t),color var(--t); }
+.pick-item:hover { background:var(--panel2); color:var(--text); }
+.pick-sep { height:1px; background:var(--border); margin:4px 0; }
+.pick-section { font-size:9px; font-weight:700; letter-spacing:.5px; text-transform:uppercase; color:var(--muted2); padding:4px 10px 2px; }
+
+/* ── VIEW CONTENTS ──────────────────────────────── */
+/* Iframe */
+.view-iframe { width:100%; height:100%; border:none; }
+.iframe-err { display:flex; flex-direction:column; align-items:center; justify-content:center; height:100%; gap:10px; color:var(--muted); }
+.iframe-err h3 { color:var(--text); }
+
+/* Dashboard */
+.view-dash { padding:14px; overflow-y:auto; height:100%; }
+.grp-label { font-size:10px; font-weight:700; letter-spacing:.7px; text-transform:uppercase; color:var(--muted); margin:12px 0 7px; }
+.svc-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(140px,1fr)); gap:6px; }
+.svc-card { background:var(--panel); border:1px solid var(--border); border-radius:var(--r); padding:9px 11px; cursor:pointer; transition:border-color var(--t); position:relative; min-height:66px; }
+.svc-card:hover { border-color:var(--accent); }
+.svc-card.dim { opacity:.5; cursor:default; }
+.svc-card.dim:hover { border-color:var(--border); }
+.sc-name { font-size:12px; font-weight:600; }
+.sc-desc { font-size:10px; color:var(--muted); margin-top:2px; }
+.sc-port { font-family:var(--mono); font-size:9px; color:var(--muted2); margin-top:5px; }
+.sc-status { position:absolute; top:7px; right:7px; }
+
+/* Terminal */
+.view-term { display:flex; flex-direction:column; height:100%; }
+.term-out { flex:1; background:#010409; padding:10px; font-family:var(--mono); font-size:11.5px; overflow-y:auto; white-space:pre-wrap; word-break:break-all; line-height:1.6; }
+.term-in-row { display:flex; gap:6px; align-items:center; padding:6px 8px; background:var(--panel); border-top:1px solid var(--border); flex-shrink:0; }
+.term-prompt { font-family:var(--mono); font-size:11px; color:var(--teal); white-space:nowrap; }
+.term-inp { flex:1; background:var(--panel2); border:1px solid var(--border2); border-radius:var(--r); color:var(--text); font-family:var(--mono); font-size:11.5px; padding:4px 8px; }
+.term-inp:focus { outline:none; border-color:var(--accent); }
+.qcmds { padding:5px 8px 6px; display:flex; flex-wrap:wrap; gap:4px; background:var(--panel); border-top:1px solid var(--border); flex-shrink:0; }
+.qc { font-family:var(--mono); font-size:10px; padding:2px 7px; border:1px solid var(--border2); border-radius:var(--r); background:var(--panel2); color:var(--muted); cursor:pointer; }
+.qc:hover { color:var(--text); border-color:var(--accent); }
+.tl-cmd  { color:var(--teal); }
+.tl-out  { color:#c9d1d9; }
+.tl-err  { color:var(--red); }
+.tl-info { color:var(--muted); font-style:italic; }
+
+/* Logs */
+.view-logs { display:flex; flex-direction:column; height:100%; }
+.logs-bar { padding:6px 8px; border-bottom:1px solid var(--border); display:flex; gap:6px; background:var(--panel); flex-shrink:0; }
+.log-inp { background:var(--panel2); border:1px solid var(--border2); border-radius:var(--r); color:var(--text); font-family:var(--mono); font-size:11px; padding:4px 8px; }
+.log-inp:focus { outline:none; border-color:var(--accent); }
+.log-out { flex:1; background:#010409; padding:10px; font-family:var(--mono); font-size:11px; overflow-y:auto; white-space:pre-wrap; word-break:break-all; line-height:1.5; color:#8ca; }
+
+/* Docs */
+.view-docs { display:flex; height:100%; overflow:hidden; }
+.docs-sb { width:170px; flex-shrink:0; background:var(--panel); border-right:1px solid var(--border); overflow-y:auto; padding:6px 0; }
+.doc-item { padding:6px 12px; font-size:11px; cursor:pointer; color:var(--muted); transition:background var(--t),color var(--t); border-left:2px solid transparent; }
+.doc-item:hover { background:var(--panel2); color:var(--text); }
+.doc-item.active { color:var(--accent); border-left-color:var(--accent); background:var(--panel2); }
+.docs-content { flex:1; overflow-y:auto; padding:20px 24px; }
+.docs-content h1 { font-size:20px; font-weight:700; margin-bottom:14px; padding-bottom:8px; border-bottom:1px solid var(--border); }
+.docs-content h2 { font-size:15px; font-weight:700; margin:18px 0 8px; }
+.docs-content h3 { font-size:12px; font-weight:700; margin:14px 0 6px; color:var(--accent); }
+.docs-content p { font-size:12px; color:#c9d1d9; line-height:1.7; margin-bottom:9px; }
+.docs-content ul,.docs-content ol { padding-left:18px; margin-bottom:9px; }
+.docs-content li { font-size:12px; color:#c9d1d9; line-height:1.7; margin-bottom:2px; }
+.docs-content code { font-family:var(--mono); font-size:10.5px; background:var(--panel2); padding:1px 5px; border-radius:3px; color:var(--teal); }
+.docs-content pre { background:#010409; border:1px solid var(--border); border-radius:var(--r); padding:10px; margin:8px 0; overflow-x:auto; }
+.docs-content pre code { background:none; padding:0; color:#c9d1d9; font-size:11px; }
+.docs-content blockquote { border-left:3px solid var(--border2); margin:8px 0; padding:5px 12px; color:var(--muted); background:var(--panel); border-radius:0 var(--r) var(--r) 0; }
+.docs-content table { border-collapse:collapse; margin:8px 0; }
+.docs-content th { background:var(--panel2); padding:6px 9px; font-size:10px; font-weight:700; text-align:left; border:1px solid var(--border); color:var(--muted); }
+.docs-content td { padding:6px 9px; font-size:11px; border:1px solid var(--border); color:#c9d1d9; }
+
+/* Runbooks */
+.view-runbooks { display:flex; height:100%; overflow:hidden; }
+.rb-list { width:200px; flex-shrink:0; border-right:1px solid var(--border); overflow-y:auto; padding:8px 6px; }
+.rb-card { padding:8px 10px; border-radius:var(--r); cursor:pointer; margin-bottom:4px; border:1px solid transparent; transition:all var(--t); }
+.rb-card:hover { background:var(--panel2); }
+.rb-card.active { background:rgba(57,208,196,.08); border-color:var(--accent); }
+.rb-card-title { font-size:11px; font-weight:700; color:var(--text); display:flex; align-items:center; gap:5px; }
+.rb-card-desc { font-size:10px; color:var(--muted); margin-top:2px; }
+.rb-card-status { margin-left:auto; font-size:9px; font-family:var(--mono); }
+.rb-detail { flex:1; overflow-y:auto; padding:0; display:flex; flex-direction:column; }
+.rb-detail-hdr { padding:10px 14px 8px; border-bottom:1px solid var(--border); display:flex; align-items:center; gap:8px; flex-shrink:0; }
+.rb-detail-title { font-size:13px; font-weight:700; color:var(--text); }
+.rb-detail-desc { font-size:11px; color:var(--muted); flex:1; }
+.rb-steps { padding:8px 12px; flex:1; }
+.rb-step { border:1px solid var(--border); border-radius:5px; margin-bottom:6px; overflow:hidden; }
+.rb-step-hdr { display:flex; align-items:center; gap:8px; padding:8px 10px; cursor:pointer; background:var(--panel2); }
+.rb-step-num { font-size:9px; font-family:var(--mono); color:var(--muted2); min-width:16px; }
+.rb-step-name { font-size:11px; color:var(--text); font-weight:600; flex:1; }
+.rb-step-cmd { font-size:9px; font-family:var(--mono); color:var(--muted); flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; max-width:180px; }
+.rb-step-icon { font-size:14px; flex-shrink:0; }
+.rb-step-run { background:var(--accent); color:#000; border:none; border-radius:3px; padding:2px 9px; cursor:pointer; font-size:10px; font-weight:700; flex-shrink:0; }
+.rb-step-run:disabled { opacity:.4; cursor:default; }
+.rb-step-out { background:#010409; font-family:var(--mono); font-size:10px; line-height:1.6; padding:8px 10px; white-space:pre-wrap; word-break:break-all; color:#c9d1d9; display:none; max-height:160px; overflow-y:auto; }
+.rb-step-out.show { display:block; }
+
+/* Map */
+.view-map { width:100%; height:100%; background:#010409; position:relative; overflow-y:auto; }
+.map-header { display:flex; align-items:center; gap:10px; padding:10px 14px 6px; border-bottom:1px solid var(--border); flex-shrink:0; }
+.map-section { padding:10px 12px 0; }
+.map-group-label { font-size:9px; font-weight:700; letter-spacing:.8px; text-transform:uppercase; color:var(--muted2); padding:0 2px 6px; }
+.map-group-cards { display:flex; flex-wrap:wrap; gap:8px; margin-bottom:12px; }
+.stack-card { border:1px solid; border-radius:5px; padding:8px 10px; min-width:120px; max-width:160px; cursor:pointer; transition:filter var(--t),transform var(--t); flex-shrink:0; }
+.stack-card:hover { filter:brightness(1.25); transform:translateY(-1px); }
+.stack-card.no-click { cursor:default; }
+.stack-ctr { display:flex; align-items:center; gap:4px; padding:2px 0; }
+.map-network { margin:8px 12px 12px; padding:5px 12px; border:1px dashed #1c2d44; border-radius:4px; font-size:10px; font-family:var(--mono); color:#1c3450; text-align:center; letter-spacing:.5px; }
+
+/* Vault */
+.view-vault { padding:14px; overflow-y:auto; height:100%; }
+#vlock { max-width:320px; margin:30px auto; }
+#vlock h2 { font-size:18px; font-weight:700; margin-bottom:5px; }
+#vlock p { color:var(--muted); font-size:11px; margin-bottom:14px; }
+.vi { width:100%; background:var(--panel); border:1px solid var(--border2); border-radius:var(--r); color:var(--text); font-size:12px; padding:7px 10px; margin-bottom:8px; }
+.vi:focus { outline:none; border-color:var(--accent); }
+#vbody { display:none; }
+#ventries { display:flex; flex-direction:column; gap:7px; margin-top:12px; }
+.ve { background:var(--panel); border:1px solid var(--border); border-radius:var(--r); padding:8px 11px; display:flex; align-items:center; gap:7px; }
+.ve-info { flex:1; min-width:0; }
+.ve-title { font-weight:600; font-size:12px; }
+.ve-user  { font-size:10px; color:var(--muted); }
+.ve-pw { font-family:var(--mono); font-size:10px; color:var(--muted); margin-top:2px; }
+.ve-pw.show { color:var(--text); letter-spacing:0; }
+.ve-acts { display:flex; gap:3px; }
+
+/* Issues */
+.view-issues { padding:14px; overflow-y:auto; height:100%; }
+.iss-row { display:flex; gap:8px; align-items:flex-start; padding:8px 0; border-bottom:1px solid var(--border); }
+.iss-dot { width:7px; height:7px; border-radius:50%; margin-top:5px; flex-shrink:0; }
+.iss-dot.open { background:var(--yellow); }
+.iss-dot.resolved { background:var(--green); }
+.iss-title { font-size:12px; font-weight:600; }
+.iss-desc  { font-size:10px; color:var(--muted); margin-top:2px; }
+.iss-res   { font-size:10px; color:var(--green); margin-top:2px; }
+.iss-date  { font-size:9px; color:var(--muted2); margin-top:3px; font-family:var(--mono); }
+
+/* Network */
+.view-net { padding:14px; overflow-y:auto; height:100%; display:flex; flex-direction:column; gap:10px; }
+.net-card { background:var(--panel); border:1px solid var(--border); border-radius:var(--r); padding:10px 12px; }
+.net-card h4 { font-size:11px; font-weight:700; letter-spacing:.5px; text-transform:uppercase; color:var(--muted); margin-bottom:8px; }
+.net-pre { font-family:var(--mono); font-size:10.5px; color:#c9d1d9; white-space:pre-wrap; word-break:break-all; }
+
+/* Chat */
+.view-chat { display:flex; flex-direction:column; height:100%; }
+#chat-msgs { flex:1; overflow-y:auto; padding:12px 14px; display:flex; flex-direction:column; gap:9px; }
+.msg { display:flex; flex-direction:column; max-width:85%; }
+.msg.user { align-self:flex-end; align-items:flex-end; }
+.msg.ai   { align-self:flex-start; }
+.msg-bub { padding:8px 12px; border-radius:10px; font-size:12px; line-height:1.6; white-space:pre-wrap; word-break:break-word; }
+.msg.user .msg-bub { background:var(--acdim); border:1px solid var(--accent); border-radius:10px 10px 2px 10px; }
+.msg.ai   .msg-bub { background:var(--panel); border:1px solid var(--border); color:#c9d1d9; border-radius:10px 10px 10px 2px; font-family:var(--mono); font-size:11px; }
+.msg-meta { font-size:9px; color:var(--muted2); margin-top:2px; }
+#chat-row { padding:8px 10px; border-top:1px solid var(--border); display:flex; gap:6px; align-items:flex-end; background:var(--panel); flex-shrink:0; }
+#chat-inp { flex:1; background:var(--panel2); border:1px solid var(--border2); border-radius:var(--r); color:var(--text); font-family:var(--ui); font-size:12px; padding:6px 10px; resize:none; min-height:32px; max-height:100px; line-height:1.5; }
+#chat-inp:focus { outline:none; border-color:var(--accent); }
+
+/* Shared */
+.btn { padding:4px 10px; border-radius:var(--r); border:1px solid var(--border2); background:var(--panel2); color:var(--text); font-size:11px; cursor:pointer; font-family:var(--ui); transition:border-color var(--t); }
+.btn:hover { border-color:var(--accent); }
+.btn.p { background:var(--acdim); border-color:var(--accent); color:var(--accent); }
+.btn.d { background:var(--rdim); border-color:var(--red); color:var(--red); }
+.badge { display:inline-block; padding:1px 6px; border-radius:8px; font-size:9px; font-weight:600; }
+.badge.up  { background:var(--gdim); color:var(--green); }
+.badge.dn  { background:var(--rdim); color:var(--red); }
+.badge.off { background:var(--panel2); color:var(--muted); }
+
+/* Footer */
+#foot { height:var(--foot-h); background:var(--panel); border-top:1px solid var(--border); display:flex; align-items:center; padding:0 12px; gap:14px; font-size:10px; color:var(--muted); flex-shrink:0; font-family:var(--mono); }
+.fsep { color:var(--border2); }
+
+/* Modal */
+#moverlay { display:none; position:fixed; inset:0; background:rgba(0,0,0,.6); z-index:300; align-items:center; justify-content:center; padding:16px; }
+#moverlay.show { display:flex; }
+#modal { background:var(--panel); border:1px solid var(--border2); border-radius:7px; padding:18px; width:340px; max-width:min(340px,calc(100vw - 32px)); max-height:calc(100vh - 80px); overflow-y:auto; }
+#modal h3 { font-size:14px; font-weight:700; margin-bottom:12px; }
+.mf { margin-bottom:8px; }
+.mf label { display:block; font-size:10px; color:var(--muted); margin-bottom:3px; }
+.macts { display:flex; gap:6px; justify-content:flex-end; margin-top:12px; }
+
+/* Scrollbar */
+::-webkit-scrollbar { width:5px; height:5px; }
+::-webkit-scrollbar-track { background:transparent; }
+::-webkit-scrollbar-thumb { background:var(--border2); border-radius:3px; }
+</style>
+</head>
+<body>
+
+<!-- TOP BAR -->
+<div id="top">
+  <span class="brand">⬡ HUB</span>
+  <div id="sdot"></div>
+  <span class="chip">up <span id="t-up">—</span></span>
+  <span class="chip">RAM <span id="t-ram">—</span></span>
+  <span class="chip">disk <span id="t-disk">—</span></span>
+  <span class="chip">load <span id="t-load">—</span></span>
+  <span class="chip">🐳 <span id="t-ct">—</span></span>
+  <div id="top-r">
+    <span style="color:var(--muted);font-family:var(--mono);font-size:10px" id="t-clock"></span>
+    <button class="tbtn" onclick="hardRefresh()">↻ Refresh</button>
+    <button class="tbtn" onclick="enterDeskMode()" title="Desk Mode — focus your widgets" id="desk-btn">⊡ Desk</button>
+  </div>
+</div>
+
+<!-- DESK MODE OVERLAY -->
+<div id="desk-overlay"></div>
+<button id="desk-exit" onclick="exitDeskMode()">✕ Exit Desk</button>
+<!-- WIDGET LAYER — fixed, always on top of everything -->
+<div id="widget-layer"></div>
+
+<!-- WORKSPACE TAB BAR -->
+<div id="wsbar">
+  <button id="ws-add" onclick="newWorkspace()" title="New workspace">＋</button>
+</div>
+
+<!-- BOOKMARK BAR -->
+<div id="bkbar">
+  <button class="bk-add" onclick="addBookmark()">＋ Bookmark</button>
+</div>
+
+<!-- MAIN AREA -->
+<div id="main">
+
+  <!-- CATEGORY NAV (far left) -->
+  <nav id="catnav">
+    <button class="cat-item active" data-cat="server" onclick="setCategory('server')" title="Server">
+      <span class="cat-icon">🖥</span><span class="cat-label">Server</span>
+    </button>
+    <button class="cat-item" data-cat="services" onclick="setCategory('services')" title="Services">
+      <span class="cat-icon">⚙</span><span class="cat-label">Svcs</span>
+    </button>
+    <div class="cat-sep"></div>
+    <button class="cat-item" data-cat="docs" onclick="setCategory('docs')" title="Knowledge Base">
+      <span class="cat-icon">📚</span><span class="cat-label">Docs</span>
+    </button>
+    <button class="cat-item" data-cat="ops" onclick="setCategory('ops')" title="Ops & Runbooks">
+      <span class="cat-icon">▶</span><span class="cat-label">Ops</span>
+    </button>
+    <button class="cat-item" data-cat="tools" onclick="setCategory('tools')" title="Tools">
+      <span class="cat-icon">🛠</span><span class="cat-label">Tools</span>
+    </button>
+    <div class="cat-sep"></div>
+    <button class="cat-item" data-cat="vault" onclick="setCategory('vault')" title="Vault">
+      <span class="cat-icon">🔐</span><span class="cat-label">Vault</span>
+    </button>
+    <div class="cat-sep"></div>
+    <button class="cat-item" data-cat="favorites" onclick="setCategory('favorites')" title="Favorites">
+      <span class="cat-icon">⭐</span><span class="cat-label">Favs</span>
+    </button>
+  </nav>
+
+  <!-- SECTION NAV (inner left, changes per category) -->
+  <div id="secnav">
+    <div id="secnav-header">
+      <span id="secnav-title">Server</span>
+      <button id="secnav-toggle" onclick="toggleSecNav()" title="Hide panel">◂</button>
+    </div>
+    <div id="secnav-body"></div>
+  </div>
+
+  <!-- WORKSPACE AREA -->
+  <div id="wsarea"></div>
+
+  <!-- RIGHT CONTEXT PANEL (inner right, collapsible) — context-sensitive utility tools -->
+  <div id="wpanel">
+    <div id="wpanel-header">
+      <div id="wpanel-tabs">
+        <button class="wp-tab active" data-tab="ctx" onclick="setWPTab('ctx')">Ctx</button>
+        <button class="wp-tab" data-tab="alerts" onclick="setWPTab('alerts')">⚠</button>
+        <button class="wp-tab" data-tab="hist" onclick="setWPTab('hist')">⌚</button>
+      </div>
+      <button id="wpanel-toggle" onclick="toggleWPanel()" title="Hide panel">▸</button>
+    </div>
+    <div id="wpanel-body">
+      <div id="ctx-panel-content" style="padding:0 2px"></div>
+    </div>
+  </div>
+
+  <!-- RIGHT WIDGET DOCK (far right, always visible) -->
+  <div id="wdock">
+    <div class="wdock-item" onclick="spawnWidget('terminal');setWDock('terminal')" data-wtype="terminal" title="Terminal widget">
+      <span class="wdock-icon">⌨</span><span class="wdock-label">Term</span>
+    </div>
+    <div class="wdock-item" onclick="spawnWidget('whiteboard');setWDock('whiteboard')" data-wtype="whiteboard" title="Whiteboard">
+      <span class="wdock-icon">🎨</span><span class="wdock-label">Board</span>
+    </div>
+    <div class="wdock-item" onclick="spawnWidget('sticky');setWDock('sticky')" data-wtype="sticky" title="Sticky note">
+      <span class="wdock-icon">📌</span><span class="wdock-label">Note</span>
+    </div>
+    <div class="wdock-sep"></div>
+    <div class="wdock-item" onclick="spawnWidget('stats');setWDock('stats')" data-wtype="stats" title="Server stats">
+      <span class="wdock-icon">📊</span><span class="wdock-label">Stats</span>
+    </div>
+    <div class="wdock-item" onclick="spawnWidget('logtail');setWDock('logtail')" data-wtype="logtail" title="Container log tail">
+      <span class="wdock-icon">📋</span><span class="wdock-label">Logs</span>
+    </div>
+    <div class="wdock-item" onclick="spawnWidget('ctrtoggle');setWDock('ctrtoggle')" data-wtype="ctrtoggle" title="Container quick-toggle">
+      <span class="wdock-icon">🐳</span><span class="wdock-label">Ctr</span>
+    </div>
+    <div class="wdock-sep"></div>
+    <div class="wdock-item" onclick="spawnWidget('timer');setWDock('timer')" data-wtype="timer" title="Timer / countdown">
+      <span class="wdock-icon">⏱</span><span class="wdock-label">Timer</span>
+    </div>
+    <div class="wdock-sep"></div>
+    <div class="wdock-item" onclick="toggleWPanel()" title="Expand widget panel">
+      <span class="wdock-icon">⊞</span><span class="wdock-label">Panel</span>
+    </div>
+  </div>
+
+</div>
+
+<!-- FOOTER -->
+<div id="foot">
+  <span id="f-last">—</span>
+  <span class="fsep">|</span>
+  <span id="f-ct">—</span>
+  <span class="fsep">|</span>
+  <span id="f-iss">—</span>
+  <span style="margin-left:auto;color:var(--muted2)">Hub · localhost:8765</span>
+</div>
+
+<!-- VIEW PICKER -->
+<div id="picker"></div>
+<!-- TAB CONTEXT MENU -->
+<div id="tab-ctx"></div>
+
+<!-- ADD SERVICE MODAL -->
+<div id="moverlay" onclick="if(event.target===this)closeModal()">
+  <div id="modal">
+    <h3>Add Service</h3>
+    <div class="mf"><label>Name</label><input class="vi" id="m-name" placeholder="My Service"></div>
+    <div class="mf"><label>Port</label><input class="vi" id="m-port" type="number" placeholder="8080"></div>
+    <div class="mf"><label>Description</label><input class="vi" id="m-desc" placeholder="What it does"></div>
+    <div class="mf"><label>Group</label><input class="vi" id="m-group" placeholder="Tools"></div>
+    <div class="macts">
+      <button class="btn" onclick="closeModal()">Cancel</button>
+      <button class="btn p" onclick="addServiceFromModal()">Add</button>
+    </div>
+  </div>
+</div>
+
+<script>
+'use strict';
+const API = 'http://localhost:8765';
+const SRV = '192.168.1.229';
+
+// ── GLOBAL STATE ────────────────────────────────────────────────────────────
+const S = {
+  status: null,
+  services: [],
+  issues: [],
+  containers: [],
+  docs: [],
+  activeCategory: 'server',
+  secNavCollapsed: false,
+  workspaces: [],        // [{id, title, icon, pinned, layout, panes}]
+  activeWs: null,        // id of active workspace
+  pickerTarget: null,    // {wsId, paneId}
+  termHistories: {},     // wsId+paneId -> []
+  termHistIdx: {},
+  vaultData: null,
+  vaultMP: null,
+  docsLoaded: false,
+  mapDrawn: false,
+};
+
+let _wsCounter = 0;
+const uid = () => 'x' + (++_wsCounter);
+
+// ── CLOCK ───────────────────────────────────────────────────────────────────
+setInterval(() => {
+  document.getElementById('t-clock').textContent =
+    new Date().toLocaleTimeString([], {hour:'2-digit',minute:'2-digit',second:'2-digit'});
+}, 1000);
+
+// ── STATUS ───────────────────────────────────────────────────────────────────
+async function fetchStatus(force=false) {
+  try {
+    const r = await fetch(API + '/api/status' + (force?'?force=1':''));
+    S.status = await r.json();
+    applyStatus();
+  } catch { applyStatus(false); }
+}
+function applyStatus(ok) {
+  const s = S.status;
+  const dot = document.getElementById('sdot');
+  if (!s?.online) { dot.className='off'; return; }
+  dot.className='on';
+  if (s.uptime)    document.getElementById('t-up').textContent = s.uptime;
+  if (s.ram_used_mb && s.ram_total_mb) {
+    const u = (s.ram_used_mb/1024).toFixed(1), t = (s.ram_total_mb/1024).toFixed(0);
+    document.getElementById('t-ram').textContent = `${u}/${t}GB`;
+  }
+  if (s.disk_pct)  document.getElementById('t-disk').textContent = s.disk_used+'/'+s.disk_total;
+  if (s.load)      document.getElementById('t-load').textContent = s.load;
+  if (s.containers !== undefined) {
+    document.getElementById('t-ct').textContent = s.containers;
+    document.getElementById('f-ct').textContent = s.containers + ' containers';
+  }
+  if (s.fetched_at) document.getElementById('f-last').textContent = 'Updated ' + s.fetched_at;
+}
+
+// ── SERVICES ─────────────────────────────────────────────────────────────────
+const KNOWN_SVCS = [
+  {name:'NPM',        port:81,    group:'Infrastructure', desc:'Nginx Proxy Manager',  installed:true},
+  {name:'Portainer',  port:9443,  group:'Infrastructure', desc:'Container manager',     installed:true, https:true},
+  {name:'Cockpit',    port:9090,  group:'Infrastructure', desc:'Linux admin panel',     installed:true, https:true},
+  {name:'Homepage',   port:3000,  group:'Monitoring',     desc:'Dashboard',             installed:true},
+  {name:'Uptime Kuma',port:3001,  group:'Monitoring',     desc:'Uptime monitoring',     installed:true},
+  {name:'Netdata',    port:19999, group:'Monitoring',     desc:'Real-time metrics',     installed:true},
+  {name:'Dozzle',     port:8090,  group:'Monitoring',     desc:'Container log viewer',  installed:true},
+  {name:'ntfy',       port:8085,  group:'Notifications',  desc:'Push notifications',    installed:true},
+  {name:'n8n',        port:5678,  group:'Tools',          desc:'Workflow automation',   installed:false},
+  {name:'Supabase',   port:8000,  group:'Tools',          desc:'Database platform',     installed:false},
+  {name:'Redis',      port:6379,  group:'Tools',          desc:'Cache/key-value',       installed:false, noui:true},
+  {name:'MinIO',      port:9001,  group:'Tools',          desc:'Object storage',        installed:false},
+  {name:'Adminer',    port:8082,  group:'Tools',          desc:'Database browser',      installed:false},
+  {name:'Mailpit',    port:8025,  group:'Tools',          desc:'Dev email catcher',     installed:false},
+  {name:'Wiki.js',    port:3002,  group:'Tools',          desc:'Knowledge base',        installed:false},
+  {name:'Ollama',     port:11434, group:'AI',             desc:'AI model engine',       installed:true, noui:true},
+  {name:'Open WebUI', port:3004,  group:'AI',             desc:'AI chat interface',     installed:true},
+];
+let customSvcs = JSON.parse(localStorage.getItem('hub_custom')||'[]');
+
+async function fetchServices() {
+  let svcs = [...KNOWN_SVCS, ...customSvcs];
+  try {
+    const r = await fetch(API+'/api/services');
+    const live = await r.json();
+    svcs = [...live, ...customSvcs.filter(c=>!live.find(l=>l.name===c.name))];
+  } catch {}
+  S.services = svcs;
+  refreshCategoryNav();
+}
+
+async function fetchContainers() {
+  try {
+    const r = await fetch(API+'/api/containers');
+    S.containers = await r.json();
+  } catch { S.containers = []; }
+}
+
+async function fetchDocs() {
+  if (S.docsLoaded) return;
+  try {
+    const r = await fetch(API+'/api/docs');
+    S.docs = await r.json();
+    S.docsLoaded = true;
+    refreshCategoryNav();
+  } catch {}
+}
+
+async function fetchIssues() {
+  try {
+    const r = await fetch(API+'/api/issues');
+    S.issues = await r.json();
+    const open = S.issues.filter(i=>i.status==='open').length;
+    document.getElementById('f-iss').textContent = open + ' issues open';
+  } catch { S.issues = []; }
+}
+
+// ── CATEGORY NAV ─────────────────────────────────────────────────────────────
+const CATEGORIES = {
+  server: {
+    title: 'Server',
+    sections: [
+      { label:'Views', items:[
+        {icon:'⊞', label:'Dashboard',   action:()=>openView('dashboard')},
+        {icon:'🗺', label:'Infra Map',   action:()=>openView('map')},
+        {icon:'⚑', label:'Issues',      action:()=>openView('issues')},
+      ]},
+      {label:'Ops', items:[
+        {icon:'▶',  label:'Runbooks',    action:()=>openView('runbooks')},
+        {icon:'⌨', label:'Terminal',    action:()=>openView('terminal')},
+        {icon:'📋', label:'Logs',        action:()=>openView('logs')},
+        {icon:'🌐', label:'Network',     action:()=>openView('network')},
+      ]},
+      {label:'AI', items:[
+        {icon:'🤖', label:'AI Chat',     action:()=>openView('chat')},
+      ]},
+    ]
+  },
+  services: { title: 'Services', sections: [] }, // built dynamically
+  docs:     { title: 'Docs',     sections: [] }, // built from files
+  ops: {
+    title: 'Ops',
+    sections: [
+      {label:'Automation', items:[
+        {icon:'▶',  label:'Runbooks',        action:()=>openView('runbooks')},
+      ]},
+      {label:'Debugging', items:[
+        {icon:'⌨', label:'Terminal',         action:()=>openView('terminal')},
+        {icon:'📋', label:'Container Logs',   action:()=>openView('logs')},
+        {icon:'🌐', label:'Network',          action:()=>openView('network')},
+      ]},
+    ]
+  },
+  tools: {
+    title: 'Tools',
+    sections: [
+      {label:'Dev', items:[
+        {icon:'⌨', label:'Terminal',     action:()=>openView('terminal')},
+        {icon:'📋', label:'Container Logs', action:()=>openView('logs')},
+        {icon:'🌐', label:'Network',      action:()=>openView('network')},
+      ]},
+      {label:'Admin', items:[
+        {icon:'🔐', label:'Vault',        action:()=>openView('vault')},
+        {icon:'🤖', label:'AI Chat',      action:()=>openView('chat')},
+        {icon:'▶',  label:'Runbooks',     action:()=>openView('runbooks')},
+      ]},
+    ]
+  },
+  vault: {
+    title: 'Vault',
+    sections: [
+      {label:'', items:[
+        {icon:'🔐', label:'Password Vault', action:()=>openView('vault')},
+      ]},
+    ]
+  },
+};
+
+function setCategory(cat) {
+  S.activeCategory = cat;
+  document.querySelectorAll('.cat-item').forEach(el => el.classList.toggle('active', el.dataset.cat===cat));
+  document.getElementById('secnav-title').textContent = CATEGORIES[cat]?.title || cat;
+  if (cat === 'docs') fetchDocs();
+  refreshCategoryNav();
+}
+
+function refreshCategoryNav() {
+  const cat = S.activeCategory;
+  const body = document.getElementById('secnav-body');
+  let html = '';
+
+  const starBtn = (icon, label, type, extra={}) => {
+    const fav = isFav(label);
+    const extraStr = JSON.stringify(extra).replace(/"/g,'&quot;');
+    return `<button class="sec-star${fav?' fav':''}" title="${fav?'Remove favorite':'Add to favorites'}"
+      onclick="event.stopPropagation();toggleFav('${icon}','${label.replace(/'/g,'\\\'').replace(/"/g,'&quot;')}','${type}','${extraStr}')">${fav?'★':'☆'}</button>`;
+  };
+
+  if (cat === 'favorites') {
+    if (!bookmarks.length) {
+      html = '<div style="padding:16px 10px;color:var(--muted);font-size:11px;line-height:1.7">No favorites yet.<br>Hover any item in the nav and click ☆ to star it.</div>';
+    } else {
+      html = '<div class="sec-group"><div class="sec-group-label">Starred</div>';
+      bookmarks.forEach((bk, i) => {
+        html += `<div class="sec-item" onclick="runBookmark(${JSON.stringify(bk).replace(/"/g,'&quot;')})">
+          <span class="sec-item-icon">${bk.icon}</span>${bk.label}
+          <button class="sec-star fav" onclick="event.stopPropagation();removeBookmark(${i})">★</button>
+        </div>`;
+      });
+      html += '</div>';
+    }
+
+  } else if (cat === 'services') {
+    const groups = {};
+    S.services.forEach(s => { const g=s.group||'Other'; if(!groups[g]) groups[g]=[]; groups[g].push(s); });
+    const ORDER = ['Infrastructure','Monitoring','Notifications','Tools','AI','Custom','Other'];
+    const sorted = Object.keys(groups).sort((a,b)=>{const ai=ORDER.indexOf(a),bi=ORDER.indexOf(b);return(ai<0?99:ai)-(bi<0?99:bi);});
+    sorted.forEach(g => {
+      html += `<div class="sec-group"><div class="sec-group-label">${g}</div>`;
+      groups[g].forEach(s => {
+        const inst = s.installed!==false;
+        const url = `${s.https?'https':'http'}://${SRV}:${s.port}`;
+        const badge = !inst ? 'off' : s.running ? 'up' : s.noui ? 'na' : '';
+        const badgeText = !inst ? 'N/A' : s.running ? 'up' : s.noui ? 'no UI' : '?';
+        const extra = {port:s.port, url, viewType:'iframe'};
+        html += `<div class="sec-item" onclick="${inst&&!s.noui?`openIframeWs('${s.name}',${s.port},'${url}')`:''}" title="${s.desc||''}">
+          <span class="sec-item-icon">${s.https?'🔒':'🌐'}</span>
+          ${s.name}
+          ${badge?`<span class="sec-item-badge badge-${badge}">${badgeText}</span>`:''}
+          ${inst&&!s.noui ? starBtn('🌐', s.name, 'iframe', extra) : ''}
+        </div>`;
+      });
+      html += '</div>';
+    });
+    html += `<button class="sec-add" onclick="openModal()">＋ Add Service</button>`;
+
+  } else if (cat === 'docs') {
+    if (!S.docsLoaded) {
+      html = '<div style="padding:12px;color:var(--muted);font-size:11px">Loading…</div>';
+    } else if (!S.docs.length) {
+      html = '<div style="padding:12px;color:var(--muted);font-size:11px">No guides found in guides/ folder</div>';
+    } else {
+      html = '<div class="sec-group"><div class="sec-group-label">Guides</div>';
+      S.docs.forEach(d => {
+        html += `<div class="sec-item" onclick="openDocWs('${d.file}','${d.title}')">
+          <span class="sec-item-icon">📄</span>${d.title}
+          ${starBtn('📄', d.title, 'doc', {file:d.file})}
+        </div>`;
+      });
+      html += '</div>';
+    }
+  } else {
+    const sections = CATEGORIES[cat]?.sections || [];
+    sections.forEach(sec => {
+      if (sec.label) html += `<div class="sec-group"><div class="sec-group-label">${sec.label}</div>`;
+      else html += '<div class="sec-group">';
+      sec.items.forEach((item, idx) => {
+        html += `<div class="sec-item" onclick="catAction(${JSON.stringify(cat)},${JSON.stringify(sec.label)},${idx})">
+          <span class="sec-item-icon">${item.icon}</span>${item.label}
+          ${starBtn(item.icon, item.label, 'view', {viewType: item.label.toLowerCase().replace(/\s+/g,'')==='artificialchat'?'chat':item.label.toLowerCase().replace(/\s+/g,'').replace('inframap','map').replace('dashboard','dashboard')})}
+        </div>`;
+      });
+      html += '</div>';
+    });
+  }
+
+  body.innerHTML = html;
+}
+
+// Because inline onclick can't call closures, map category actions by index
+function catAction(cat, sectionLabel, idx) {
+  const cat_def = CATEGORIES[cat];
+  if (!cat_def) return;
+  const sec = cat_def.sections.find(s=>s.label===sectionLabel);
+  if (sec && sec.items[idx]) sec.items[idx].action();
+}
+
+function toggleSecNav() {
+  S.secNavCollapsed = !S.secNavCollapsed;
+  document.getElementById('secnav').classList.toggle('collapsed', S.secNavCollapsed);
+  document.getElementById('secnav-toggle').textContent = S.secNavCollapsed ? '▸' : '◂';
+}
+
+// ── WORKSPACE SYSTEM ──────────────────────────────────────────────────────────
+function createWorkspace({ title, icon='⊞', pinned=false, viewType='dashboard', viewConfig={} } = {}) {
+  const id = uid();
+  const paneId = uid();
+  const ws = {
+    id, title: title||'New Workspace', icon, pinned,
+    layout: 'l1',
+    panes: [{id: paneId, viewType, viewConfig}],
+  };
+  S.workspaces.push(ws);
+  renderWsTab(ws);
+  renderWorkspace(ws);
+  activateWorkspace(id);
+  return ws;
+}
+
+function openView(viewType, config={}) {
+  // Reuse existing workspace with this view, or create new
+  const existing = S.workspaces.find(ws => ws.panes.some(p=>p.viewType===viewType && !ws.panes.some(p=>p.viewType==='iframe')));
+  if (existing) { activateWorkspace(existing.id); return; }
+  const titles = { dashboard:'Dashboard', terminal:'Terminal', logs:'Logs', docs:'Docs', map:'Infra Map', vault:'Vault', issues:'Issues', network:'Network', chat:'AI Chat' };
+  const icons  = { dashboard:'⊞', terminal:'⌨', logs:'📋', docs:'📚', map:'🗺', vault:'🔐', issues:'⚑', network:'🌐', chat:'🤖' };
+  createWorkspace({ title: titles[viewType]||viewType, icon: icons[viewType]||'⊞', viewType, viewConfig: config });
+}
+
+function openIframeWs(name, port, url) {
+  const id_key = 'iframe-' + port;
+  const existing = S.workspaces.find(ws => ws.panes.some(p=>p.viewType==='iframe' && p.viewConfig.port===port));
+  if (existing) { activateWorkspace(existing.id); return; }
+  createWorkspace({ title: name, icon: '🌐', viewType: 'iframe', viewConfig: {url: `${API}/proxy/${port}/`, directUrl: url, port, title: name} });
+}
+
+function openDocWs(file, title) {
+  const existing = S.workspaces.find(ws => ws.panes.some(p=>p.viewType==='docs' && p.viewConfig.file===file));
+  if (existing) { activateWorkspace(existing.id); return; }
+  createWorkspace({ title, icon: '📄', viewType: 'docs', viewConfig: {file} });
+}
+
+function newWorkspace() {
+  createWorkspace({ title: 'New', icon: '○', viewType: 'blank' });
+}
+
+function activateWorkspace(id) {
+  S.activeWs = id;
+  document.querySelectorAll('.workspace').forEach(el => el.classList.toggle('active', el.dataset.ws===id));
+  document.querySelectorAll('.ws-tab').forEach(el => el.classList.toggle('active', el.dataset.ws===id));
+  // Trigger view-specific init
+  const ws = S.workspaces.find(w=>w.id===id);
+  if (ws) ws.panes.forEach(p => initPaneView(id, p.id, p.viewType, p.viewConfig));
+  renderWPTabContent();
+}
+
+function closeWorkspace(id) {
+  const ws = S.workspaces.find(w=>w.id===id);
+  if (ws?.pinned) return;
+  S.workspaces = S.workspaces.filter(w=>w.id!==id);
+  document.querySelector(`.ws-tab[data-ws="${id}"]`)?.remove();
+  document.querySelector(`.workspace[data-ws="${id}"]`)?.remove();
+  if (S.activeWs === id) {
+    const remaining = S.workspaces;
+    if (remaining.length) activateWorkspace(remaining[remaining.length-1].id);
+    else S.activeWs = null;
+  }
+}
+
+function renderWsTab(ws) {
+  const tab = document.createElement('div');
+  tab.className = 'ws-tab';
+  tab.dataset.ws = ws.id;
+  tab.innerHTML = `<span class="ws-tab-icon">${ws.icon}</span>
+    <span class="ws-tab-title">${ws.title}</span>
+    ${!ws.pinned ? `<button class="ws-tab-close" onclick="event.stopPropagation();closeWorkspace('${ws.id}')">✕</button>` : ''}`;
+  tab.addEventListener('click', () => activateWorkspace(ws.id));
+  tab.addEventListener('contextmenu', e => { e.preventDefault(); openTabCtx(ws.id, e); });
+  document.getElementById('ws-add').insertAdjacentElement('beforebegin', tab);
+}
+
+// ── PANE SYSTEM ───────────────────────────────────────────────────────────────
+function renderWorkspace(ws) {
+  const area = document.getElementById('wsarea');
+  const el = document.createElement('div');
+  el.className = 'workspace';
+  el.dataset.ws = ws.id;
+  el.innerHTML = renderPaneGrid(ws);
+  area.appendChild(el);
+  // Attach events
+  el.querySelectorAll('[data-pane]').forEach(paneEl => {
+    const paneId = paneEl.dataset.pane;
+    const pane = ws.panes.find(p=>p.id===paneId);
+    if (pane) mountPaneContent(ws.id, paneId, pane.viewType, pane.viewConfig, paneEl.querySelector('.pane-body'));
+  });
+}
+
+function renderPaneGrid(ws) {
+  return `<div class="pane-grid ${ws.layout}" data-ws-grid="${ws.id}">
+    ${ws.panes.map(p => renderPane(ws.id, p)).join('')}
+  </div>`;
+}
+
+function renderPane(wsId, pane) {
+  const viewDef = VIEW_DEFS[pane.viewType] || VIEW_DEFS.blank;
+  return `<div class="pane" data-pane="${pane.id}">
+    <div class="pane-bar">
+      <button class="pane-view-btn" onclick="openPicker('${wsId}','${pane.id}',this)">
+        <span class="pv-icon">${viewDef.icon}</span>
+        <span>${pane.viewConfig.title || viewDef.title}</span>
+        <span style="color:var(--muted2);font-size:10px">▾</span>
+      </button>
+      <div class="pane-split-btns">
+        <button class="psb" onclick="splitPane('${wsId}','${pane.id}','h')" title="Split right">⊢</button>
+        <button class="psb" onclick="splitPane('${wsId}','${pane.id}','v')" title="Split down">⊤</button>
+        <button class="psb" onclick="splitPane('${wsId}','${pane.id}','4')" title="Split 2×2">⊞</button>
+        <button class="psb" onclick="closePane('${wsId}','${pane.id}')" title="Close pane" style="color:var(--muted2)">✕</button>
+      </div>
+    </div>
+    <div class="pane-body"></div>
+  </div>`;
+}
+
+const VIEW_DEFS = {
+  dashboard: {icon:'⊞', title:'Dashboard'},
+  terminal:  {icon:'⌨', title:'Terminal'},
+  logs:      {icon:'📋', title:'Logs'},
+  docs:      {icon:'📚', title:'Docs'},
+  map:       {icon:'🗺', title:'Infra Map'},
+  vault:     {icon:'🔐', title:'Vault'},
+  issues:    {icon:'⚑',  title:'Issues'},
+  network:   {icon:'🌐', title:'Network'},
+  chat:      {icon:'🤖', title:'AI Chat'},
+  runbooks:  {icon:'▶',  title:'Runbooks'},
+  iframe:    {icon:'🔗', title:'Service'},
+  blank:     {icon:'○',  title:'New Pane'},
+};
+
+function splitPane(wsId, paneId, dir) {
+  const ws = S.workspaces.find(w=>w.id===wsId);
+  if (!ws) return;
+  if (dir === '4') {
+    ws.panes = [{id:uid(),viewType:'dashboard',viewConfig:{}},{id:uid(),viewType:'terminal',viewConfig:{}},{id:uid(),viewType:'logs',viewConfig:{}},{id:uid(),viewType:'map',viewConfig:{}}];
+    ws.layout = 'l4';
+  } else if (dir === 'h') {
+    if (ws.panes.length < 2) { ws.panes.push({id:uid(),viewType:'terminal',viewConfig:{}}); ws.layout='l2h'; }
+    else if (ws.panes.length < 4) { ws.panes.push({id:uid(),viewType:'blank',viewConfig:{}}); ws.layout='l4'; }
+  } else {
+    if (ws.panes.length < 2) { ws.panes.push({id:uid(),viewType:'logs',viewConfig:{}}); ws.layout='l2v'; }
+    else if (ws.panes.length < 4) { ws.panes.push({id:uid(),viewType:'blank',viewConfig:{}}); ws.layout='l4'; }
+  }
+  reRenderWorkspace(wsId);
+}
+
+function closePane(wsId, paneId) {
+  const ws = S.workspaces.find(w=>w.id===wsId);
+  if (!ws || ws.panes.length <= 1) return;
+  ws.panes = ws.panes.filter(p=>p.id!==paneId);
+  ws.layout = ws.panes.length===1?'l1':ws.panes.length===2?'l2h':'l4';
+  reRenderWorkspace(wsId);
+}
+
+function reRenderWorkspace(wsId) {
+  const ws = S.workspaces.find(w=>w.id===wsId);
+  if (!ws) return;
+  const el = document.querySelector(`.workspace[data-ws="${wsId}"]`);
+  if (!el) return;
+  el.innerHTML = renderPaneGrid(ws);
+  el.querySelectorAll('[data-pane]').forEach(paneEl => {
+    const paneId = paneEl.dataset.pane;
+    const pane = ws.panes.find(p=>p.id===paneId);
+    if (pane) mountPaneContent(wsId, paneId, pane.viewType, pane.viewConfig, paneEl.querySelector('.pane-body'));
+  });
+  if (S.activeWs === wsId) ws.panes.forEach(p => initPaneView(wsId, p.id, p.viewType, p.viewConfig));
+}
+
+// ── VIEW PICKER ───────────────────────────────────────────────────────────────
+function openPicker(wsId, paneId, btn) {
+  S.pickerTarget = {wsId, paneId};
+  const picker = document.getElementById('picker');
+  const viewList = Object.entries(VIEW_DEFS).filter(([k])=>k!=='blank').map(([k,v])=>
+    `<div class="pick-item" onclick="setPaneView('${wsId}','${paneId}','${k}')">${v.icon} ${v.title}</div>`
+  ).join('');
+  const svcsHtml = S.services.filter(s=>s.installed!==false&&!s.noui).slice(0,8).map(s => {
+    const url = `${s.https?'https':'http'}://${SRV}:${s.port}`;
+    return `<div class="pick-item" onclick="setPaneView('${wsId}','${paneId}','iframe',{url:'${API}/proxy/${s.port}/',directUrl:'${url}',port:${s.port},title:'${s.name}'})">🌐 ${s.name}</div>`;
+  }).join('');
+  const otherWs = S.workspaces.filter(w=>w.id!==wsId);
+  const wsHtml = otherWs.length ? otherWs.map(w =>
+    `<div class="pick-item" onclick="setPaneFromWorkspace('${wsId}','${paneId}','${w.id}')">${w.icon} ${w.title}</div>`
+  ).join('') : `<div class="pick-item" style="color:var(--muted2);cursor:default">No other workspaces open</div>`;
+  picker.innerHTML = `
+    <div class="pick-section">Views</div>${viewList}
+    <div class="pick-sep"></div><div class="pick-section">Services</div>${svcsHtml}
+    <div class="pick-sep"></div><div class="pick-section">Pull from open tab</div>${wsHtml}`;
+  const rect = btn.getBoundingClientRect();
+  picker.style.left = rect.left + 'px';
+  picker.style.top  = (rect.bottom + 4) + 'px';
+  picker.classList.add('show');
+}
+
+document.addEventListener('click', e => {
+  const p = document.getElementById('picker');
+  const c = document.getElementById('tab-ctx');
+  if (!p.contains(e.target) && !e.target.classList.contains('pane-view-btn')) p.classList.remove('show');
+  if (!c.contains(e.target)) c.classList.remove('show');
+});
+
+function setPaneFromWorkspace(wsId, paneId, sourceWsId) {
+  document.getElementById('picker').classList.remove('show');
+  const src = S.workspaces.find(w=>w.id===sourceWsId);
+  if (!src || !src.panes[0]) return;
+  const p = src.panes[0];
+  setPaneView(wsId, paneId, p.viewType, {...p.viewConfig});
+}
+
+// ── TAB CONTEXT MENU ──────────────────────────────────────────────────────────
+function openTabCtx(wsId, e) {
+  const ws = S.workspaces.find(w=>w.id===wsId);
+  if (!ws) return;
+  const ctx = document.getElementById('tab-ctx');
+  const canSplit = S.workspaces.filter(w=>w.id!==wsId);
+  const splitItems = canSplit.map(o =>
+    `<div class="pick-item" onclick="splitMerge('${wsId}','${o.id}')">⊢ ${o.icon} ${o.title}</div>`
+  ).join('') || `<div class="pick-item" style="color:var(--muted2);cursor:default">No other tabs</div>`;
+  ctx.innerHTML = `
+    <div class="pick-section">${ws.icon} ${ws.title}</div>
+    <div class="pick-item" onclick="splitPane('${wsId}','${ws.panes[0]?.id}','h')">⊢ Split right</div>
+    <div class="pick-item" onclick="splitPane('${wsId}','${ws.panes[0]?.id}','v')">⊤ Split down</div>
+    <div class="pick-item" onclick="splitPane('${wsId}','${ws.panes[0]?.id}','4')">⊞ Split 2×2</div>
+    <div class="pick-sep"></div>
+    <div class="pick-section">Group with…</div>
+    ${splitItems}
+    ${!ws.pinned ? `<div class="pick-sep"></div><div class="pick-item" onclick="closeWorkspace('${wsId}')" style="color:var(--red)">✕ Close</div>` : ''}`;
+  ctx.style.left = Math.min(e.clientX, window.innerWidth - 210) + 'px';
+  ctx.style.top  = Math.min(e.clientY, window.innerHeight - 200) + 'px';
+  ctx.classList.add('show');
+}
+
+function splitMerge(wsId, addWsId) {
+  document.getElementById('tab-ctx').classList.remove('show');
+  const ws = S.workspaces.find(w=>w.id===wsId);
+  const src = S.workspaces.find(w=>w.id===addWsId);
+  if (!ws || !src || !src.panes[0]) return;
+  const p = src.panes[0];
+  if (ws.panes.length === 1) {
+    ws.panes.push({id:uid(), viewType:p.viewType, viewConfig:{...p.viewConfig}});
+    ws.layout = 'l2h';
+  } else if (ws.panes.length === 2) {
+    ws.panes.push({id:uid(), viewType:p.viewType, viewConfig:{...p.viewConfig}});
+    ws.panes.push({id:uid(), viewType:'blank', viewConfig:{}});
+    ws.layout = 'l4';
+  }
+  reRenderWorkspace(wsId);
+  activateWorkspace(wsId);
+}
+
+function setPaneView(wsId, paneId, viewType, viewConfig={}) {
+  document.getElementById('picker').classList.remove('show');
+  const ws = S.workspaces.find(w=>w.id===wsId);
+  if (!ws) return;
+  const pane = ws.panes.find(p=>p.id===paneId);
+  if (!pane) return;
+  pane.viewType = viewType;
+  pane.viewConfig = viewConfig;
+  const paneEl = document.querySelector(`[data-pane="${paneId}"]`);
+  if (!paneEl) return;
+  const vdef = VIEW_DEFS[viewType]||VIEW_DEFS.blank;
+  paneEl.querySelector('.pane-view-btn').innerHTML = `<span class="pv-icon">${vdef.icon}</span><span>${viewConfig.title||vdef.title}</span><span style="color:var(--muted2);font-size:10px">▾</span>`;
+  const body = paneEl.querySelector('.pane-body');
+  body.innerHTML = '';
+  mountPaneContent(wsId, paneId, viewType, viewConfig, body);
+  initPaneView(wsId, paneId, viewType, viewConfig);
+  if (wsId === S.activeWs) renderWPTabContent();
+}
+
+// ── MOUNT CONTENT INTO A PANE ─────────────────────────────────────────────────
+function mountPaneContent(wsId, paneId, viewType, viewConfig, body) {
+  const key = wsId + '-' + paneId;
+  switch(viewType) {
+    case 'dashboard':
+      body.innerHTML = `<div class="view-dash" id="dash-${key}"></div>`;
+      renderDash(`dash-${key}`);
+      break;
+    case 'terminal':
+      if (!S.termHistories[key]) { S.termHistories[key]=[]; S.termHistIdx[key]=-1; }
+      body.innerHTML = `<div class="view-term">
+        <div class="term-out" id="tout-${key}"></div>
+        <div class="qcmds">
+          <span class="qc" onclick="qcmd('${key}','health-check')">health-check</span>
+          <span class="qc" onclick="qcmd('${key}','docker ps --format &quot;table {{.Names}}\\t{{.Status}}&quot;')">containers</span>
+          <span class="qc" onclick="qcmd('${key}','df -h /')">disk</span>
+          <span class="qc" onclick="qcmd('${key}','free -h')">memory</span>
+          <span class="qc" onclick="qcmd('${key}','uptime')">uptime</span>
+          <span class="qc" onclick="qcmd('${key}','sudo fail2ban-client status sshd')">fail2ban</span>
+          <span class="qc" onclick="qcmd('${key}','ls /srv/docker/')">docker dirs</span>
+        </div>
+        <div class="term-in-row">
+          <span class="term-prompt">admin1@homeserver ~$</span>
+          <input class="term-inp" id="tinp-${key}" type="text" placeholder="command…" autocomplete="off" spellcheck="false">
+          <button class="btn p" onclick="runTerm('${key}')">Run</button>
+        </div>
+      </div>`;
+      tline(key,'tl-info','  Shell · homeserver 192.168.1.229');
+      tline(key,'tl-info','  ─────────────────────────────────');
+      const ti = document.getElementById(`tinp-${key}`);
+      if (ti) {
+        ti.addEventListener('keydown', e => {
+          if (e.key==='Enter') runTerm(key);
+          else if (e.key==='ArrowUp') { S.termHistIdx[key]=Math.min(S.termHistIdx[key]+1,S.termHistories[key].length-1); ti.value=S.termHistories[key][S.termHistIdx[key]]||''; e.preventDefault(); }
+          else if (e.key==='ArrowDown') { S.termHistIdx[key]=Math.max(S.termHistIdx[key]-1,-1); ti.value=S.termHistIdx[key]>=0?S.termHistories[key][S.termHistIdx[key]]:''; e.preventDefault(); }
+        });
+      }
+      break;
+    case 'logs':
+      body.innerHTML = `<div class="view-logs">
+        <div class="logs-bar">
+          <input class="log-inp" id="lname-${key}" placeholder="Container name" style="flex:1">
+          <input class="log-inp" id="llines-${key}" type="number" value="80" style="width:60px">
+          <button class="btn p" onclick="fetchLogs('${key}')">Fetch</button>
+          <button class="btn" onclick="document.getElementById('lout-${key}').textContent=''">Clear</button>
+        </div>
+        <div class="log-out" id="lout-${key}">Enter a container name above.</div>
+      </div>`;
+      break;
+    case 'docs':
+      body.innerHTML = `<div class="view-docs">
+        <div class="docs-sb" id="dsb-${key}"></div>
+        <div class="docs-content" id="dcon-${key}"><div style="color:var(--muted);padding:30px;font-size:12px">Select a guide from the sidebar</div></div>
+      </div>`;
+      loadDocsPane(key, viewConfig.file);
+      break;
+    case 'map':
+      body.innerHTML = `<div class="view-map" id="map-${key}"></div>`;
+      setTimeout(()=>drawMapPane(key), 100);
+      break;
+    case 'vault':
+      body.innerHTML = `<div class="view-vault" id="vlt-${key}">${vaultHTML()}</div>`;
+      initVault(key);
+      break;
+    case 'issues':
+      body.innerHTML = `<div class="view-issues" id="iss-${key}"></div>`;
+      renderIssues(`iss-${key}`);
+      break;
+    case 'network':
+      body.innerHTML = `<div class="view-net" id="net-${key}">
+        <div style="display:flex;gap:8px;margin-bottom:4px">
+          <button class="btn p" onclick="loadNet('${key}')">↻ Load</button>
+        </div>
+        <div class="net-card"><h4>UFW Firewall</h4><div class="net-pre" id="nufw-${key}">Click Load</div></div>
+        <div class="net-card"><h4>Fail2Ban SSH</h4><div class="net-pre" id="nf2b-${key}">Click Load</div></div>
+        <div class="net-card"><h4>Listening Ports</h4><div class="net-pre" id="npts-${key}">Click Load</div></div>
+      </div>`;
+      break;
+    case 'runbooks':
+      mountRunbooksView(key, body);
+      break;
+    case 'chat':
+      body.innerHTML = `<div class="view-chat">
+        <div id="chat-msgs-${key}"></div>
+        <div id="chat-row">
+          <textarea id="chat-inp-${key}" placeholder="Ask about the server… (Enter to send)" rows="1"></textarea>
+          <button class="btn p" onclick="sendChat('${key}')">Send</button>
+        </div>
+      </div>`;
+      const ci = document.getElementById(`chat-inp-${key}`);
+      if (ci) ci.addEventListener('keydown', e => { if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();sendChat(key);} });
+      chatMsg(key,'ai','👋 Ask me anything about the server. I\'ll run commands and report back.');
+      break;
+    case 'iframe':
+      if (viewConfig.url) {
+        body.innerHTML = `<iframe class="view-iframe" src="${viewConfig.url}" sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-pointer-lock"></iframe>`;
+      } else {
+        body.innerHTML = `<div class="iframe-err"><h3>No URL</h3><p>Pick a service from the view menu above.</p></div>`;
+      }
+      break;
+    default:
+      body.innerHTML = `<div style="display:flex;flex-direction:column;align-items:center;justify-content:center;height:100%;gap:14px;color:var(--muted)">
+        <div style="font-size:36px">○</div>
+        <div style="font-size:13px">New Pane</div>
+        <div style="font-size:11px;color:var(--muted2)">Click the view name above to choose what to show here</div>
+      </div>`;
+  }
+}
+
+function initPaneView(wsId, paneId, viewType, viewConfig) {
+  const key = wsId + '-' + paneId;
+  if (viewType === 'map') drawMapPane(key);
+}
+
+// ── TERMINAL ──────────────────────────────────────────────────────────────────
+function tline(key, cls, text) {
+  const el = document.getElementById(`tout-${key}`);
+  if (!el) return;
+  const p = document.createElement('p');
+  p.className = 'term-line ' + cls;
+  p.textContent = text;
+  el.appendChild(p);
+  el.scrollTop = el.scrollHeight;
+}
+function qcmd(key, cmd) {
+  const inp = document.getElementById(`tinp-${key}`);
+  if (inp) { inp.value = cmd; runTerm(key); }
+}
+async function runTerm(key) {
+  const inp = document.getElementById(`tinp-${key}`);
+  if (!inp) return;
+  const cmd = inp.value.trim(); if (!cmd) return;
+  S.termHistories[key] = S.termHistories[key] || [];
+  S.termHistories[key].unshift(cmd);
+  S.termHistIdx[key] = -1;
+  inp.value = '';
+  pushHistory(cmd);
+  tline(key,'tl-cmd','$ '+cmd);
+  tline(key,'tl-info','Running…');
+  try {
+    const r = await fetch(API+'/api/run',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({command:cmd})});
+    const d = await r.json();
+    const el = document.getElementById(`tout-${key}`);
+    if (el?.lastChild?.classList.contains('tl-info')) el.removeChild(el.lastChild);
+    if (d.output) tline(key,'tl-out',d.output);
+    if (d.error)  tline(key,'tl-err','⚠ '+d.error);
+    if (!d.online) tline(key,'tl-err','✗ Server offline');
+  } catch {
+    const el = document.getElementById(`tout-${key}`);
+    if (el?.lastChild?.classList.contains('tl-info')) el.removeChild(el.lastChild);
+    tline(key,'tl-err','✗ Hub server not running — start hub/server.py');
+  }
+}
+
+// ── LOGS ──────────────────────────────────────────────────────────────────────
+async function fetchLogs(key) {
+  const name = document.getElementById(`lname-${key}`)?.value.trim();
+  const lines = document.getElementById(`llines-${key}`)?.value || 80;
+  if (!name) return;
+  const out = document.getElementById(`lout-${key}`);
+  out.textContent = `Fetching ${lines} lines from ${name}…`;
+  try {
+    const r = await fetch(API+'/api/run',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({command:`docker logs --tail ${lines} ${name} 2>&1`})});
+    const d = await r.json();
+    out.textContent = d.output || d.error || '(no output)';
+    out.scrollTop = out.scrollHeight;
+  } catch { out.textContent = 'Hub server not running.'; }
+}
+
+// ── DOCS ──────────────────────────────────────────────────────────────────────
+async function loadDocsPane(key, preselect) {
+  if (!S.docsLoaded) { await fetchDocs(); }
+  const sb = document.getElementById(`dsb-${key}`);
+  if (!sb) return;
+  if (!S.docs.length) { sb.innerHTML='<div style="padding:10px;color:var(--muted);font-size:11px">No guides found</div>'; return; }
+  sb.innerHTML = S.docs.map(d=>
+    `<div class="doc-item" onclick="openDocInPane('${key}','${d.file}',this)">${d.title}</div>`
+  ).join('');
+  const first = preselect ? S.docs.find(d=>d.file===preselect) : S.docs[0];
+  if (first) { openDocInPane(key, first.file, sb.querySelector('.doc-item')); }
+}
+async function openDocInPane(key, file, el) {
+  document.querySelectorAll(`#dsb-${key} .doc-item`).forEach(d=>d.classList.remove('active'));
+  if (el) el.classList.add('active');
+  const con = document.getElementById(`dcon-${key}`);
+  if (!con) return;
+  con.innerHTML = '<div style="color:var(--muted);padding:20px;font-size:12px">Loading…</div>';
+  try {
+    const r = await fetch(`${API}/api/docs/content?file=${encodeURIComponent(file)}`);
+    const d = await r.json();
+    con.innerHTML = renderMd(d.content||'');
+  } catch { con.innerHTML = '<div style="color:var(--muted);padding:20px">Failed to load</div>'; }
+}
+
+function renderMd(text) {
+  const esc = s=>s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  const blocks=[];
+  text=text.replace(/```(\w*)\n([\s\S]*?)```/g,(_,l,c)=>{blocks.push(`<pre><code>${esc(c.trimEnd())}</code></pre>`);return`\x00B${blocks.length-1}\x00`;});
+  text=text.replace(/`([^`]+)`/g,(_,c)=>`<code>${esc(c)}</code>`);
+  text=text.replace(/\|(.+)\|\n\|[-| :]+\|\n((?:\|.+\|\n?)*)/g,(_,h,rows)=>{
+    const th=h.split('|').filter(c=>c.trim()).map(c=>`<th>${c.trim()}</th>`).join('');
+    const tr=rows.trim().split('\n').map(r=>`<tr>${r.split('|').filter(c=>c.trim()).map(c=>`<td>${c.trim()}</td>`).join('')}</tr>`).join('');
+    return `<table><thead><tr>${th}</tr></thead><tbody>${tr}</tbody></table>`;
+  });
+  text=text.replace(/^### (.+)$/gm,'<h3>$1</h3>');
+  text=text.replace(/^## (.+)$/gm,'<h2>$1</h2>');
+  text=text.replace(/^# (.+)$/gm,'<h1>$1</h1>');
+  text=text.replace(/\*\*(.+?)\*\*/g,'<strong>$1</strong>');
+  text=text.replace(/\*(.+?)\*/g,'<em>$1</em>');
+  text=text.replace(/^> (.+)$/gm,'<blockquote>$1</blockquote>');
+  text=text.replace(/(^[-*] .+$(\n^[-*] .+$)*)/gm,m=>`<ul>${m.split('\n').map(l=>`<li>${l.replace(/^[-*] /,'')}</li>`).join('')}</ul>`);
+  text=text.replace(/^---$/gm,'<hr style="border-color:var(--border);margin:14px 0">');
+  text=text.replace(/\[([^\]]+)\]\(([^)]+)\)/g,'<a href="$2" target="_blank">$1</a>');
+  const lines=text.split('\n');const out=[];
+  for(const l of lines){const t=l.trim();if(!t){out.push('');continue;}if(t.startsWith('<')||t.startsWith('\x00B')){out.push(t);continue;}out.push(`<p>${t}</p>`);}
+  text=out.join('\n');
+  blocks.forEach((b,i)=>{text=text.replace(`\x00B${i}\x00`,b);});
+  return text;
+}
+
+// ── RUNBOOKS ──────────────────────────────────────────────────────────────────
+const RUNBOOKS = [
+  { id:'inventory', icon:'🔍', name:'Server Inventory', desc:'Full scan of what is installed and running',
+    steps:[
+      {name:'OS & kernel',        cmd:'uname -a && cat /etc/os-release | head -5'},
+      {name:'CPU & RAM',          cmd:'lscpu | grep -E "Model name|CPU\\(s\\)" | head -4 && free -h'},
+      {name:'Disk layout',        cmd:'df -h'},
+      {name:'Docker version',     cmd:'docker --version && docker compose version'},
+      {name:'All containers',     cmd:'docker ps -a --format "table {{.Names}}\\t{{.Status}}\\t{{.Ports}}"'},
+      {name:'Installed stacks',   cmd:'ls /srv/docker/'},
+      {name:'CLI tools',          cmd:'for t in server-menu health-check server-backup server-update sec ai-models; do echo -n "$t: "; which $t 2>/dev/null && echo "installed" || echo "MISSING"; done'},
+      {name:'Network interfaces', cmd:'ip -br addr'},
+      {name:'Open ports',         cmd:'ss -tlnp'},
+    ]
+  },
+  { id:'health', icon:'🏥', name:'Health Check', desc:'Quick server vitals scan',
+    steps:[
+      {name:'Uptime & load',      cmd:'uptime'},
+      {name:'Memory',             cmd:'free -h'},
+      {name:'Disk',               cmd:'df -h /'},
+      {name:'Containers running', cmd:'docker ps --format "table {{.Names}}\\t{{.Status}}"'},
+      {name:'Fail2Ban',           cmd:'sudo fail2ban-client status sshd'},
+      {name:'UFW',                cmd:'sudo ufw status'},
+    ]
+  },
+  { id:'startup', icon:'🚀', name:'Bring Online', desc:'Start all core services in sequence',
+    steps:[
+      {name:'Start NPM',          cmd:'cd /srv/docker/npm && docker compose up -d'},
+      {name:'Start Portainer',    cmd:'cd /srv/docker/portainer && docker compose up -d'},
+      {name:'Start Homepage',     cmd:'cd /srv/docker/homepage && docker compose up -d'},
+      {name:'Start Uptime Kuma',  cmd:'cd /srv/docker/uptime-kuma && docker compose up -d'},
+      {name:'Start Netdata',      cmd:'cd /srv/docker/netdata && docker compose up -d'},
+      {name:'Start Dozzle',       cmd:'cd /srv/docker/dozzle && docker compose up -d'},
+      {name:'Verify all',         cmd:'docker ps --format "table {{.Names}}\\t{{.Status}}"'},
+    ]
+  },
+  { id:'shutdown', icon:'🛑', name:'Graceful Shutdown', desc:'Stop services in safe order',
+    steps:[
+      {name:'Stop monitoring',    cmd:'cd /srv/docker/netdata && docker compose down; cd /srv/docker/dozzle && docker compose down'},
+      {name:'Stop dashboard',     cmd:'cd /srv/docker/homepage && docker compose down; cd /srv/docker/uptime-kuma && docker compose down'},
+      {name:'Stop Portainer',     cmd:'cd /srv/docker/portainer && docker compose down'},
+      {name:'Stop NPM',           cmd:'cd /srv/docker/npm && docker compose down'},
+      {name:'Verify stopped',     cmd:'docker ps'},
+    ]
+  },
+  { id:'backup', icon:'💾', name:'Run Backup', desc:'Trigger manual backup and verify',
+    steps:[
+      {name:'Disk before',        cmd:'df -h /'},
+      {name:'Run backup',         cmd:'sudo server-backup'},
+      {name:'Check log',          cmd:'tail -20 /var/log/server-backup.log'},
+      {name:'List backups',       cmd:'ls -lh /srv/backups/ | tail -8'},
+    ]
+  },
+  { id:'update', icon:'⬆', name:'Update All', desc:'Pull new container images and update system',
+    steps:[
+      {name:'Pull new images',    cmd:'cd /srv/docker && for d in */; do echo "=== $d ==="; (cd "$d" && docker compose pull 2>&1 | tail -3); done'},
+      {name:'Restart updated',    cmd:'cd /srv/docker && for d in */; do (cd "$d" && docker compose up -d 2>&1 | tail -2); done'},
+      {name:'System apt update',  cmd:'sudo apt update && sudo apt upgrade -y --no-install-recommends'},
+      {name:'Verify containers',  cmd:'docker ps --format "table {{.Names}}\\t{{.Status}}"'},
+    ]
+  },
+  { id:'security', icon:'🔒', name:'Security Audit', desc:'Full security status check',
+    steps:[
+      {name:'UFW rules',          cmd:'sudo ufw status numbered'},
+      {name:'Fail2Ban status',    cmd:'sudo fail2ban-client status sshd'},
+      {name:'Active sessions',    cmd:'who && last | head -10'},
+      {name:'Listening ports',    cmd:'ss -tlnp'},
+      {name:'Security check',     cmd:'sudo sec 2>/dev/null || echo "sec tool not found — run server-kit setup"'},
+    ]
+  },
+  { id:'docker-clean', icon:'🧹', name:'Docker Cleanup', desc:'Prune unused images, containers, volumes',
+    steps:[
+      {name:'Space before',       cmd:'docker system df'},
+      {name:'Prune containers',   cmd:'docker container prune -f'},
+      {name:'Prune images',       cmd:'docker image prune -f'},
+      {name:'Prune volumes',      cmd:'docker volume prune -f'},
+      {name:'Space after',        cmd:'docker system df'},
+    ]
+  },
+  { id:'install-extras', icon:'📦', name:'Install Extra Services', desc:'Run the extras setup script (n8n, Supabase, Redis, MinIO…)',
+    steps:[
+      {name:'Check script',       cmd:'ls ~/server-kit/08-extras-setup.sh'},
+      {name:'Run install script', cmd:'bash ~/server-kit/08-extras-setup.sh'},
+      {name:'Verify services',    cmd:'docker ps --format "table {{.Names}}\\t{{.Status}}"'},
+    ]
+  },
+];
+
+// Per-runbook state: {stepIdx: {status:'', output:''}}
+const RB_STATE = {};
+let RB_ACTIVE = null;
+
+function openRunbook(id) {
+  RB_ACTIVE = id;
+  document.querySelectorAll('.rb-card').forEach(el => el.classList.toggle('active', el.dataset.rb===id));
+  const rb = RUNBOOKS.find(r=>r.id===id);
+  const detail = document.querySelector('.rb-detail');
+  if (!rb || !detail) return;
+  if (!RB_STATE[id]) RB_STATE[id] = {};
+  detail.innerHTML = `
+    <div class="rb-detail-hdr">
+      <span style="font-size:20px">${rb.icon}</span>
+      <div>
+        <div class="rb-detail-title">${rb.name}</div>
+        <div class="rb-detail-desc">${rb.desc}</div>
+      </div>
+      <button class="btn p" style="margin-left:auto" onclick="runAllSteps('${id}')">▶ Run All</button>
+      <button class="btn" onclick="resetRunbook('${id}')">↺ Reset</button>
+    </div>
+    <div class="rb-steps">
+      ${rb.steps.map((s,i)=>`
+        <div class="rb-step" id="rbstep-${id}-${i}">
+          <div class="rb-step-hdr" onclick="toggleStepOut('${id}',${i})">
+            <span class="rb-step-num">${String(i+1).padStart(2,'0')}</span>
+            <span class="rb-step-name">${s.name}</span>
+            <span class="rb-step-cmd">${s.cmd.slice(0,50)}${s.cmd.length>50?'…':''}</span>
+            <span class="rb-step-icon" id="rbicon-${id}-${i}">⬜</span>
+            <button class="rb-step-run" id="rbbtn-${id}-${i}" onclick="event.stopPropagation();runStep('${id}',${i})">Run</button>
+          </div>
+          <div class="rb-step-out" id="rbout-${id}-${i}"></div>
+        </div>`).join('')}
+    </div>`;
+  // Restore previous state
+  rb.steps.forEach((_,i) => {
+    const st = RB_STATE[id][i];
+    if (st) { setStepStatus(id,i,st.status); const o=document.getElementById(`rbout-${id}-${i}`); if(o&&st.output){o.textContent=st.output;o.classList.add('show');} }
+  });
+}
+
+function toggleStepOut(rbId, i) {
+  const el = document.getElementById(`rbout-${rbId}-${i}`);
+  if (el) el.classList.toggle('show');
+}
+
+function setStepStatus(rbId, i, status) {
+  const icon = document.getElementById(`rbicon-${rbId}-${i}`);
+  const btn  = document.getElementById(`rbbtn-${rbId}-${i}`);
+  const icons = {pending:'⬜', running:'🔄', ok:'✅', err:'❌'};
+  if (icon) icon.textContent = icons[status] || '⬜';
+  if (btn)  btn.disabled = status === 'running';
+  if (!RB_STATE[rbId]) RB_STATE[rbId] = {};
+  RB_STATE[rbId][i] = RB_STATE[rbId][i] || {};
+  RB_STATE[rbId][i].status = status;
+}
+
+async function runStep(rbId, stepIdx) {
+  const rb = RUNBOOKS.find(r=>r.id===rbId); if (!rb) return;
+  const s = rb.steps[stepIdx]; if (!s) return;
+  setStepStatus(rbId, stepIdx, 'running');
+  const outEl = document.getElementById(`rbout-${rbId}-${stepIdx}`);
+  if (outEl) { outEl.textContent = 'Running…'; outEl.classList.add('show'); }
+  try {
+    const r = await fetch(API+'/api/run',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({command:s.cmd,timeout:60})});
+    const d = await r.json();
+    const out = [d.output, d.error].filter(Boolean).join('\n') || '(no output)';
+    if (outEl) outEl.textContent = out;
+    if (!RB_STATE[rbId]) RB_STATE[rbId] = {};
+    if (!RB_STATE[rbId][stepIdx]) RB_STATE[rbId][stepIdx] = {};
+    RB_STATE[rbId][stepIdx].output = out;
+    setStepStatus(rbId, stepIdx, d.exitcode===0||d.online ? 'ok' : 'err');
+  } catch(e) {
+    if (outEl) outEl.textContent = 'Hub server not running.';
+    setStepStatus(rbId, stepIdx, 'err');
+  }
+}
+
+async function runAllSteps(rbId) {
+  const rb = RUNBOOKS.find(r=>r.id===rbId); if (!rb) return;
+  for (let i=0; i<rb.steps.length; i++) {
+    await runStep(rbId, i);
+    await new Promise(res=>setTimeout(res,300));
+  }
+}
+
+function resetRunbook(rbId) {
+  RB_STATE[rbId] = {};
+  if (RB_ACTIVE === rbId) openRunbook(rbId);
+}
+
+function mountRunbooksView(key, body) {
+  body.innerHTML = `<div class="view-runbooks">
+    <div class="rb-list">
+      ${RUNBOOKS.map(rb=>`
+        <div class="rb-card" data-rb="${rb.id}" onclick="openRunbook('${rb.id}')">
+          <div class="rb-card-title">${rb.icon} ${rb.name}</div>
+          <div class="rb-card-desc">${rb.desc}</div>
+        </div>`).join('')}
+    </div>
+    <div class="rb-detail">
+      <div style="display:flex;align-items:center;justify-content:center;height:100%;color:var(--muted);font-size:12px;flex-direction:column;gap:8px">
+        <span style="font-size:32px">▶</span>
+        <span>Select a runbook to get started</span>
+      </div>
+    </div>
+  </div>`;
+}
+
+// ── INFRA MAP ─────────────────────────────────────────────────────────────────
+// Compose stack definitions mirroring /srv/docker/ directory layout
+const MAP_STACKS = [
+  {id:'npm',         label:'Nginx Proxy Mgr', group:'Infrastructure', port:81,    pats:['nginx-proxy','npm','nginx']},
+  {id:'portainer',   label:'Portainer',        group:'Infrastructure', port:9443,  pats:['portainer']},
+  {id:'watchtower',  label:'Watchtower',        group:'Infrastructure', port:null,  pats:['watchtower']},
+  {id:'cockpit',     label:'Cockpit',           group:'Infrastructure', port:9090,  pats:['cockpit']},
+  {id:'homepage',    label:'Homepage',          group:'Monitoring',     port:3000,  pats:['homepage']},
+  {id:'uptime-kuma', label:'Uptime Kuma',       group:'Monitoring',     port:3001,  pats:['uptime','kuma']},
+  {id:'netdata',     label:'Netdata',           group:'Monitoring',     port:19999, pats:['netdata']},
+  {id:'dozzle',      label:'Dozzle',            group:'Monitoring',     port:8090,  pats:['dozzle']},
+  {id:'n8n',         label:'n8n',               group:'Tools',          port:5678,  pats:['n8n']},
+  {id:'supabase',    label:'Supabase',          group:'Tools',          port:8000,  pats:['supabase','kong','studio','realtime','storage','auth','meta','functions']},
+  {id:'redis',       label:'Redis',             group:'Tools',          port:6379,  pats:['redis']},
+  {id:'minio',       label:'MinIO',             group:'Tools',          port:9001,  pats:['minio']},
+  {id:'adminer',     label:'Adminer',           group:'Tools',          port:8082,  pats:['adminer']},
+  {id:'mailpit',     label:'Mailpit',           group:'Tools',          port:8025,  pats:['mailpit']},
+  {id:'wikijs',      label:'Wiki.js',           group:'Tools',          port:3002,  pats:['wiki']},
+  {id:'surrealdb',   label:'SurrealDB',         group:'Tools',          port:8001,  pats:['surreal']},
+  {id:'languagetool',label:'LanguageTool',      group:'Tools',          port:8081,  pats:['language','languagetool']},
+  {id:'ai',          label:'AI Stack',          group:'AI',             port:null,  pats:['ollama','open-webui','openwebui','openclaw']},
+];
+const MAP_GROUP_ORDER = ['Infrastructure','Monitoring','Tools','AI'];
+const MAP_GROUP_BG  = {Infrastructure:'#0b1929', Monitoring:'#091a0d', Tools:'#0e0e1e', AI:'#150e1e'};
+const MAP_GROUP_ACC = {Infrastructure:'#58a6ff', Monitoring:'#3fb950', Tools:'#a371f7',  AI:'#f78166'};
+
+async function drawMapPane(key) {
+  await fetchContainers();
+  const wrap = document.getElementById(`map-${key}`);
+  if (!wrap) return;
+
+  const matchCtrs = pats => S.containers.filter(c => pats.some(p => c.name.toLowerCase().includes(p)));
+  const stacks = MAP_STACKS.map(s => {
+    const ctrs = matchCtrs(s.pats);
+    const running = ctrs.some(c=>c.running) || (!ctrs.length && S.services.find(sv=>sv.port===s.port)?.running);
+    return {...s, ctrs, running};
+  });
+
+  const runCount   = S.containers.filter(c=>c.running).length;
+  const totalCount = S.containers.length;
+
+  const stackCard = s => {
+    const acc = MAP_GROUP_ACC[s.group] || '#888';
+    const rc  = s.running ? acc : '#2a2a2a';
+    const ctrHtml = s.ctrs.length
+      ? s.ctrs.map(c=>`<div class="stack-ctr"><span style="width:5px;height:5px;border-radius:50%;background:${c.running?acc:'#2a2a2a'};flex-shrink:0"></span><span style="font-size:9px;font-family:var(--mono);color:${c.running?'#c9d1d9':'#3a3a3a'};overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:110px">${c.name}</span></div>`).join('')
+      : `<div style="font-size:9px;color:#2a2a2a;font-style:italic;padding:1px 0">not deployed</div>`;
+    const clickFn = s.port ? `onclick="openIframeWs('${s.label}',${s.port},'http://${SRV}:${s.port}')"` : '';
+    return `<div class="stack-card${s.port?'':' no-click'}" ${clickFn} style="border-color:${rc}44;background:${MAP_GROUP_BG[s.group]||'#111'}">
+      <div style="display:flex;align-items:center;gap:5px;margin-bottom:4px">
+        <span style="width:7px;height:7px;border-radius:50%;background:${rc};flex-shrink:0"></span>
+        <span style="font-size:10px;font-weight:700;color:${rc};font-family:var(--mono);line-height:1">${s.label}</span>
+        ${s.port?`<span style="margin-left:auto;font-size:9px;color:#2a3a4a;font-family:var(--mono)">:${s.port}</span>`:''}
+      </div>
+      <div style="font-size:8px;color:#1c2c3c;font-family:var(--mono);margin-bottom:3px">/srv/docker/${s.id}/</div>
+      <div style="border-top:1px solid ${rc}22;padding-top:3px">${ctrHtml}</div>
+    </div>`;
+  };
+
+  wrap.innerHTML = `
+    <div class="map-header">
+      <span style="font-size:12px;font-weight:700;font-family:var(--mono);color:var(--accent)">homeserver</span>
+      <span style="font-size:10px;color:var(--muted);font-family:var(--mono)">${SRV}</span>
+      <span style="font-size:10px;color:${S.status?.online?'var(--green)':'var(--red)'}">${S.status?.online?'● online':'● offline'}</span>
+      <span style="margin-left:auto;font-size:10px;color:var(--muted);font-family:var(--mono)">${runCount}/${totalCount} running</span>
+      <button class="btn" style="font-size:10px;padding:2px 8px" onclick="drawMapPane('${key}')">↻</button>
+    </div>
+    <div class="map-section">
+      ${MAP_GROUP_ORDER.filter(g=>stacks.some(s=>s.group===g)).map(g=>`
+        <div>
+          <div class="map-group-label" style="color:${MAP_GROUP_ACC[g]}">${g}</div>
+          <div class="map-group-cards">${stacks.filter(s=>s.group===g).map(stackCard).join('')}</div>
+        </div>`).join('')}
+    </div>
+    <div class="map-network">── proxy bridge network ── all stacks share internal DNS ──</div>
+    ${!totalCount?'<div style="padding:20px;text-align:center;color:var(--muted);font-size:11px">No containers — hub server may not be running</div>':''}`;
+}
+
+// ── DASHBOARD ─────────────────────────────────────────────────────────────────
+function renderDash(elId) {
+  const svcs = S.services;
+  if (!svcs.length) { document.getElementById(elId).innerHTML='<div style="color:var(--muted);padding:20px">Loading services…</div>'; return; }
+  const groups={};
+  svcs.forEach(s=>{const g=s.group||'Other';if(!groups[g])groups[g]=[];groups[g].push(s);});
+  const ORDER=['Infrastructure','Monitoring','Notifications','Tools','AI','Custom','Other'];
+  const sorted=Object.keys(groups).sort((a,b)=>{const ai=ORDER.indexOf(a),bi=ORDER.indexOf(b);return(ai<0?99:ai)-(bi<0?99:bi);});
+  document.getElementById(elId).innerHTML = sorted.map(g=>`
+    <div class="grp-label">${g}</div>
+    <div class="svc-grid">${groups[g].map(s=>{
+      const inst=s.installed!==false;
+      const url=`${s.https?'https':'http'}://${SRV}:${s.port}`;
+      const badge=!inst?`<span class="badge off">N/A</span>`:s.running?`<span class="badge up">up</span>`:s.noui?`<span class="badge off">no UI</span>`:`<span class="badge">?</span>`;
+      return `<div class="svc-card ${inst?'':'dim'}" onclick="${inst&&!s.noui?`openIframeWs('${s.name}',${s.port},'${url}')`:''}" title="${s.desc||''}">
+        <div class="sc-name">${s.name}</div><div class="sc-desc">${s.desc||''}</div>
+        <div class="sc-port">:${s.port}</div><div class="sc-status">${badge}</div>
+      </div>`;
+    }).join('')}</div>`
+  ).join('');
+}
+
+// ── VAULT ─────────────────────────────────────────────────────────────────────
+function vaultHTML() {
+  if (S.vaultData) return vaultBodyHTML();
+  return `<div id="vlock"><h2>🔐 Password Vault</h2>
+    <p>AES-256-GCM encrypted. Master password never leaves the browser.</p>
+    <input class="vi" id="vmp" type="password" placeholder="Master password…" autocomplete="new-password">
+    <div style="display:flex;gap:7px"><button class="btn p" style="flex:1" onclick="vaultUnlock()">Unlock</button><button class="btn" onclick="vaultSetup()">New Vault</button></div>
+    <div id="verr" style="color:var(--red);font-size:11px;margin-top:6px"></div></div>`;
+}
+function vaultBodyHTML() {
+  if (!S.vaultData) return '';
+  const entries = S.vaultData.entries||[];
+  return `<div id="vbody" style="display:block">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
+      <h2 style="font-size:16px;font-weight:700">Vault</h2>
+      <div style="display:flex;gap:6px"><button class="btn" onclick="vaultLock()">🔒 Lock</button><button class="btn p" onclick="vaultAdd()">+ Entry</button></div>
+    </div>
+    <div id="ventries">${entries.map((e,i)=>`
+      <div class="ve"><div class="ve-info">
+        <div class="ve-title">${e.title||'—'}</div>
+        <div class="ve-user">${e.username||''}</div>
+        <div class="ve-pw" id="vepw-${i}">••••••••</div>
+        ${e.url?`<a href="${e.url}" target="_blank" style="font-size:10px;color:var(--accent)">${e.url}</a>`:''}
+      </div><div class="ve-acts">
+        <button class="btn" style="font-size:10px;padding:2px 6px" onclick="toggleVPw(${i})">👁</button>
+        <button class="btn" style="font-size:10px;padding:2px 6px" onclick="navigator.clipboard.writeText('${(e.password||'').replace(/'/g,"\\'")}')">Copy</button>
+        <button class="btn d" style="font-size:10px;padding:2px 6px" onclick="delVE(${i})">✕</button>
+      </div></div>`).join('')}</div>
+  </div>`;
+}
+function initVault(key) { /* vault uses global S.vaultData, nothing extra needed */ }
+async function vaultUnlock() {
+  const mp=document.getElementById('vmp')?.value; if(!mp) return;
+  const err=document.getElementById('verr'); err.textContent='';
+  try {
+    const r=await fetch(API+'/api/vault'); const d=await r.json();
+    if(!d.blob){err.textContent='No vault found. Click "New Vault".';return;}
+    S.vaultData=await vDec(d.blob,mp); S.vaultMP=mp;
+    document.querySelectorAll('.view-vault').forEach(el=>{el.innerHTML=vaultBodyHTML();});
+  } catch { if(err) err.textContent='Wrong password or vault corrupted.'; }
+}
+async function vaultSetup() {
+  const mp=document.getElementById('vmp')?.value;
+  if(!mp||mp.length<6){const err=document.getElementById('verr');if(err)err.textContent='Password must be 6+ characters.';return;}
+  S.vaultData={entries:[]}; S.vaultMP=mp; await saveVault();
+  document.querySelectorAll('.view-vault').forEach(el=>{el.innerHTML=vaultBodyHTML();});
+}
+function vaultLock() { S.vaultData=null; S.vaultMP=null; document.querySelectorAll('.view-vault').forEach(el=>{el.innerHTML=vaultHTML();}); }
+async function saveVault() {
+  const blob=await vEnc(S.vaultData,S.vaultMP);
+  try { await fetch(API+'/api/vault',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({blob})}); }
+  catch { localStorage.setItem('vault_backup',blob); }
+}
+function toggleVPw(i) { const el=document.getElementById('vepw-'+i); const s=el.classList.toggle('show'); el.textContent=s?(S.vaultData.entries[i].password||'—'):'••••••••'; }
+async function delVE(i) { if(!confirm('Delete?'))return; S.vaultData.entries.splice(i,1); await saveVault(); document.querySelectorAll('.view-vault').forEach(el=>{el.innerHTML=vaultBodyHTML();}); }
+function vaultAdd() { const t=prompt('Title:');if(!t)return;const u=prompt('Username:')||'';const p=prompt('Password:')||'';const url=prompt('URL (optional):')||'';S.vaultData.entries.push({title:t,username:u,password:p,url});saveVault();document.querySelectorAll('.view-vault').forEach(el=>{el.innerHTML=vaultBodyHTML();}); }
+async function vEnc(data,pw){const salt=crypto.getRandomValues(new Uint8Array(16)),iv=crypto.getRandomValues(new Uint8Array(12));const k=await vKey(pw,salt);const ct=await crypto.subtle.encrypt({name:'AES-GCM',iv},k,new TextEncoder().encode(JSON.stringify(data)));const o=new Uint8Array(28+ct.byteLength);o.set(salt,0);o.set(iv,16);o.set(new Uint8Array(ct),28);return btoa(String.fromCharCode(...o));}
+async function vDec(blob,pw){const r=Uint8Array.from(atob(blob),c=>c.charCodeAt(0));const k=await vKey(pw,r.slice(0,16));const d=await crypto.subtle.decrypt({name:'AES-GCM',iv:r.slice(16,28)},k,r.slice(28));return JSON.parse(new TextDecoder().decode(d));}
+async function vKey(pw,salt){const m=await crypto.subtle.importKey('raw',new TextEncoder().encode(pw),'PBKDF2',false,['deriveKey']);return crypto.subtle.deriveKey({name:'PBKDF2',salt,iterations:200000,hash:'SHA-256'},m,{name:'AES-GCM',length:256},false,['encrypt','decrypt']);}
+
+// ── ISSUES ────────────────────────────────────────────────────────────────────
+async function renderIssues(elId) {
+  await fetchIssues();
+  const el=document.getElementById(elId); if(!el) return;
+  if(!S.issues.length){el.innerHTML='<div style="color:var(--muted);padding:14px;font-size:12px">No issues found.</div>';return;}
+  el.innerHTML=S.issues.map(i=>`<div class="iss-row">
+    <div class="iss-dot ${i.status}"></div>
+    <div><div class="iss-title">${i.title}</div>
+    ${i.description?`<div class="iss-desc">${i.description}</div>`:''}
+    ${i.resolution?`<div class="iss-res">✓ ${i.resolution}</div>`:''}
+    <div class="iss-date">${i.created_date||''} · ${i.status}</div></div>
+    <span class="badge ${i.status==='open'?'off':'up'}" style="margin-left:auto;flex-shrink:0">${i.status}</span>
+  </div>`).join('');
+}
+
+// ── NETWORK ───────────────────────────────────────────────────────────────────
+async function loadNet(key) {
+  const cmds=[{id:`nufw-${key}`,cmd:'sudo ufw status numbered'},{id:`nf2b-${key}`,cmd:'sudo fail2ban-client status sshd'},{id:`npts-${key}`,cmd:'ss -tlnp | head -25'}];
+  for(const c of cmds) {
+    document.getElementById(c.id).textContent='Loading…';
+    try{const r=await fetch(API+'/api/run',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({command:c.cmd})});const d=await r.json();document.getElementById(c.id).textContent=d.output||d.error||'(empty)';}
+    catch{document.getElementById(c.id).textContent='Hub server not running.';}
+  }
+}
+
+// ── AI CHAT ───────────────────────────────────────────────────────────────────
+function chatMsg(key, role, text) {
+  const el=document.getElementById(`chat-msgs-${key}`); if(!el) return;
+  const t=new Date().toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'});
+  const d=document.createElement('div'); d.className=`msg ${role}`;
+  d.innerHTML=`<div class="msg-bub">${text.replace(/</g,'&lt;').replace(/>/g,'&gt;')}</div><div class="msg-meta">${role==='ai'?'🤖 AI':'You'} · ${t}</div>`;
+  el.appendChild(d); d.scrollIntoView({behavior:'smooth'});
+  return d;
+}
+async function sendChat(key) {
+  const inp=document.getElementById(`chat-inp-${key}`); if(!inp) return;
+  const text=inp.value.trim(); if(!text) return;
+  inp.value=''; chatMsg(key,'user',text);
+  const s=S.status;
+  const ctx=s?.online?`Server: online, uptime ${s.uptime||'?'}, RAM ${s.ram_used_mb||'?'}/${s.ram_total_mb||'?'}MB, disk ${s.disk_pct||'?'}, load ${s.load||'?'}, ${s.containers||'?'} containers.`:'Server: appears offline.';
+  const prompt=`${ctx}\nUser: ${text}\nAnswer concisely as a server assistant. If you need to suggest commands, show them in backticks.`;
+  const thinking=chatMsg(key,'ai','…');
+  try {
+    const r=await fetch(API+'/api/run',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({command:`claude -p ${JSON.stringify(prompt)} --output-format text 2>/dev/null || echo "Claude CLI needs ANTHROPIC_API_KEY in ~/.bashrc on the server."`})});
+    const d=await r.json();
+    thinking.querySelector('.msg-bub').textContent=d.output||d.error||'No response';
+  } catch { thinking.querySelector('.msg-bub').textContent='Hub server not running.'; }
+}
+
+// ── ADD SERVICE ───────────────────────────────────────────────────────────────
+function openModal() { document.getElementById('moverlay').classList.add('show'); }
+function closeModal() { document.getElementById('moverlay').classList.remove('show'); }
+function addServiceFromModal() {
+  const name=document.getElementById('m-name').value.trim();
+  const port=parseInt(document.getElementById('m-port').value)||0;
+  const desc=document.getElementById('m-desc').value.trim();
+  const group=document.getElementById('m-group').value.trim()||'Custom';
+  if(!name||!port) return;
+  const svc={name,port,desc,group,installed:true,custom:true};
+  customSvcs.push(svc); localStorage.setItem('hub_custom',JSON.stringify(customSvcs));
+  S.services.push(svc); closeModal(); refreshCategoryNav();
+}
+
+// ── REFRESH ───────────────────────────────────────────────────────────────────
+async function refresh(force=false) {
+  await fetchStatus(force);
+  await fetchServices();
+  await fetchContainers();
+}
+function hardRefresh() { refresh(true); fetchIssues(); }
+
+// ── DESK MODE ─────────────────────────────────────────────────────────────────
+function enterDeskMode() {
+  document.body.classList.add('desk-mode');
+  // Spawn a terminal widget if none exist so the desk isn't empty
+  if (!W.widgets.length) spawnWidget('terminal');
+}
+function exitDeskMode() {
+  document.body.classList.remove('desk-mode');
+}
+// Escape key exits desk mode
+document.addEventListener('keydown', e => { if (e.key === 'Escape') exitDeskMode(); });
+
+// ── BOOKMARK BAR ─────────────────────────────────────────────────────────────
+let bookmarks = JSON.parse(localStorage.getItem('hub_bookmarks')||'[]');
+
+function renderBookmarks() {
+  const bar = document.getElementById('bkbar');
+  const add = bar.querySelector('.bk-add');
+  bar.querySelectorAll('.bk-chip').forEach(el => el.remove());
+  bookmarks.forEach((bk, i) => {
+    const chip = document.createElement('div');
+    chip.className = 'bk-chip';
+    chip.innerHTML = `${bk.icon} ${bk.label}<span class="bk-chip-x" onclick="event.stopPropagation();removeBookmark(${i})">✕</span>`;
+    chip.addEventListener('click', () => runBookmark(bk));
+    bar.insertBefore(chip, add);
+  });
+}
+
+function runBookmark(bk) {
+  if (!bk) return;
+  if (typeof bk === 'string') try { bk = JSON.parse(bk); } catch { return; }
+  if (bk.type === 'view') openView(bk.viewType);
+  else if (bk.type === 'iframe') openIframeWs(bk.label, bk.port, bk.url);
+  else if (bk.type === 'doc') openDocWs(bk.file, bk.label);
+}
+
+function addBookmark(icon, label, type, extra={}) {
+  if (!label) {
+    label = prompt('Bookmark name:'); if (!label) return;
+    icon = prompt('Icon (emoji):', '⭐') || '⭐';
+    type = 'view';
+    const vt = prompt('View type (dashboard/terminal/logs/map/vault/issues/network/chat):', 'dashboard') || 'dashboard';
+    extra = {viewType: vt};
+  }
+  bookmarks.push({icon, label, type, ...extra});
+  localStorage.setItem('hub_bookmarks', JSON.stringify(bookmarks));
+  renderBookmarks();
+}
+
+function addBookmarkFrom(icon, label, type, extra) {
+  if (bookmarks.find(b=>b.label===label)) return;
+  bookmarks.push({icon, label, type, ...extra});
+  localStorage.setItem('hub_bookmarks', JSON.stringify(bookmarks));
+  renderBookmarks();
+}
+
+function removeBookmark(i) {
+  bookmarks.splice(i, 1);
+  localStorage.setItem('hub_bookmarks', JSON.stringify(bookmarks));
+  renderBookmarks();
+  refreshCategoryNav();
+}
+
+function isFav(label) { return bookmarks.some(b => b.label === label); }
+
+function toggleFav(icon, label, type, extraJson) {
+  const extra = extraJson ? JSON.parse(extraJson) : {};
+  const idx = bookmarks.findIndex(b => b.label === label);
+  if (idx >= 0) { bookmarks.splice(idx, 1); }
+  else { bookmarks.push({icon, label, type, ...extra}); }
+  localStorage.setItem('hub_bookmarks', JSON.stringify(bookmarks));
+  renderBookmarks();
+  refreshCategoryNav();
+}
+
+// ── RIGHT PANEL TABS ──────────────────────────────────────────────────────────
+const S_HISTORY = []; // session command history (all terminals)
+let wpTab = 'ctx';
+
+function setWPTab(tab) {
+  wpTab = tab;
+  document.querySelectorAll('.wp-tab').forEach(el => el.classList.toggle('active', el.dataset.tab===tab));
+  renderWPTabContent();
+}
+
+function renderWPTabContent() {
+  if (wpTab === 'ctx') updateContextPanel();
+  else if (wpTab === 'alerts') renderAlertsTab();
+  else if (wpTab === 'hist') renderHistoryTab();
+}
+
+function renderAlertsTab() {
+  const body = document.getElementById('ctx-panel-content'); if (!body) return;
+  const alerts = [];
+  if (!S.status?.online) {
+    alerts.push({level:'crit', msg:'Server offline or unreachable'});
+  } else {
+    const diskPct = parseInt(S.status.disk_pct);
+    if (diskPct > 90) alerts.push({level:'crit', msg:`Disk critical: ${S.status.disk_pct} used`});
+    else if (diskPct > 75) alerts.push({level:'warn', msg:`Disk at ${S.status.disk_pct} — consider pruning`});
+    const load = parseFloat(S.status.load?.split(' ')[0]);
+    if (load > 8) alerts.push({level:'warn', msg:`High load average: ${S.status.load}`});
+  }
+  const stopped = S.containers.filter(c=>!c.running);
+  if (stopped.length) alerts.push({level:'warn', msg:`${stopped.length} container${stopped.length>1?'s':''} stopped`, detail: stopped.map(c=>c.name).join(', ')});
+  const clr = l => l==='crit'?'var(--red)':l==='warn'?'var(--yellow)':'var(--green)';
+  if (!alerts.length) {
+    body.innerHTML = `<div style="padding:24px 8px;text-align:center"><div style="font-size:24px;margin-bottom:6px">✓</div><div style="font-size:11px;color:var(--green)">All systems clear</div></div>`;
+    return;
+  }
+  body.innerHTML = alerts.map(a => `
+    <div style="border-left:3px solid ${clr(a.level)};padding:6px 10px;margin:6px 0;background:rgba(0,0,0,.2);border-radius:0 4px 4px 0">
+      <div style="font-size:11px;color:var(--text);font-weight:600">${a.msg}</div>
+      ${a.detail?`<div style="font-size:10px;color:var(--muted);margin-top:2px;font-family:var(--mono)">${a.detail}</div>`:''}
+    </div>`).join('');
+}
+
+function renderHistoryTab() {
+  const body = document.getElementById('ctx-panel-content'); if (!body) return;
+  if (!S_HISTORY.length) {
+    body.innerHTML = `<div style="padding:12px 8px;font-size:11px;color:var(--muted)">No commands run this session</div>`;
+    return;
+  }
+  const secHead = t => `<div style="font-size:9px;font-weight:700;letter-spacing:.5px;text-transform:uppercase;color:var(--muted2);padding:8px 8px 5px">${t}</div>`;
+  body.innerHTML = secHead('Recent Commands') +
+    [...S_HISTORY].slice(0,30).map(h =>
+      `<div class="w-type-item" style="font-family:var(--mono);font-size:10px;flex-direction:column;align-items:flex-start;gap:1px" onclick="openView('terminal')">
+        <span style="color:var(--text)">${h.cmd.length>36?h.cmd.slice(0,35)+'…':h.cmd}</span>
+        <span style="font-size:9px;color:var(--muted2)">${h.time}</span>
+      </div>`
+    ).join('');
+}
+
+function pushHistory(cmd) {
+  const time = new Date().toLocaleTimeString('en',{hour:'2-digit',minute:'2-digit'});
+  S_HISTORY.unshift({cmd, time});
+  if (S_HISTORY.length > 100) S_HISTORY.pop();
+  if (wpTab === 'hist') renderHistoryTab();
+}
+
+// ── RIGHT CONTEXT PANEL ───────────────────────────────────────────────────────
+function toggleWPanel() {
+  const panel = document.getElementById('wpanel');
+  const toggled = panel.classList.toggle('collapsed');
+  document.getElementById('wpanel-toggle').textContent = toggled ? '◂' : '▸';
+}
+
+function setWDock(type) {
+  document.querySelectorAll('.wdock-item').forEach(el => el.classList.toggle('active', el.dataset.wtype===type));
+}
+
+function updateContextPanel() {
+  const ws = S.workspaces.find(w=>w.id===S.activeWs);
+  const pane = ws?.panes?.[0];
+  const vt = pane?.viewType || 'blank';
+  const vc = pane?.viewConfig || {};
+  const titleEl = document.getElementById('wpanel-title');
+  const body = document.getElementById('ctx-panel-content');
+  if (!body) return;
+
+  const secHead = t => `<div style="font-size:9px;font-weight:700;letter-spacing:.5px;text-transform:uppercase;color:var(--muted2);padding:8px 8px 5px">${t}</div>`;
+  const ctxBtn = (icon, label, onclick) => `<div class="w-type-item" onclick="${onclick}">${icon} ${label}</div>`;
+  const ctxInfo = (label, val) => `<div style="display:flex;justify-content:space-between;align-items:center;padding:4px 8px;font-size:11px"><span style="color:var(--muted)">${label}</span><span style="color:var(--text);font-family:var(--mono);font-size:10px">${val}</span></div>`;
+  const divider = () => `<div style="height:1px;background:var(--border);margin:6px 0"></div>`;
+
+  let title = 'Context', html = '';
+
+  if (vt === 'terminal') {
+    title = 'Shell Tools';
+    html = secHead('Quick Run') +
+      ['health-check','docker ps -a --format "table {{.Names}}\\t{{.Status}}"','df -h /','free -h','uptime','sudo fail2ban-client status sshd','ls /srv/docker/'].map(cmd =>
+        `<div class="w-type-item" style="font-family:var(--mono);font-size:10px" onclick="qcmd('${ws.id}-${pane.id}','${cmd.replace(/'/g,"\\'").replace(/"/g,'&quot;')}')">${cmd}</div>`
+      ).join('') +
+      divider() + secHead('Connection') +
+      ctxInfo('Host', 'homeserver') + ctxInfo('User', 'admin1') + ctxInfo('IP', '192.168.1.229');
+
+  } else if (vt === 'iframe') {
+    const svc = S.services.find(s=>s.port===vc.port) || {};
+    title = vc.title || 'Service';
+    html = secHead('Service') +
+      ctxInfo('Port', ':' + (vc.port||'—')) +
+      ctxInfo('Status', svc.running ? '🟢 up' : '⚫ —') +
+      ctxInfo('Protocol', vc.directUrl?.startsWith('https')?'HTTPS':'HTTP') +
+      divider() + secHead('Actions') +
+      ctxBtn('↺','Reload iframe', `document.querySelector('.workspace.active iframe')?.contentWindow?.location?.reload()`) +
+      ctxBtn('🔗','Open direct URL', `window.open('${vc.directUrl||''}','_blank')`) +
+      (svc.name ? ctxBtn('📋','View logs', `openView('logs')`) : '') +
+      (svc.name ? ctxBtn('↺','Restart container', `qcmd && openView('terminal')`) : '');
+
+  } else if (vt === 'dashboard') {
+    title = 'Quick Actions';
+    html = secHead('Server') +
+      ctxBtn('↻','Refresh status', 'hardRefresh()') +
+      ctxBtn('⌨','Open terminal', "openView('terminal')") +
+      ctxBtn('🗺','Infra map', "openView('map')") +
+      divider() + secHead('Stats') +
+      ctxInfo('Containers', S.status?.containers ?? '—') +
+      ctxInfo('RAM', S.status?.ram_used_mb ? `${(S.status.ram_used_mb/1024).toFixed(1)}GB` : '—') +
+      ctxInfo('Disk', S.status?.disk_pct || '—') +
+      ctxInfo('Load', S.status?.load || '—');
+
+  } else if (vt === 'map') {
+    title = 'Containers';
+    const running = S.containers.filter(c=>c.running).length;
+    const stopped = S.containers.filter(c=>!c.running).length;
+    html = secHead('Summary') +
+      ctxInfo('Running', running) + ctxInfo('Stopped', stopped) +
+      divider() + secHead('Stopped') +
+      (S.containers.filter(c=>!c.running).map(c =>
+        `<div class="w-type-item" style="font-size:10px;font-family:var(--mono)" onclick="openView('terminal')">${c.name}</div>`
+      ).join('') || `<div style="padding:6px 8px;font-size:11px;color:var(--muted)">All running ✓</div>`);
+
+  } else if (vt === 'logs') {
+    title = 'Log Tools';
+    html = secHead('Containers') +
+      S.containers.filter(c=>c.running).slice(0,10).map(c =>
+        `<div class="w-type-item" style="font-size:10px;font-family:var(--mono)" onclick="document.getElementById('lname-${ws.id}-${pane.id}')&&(document.getElementById('lname-${ws.id}-${pane.id}').value='${c.name}')">${c.name}</div>`
+      ).join('');
+
+  } else if (vt === 'vault') {
+    title = 'Vault Tools';
+    html = secHead('Actions') +
+      ctxBtn('🔒','Lock vault', 'vaultLock()') +
+      ctxBtn('＋','New entry', 'vaultAdd()') +
+      divider() +
+      ctxInfo('Entries', S.vaultData?.entries?.length ?? (S.vaultData ? '0' : '—'));
+
+  } else if (vt === 'docs') {
+    title = 'Guides';
+    html = secHead('All Guides') +
+      S.docs.map(d =>
+        `<div class="w-type-item" style="font-size:11px" onclick="openDocWs('${d.file}','${d.title}')">📄 ${d.title}</div>`
+      ).join('');
+
+  } else if (vt === 'network') {
+    title = 'Network Tools';
+    html = secHead('Actions') +
+      ctxBtn('🔓','Unban my IP', `qcmd('${ws?.id}-${pane?.id}','sudo fail2ban-client set sshd unbanip 192.168.1.192')`) +
+      ctxBtn('🔥','UFW status', `qcmd('${ws?.id}-${pane?.id}','sudo ufw status numbered')`) +
+      ctxBtn('📡','Open ports', `qcmd('${ws?.id}-${pane?.id}','ss -tlnp')`);
+
+  } else if (vt === 'chat') {
+    title = 'AI Chat';
+    html = secHead('Context') + ctxInfo('Model', 'Claude CLI') + ctxInfo('Server', S.status?.online?'online':'offline');
+
+  } else {
+    title = 'Workspace';
+    html = secHead('Layout') +
+      ['l1','l2h','l2v','l4'].map((l,i) => {
+        const icons = ['▣ Single','⊢ Side-by-side','⊤ Stacked','⊞ 2×2'];
+        return `<div class="w-type-item" onclick="setWsLayout('${ws?.id}','${l}')">${icons[i]}</div>`;
+      }).join('') +
+      divider() + secHead('Open in pane') +
+      Object.entries(VIEW_DEFS).filter(([k])=>k!=='blank').map(([k,v]) =>
+        `<div class="w-type-item" style="font-size:11px" onclick="openView('${k}')">${v.icon} ${v.title}</div>`
+      ).join('');
+  }
+
+  if (titleEl) titleEl.textContent = title;
+  body.innerHTML = html;
+}
+
+function setWsLayout(wsId, layout) {
+  const ws = S.workspaces.find(w=>w.id===wsId); if (!ws) return;
+  const counts = {l1:1,l2h:2,l2v:2,l4:4};
+  const need = counts[layout]||1;
+  while (ws.panes.length < need) ws.panes.push({id:uid(),viewType:'blank',viewConfig:{}});
+  ws.panes = ws.panes.slice(0, need);
+  ws.layout = layout;
+  reRenderWorkspace(wsId);
+}
+
+function updateWActiveList() {} // kept for compat, no longer used
+
+// ── WIDGET ENGINE ─────────────────────────────────────────────────────────────
+const W = { widgets: [], zTop: 60 };
+let _wCounter = 0;
+const wuid = () => 'w' + (++_wCounter);
+
+const WIDGET_DEFS = {
+  terminal:   { icon:'⌨',  title:'Terminal',    w:340, h:260 },
+  whiteboard: { icon:'🎨', title:'Whiteboard',  w:480, h:340 },
+  sticky:     { icon:'📌', title:'Sticky Note', w:220, h:180 },
+  stats:      { icon:'📊', title:'Stats',       w:240, h:200 },
+  logtail:    { icon:'📋', title:'Log Tail',    w:360, h:280 },
+  ctrtoggle:  { icon:'🐳', title:'Containers',  w:240, h:320 },
+  timer:      { icon:'⏱',  title:'Timer',       w:210, h:160 },
+};
+
+function spawnWidget(type) {
+  const def = WIDGET_DEFS[type]; if (!def) return;
+  const id = wuid();
+  const layer = document.getElementById('widget-layer');
+  const layerRect = layer.getBoundingClientRect();
+  const offset = W.widgets.length * 24;
+  const x = Math.min(40 + offset, layerRect.width  - def.w - 20);
+  const y = Math.min(40 + offset, layerRect.height - def.h - 20);
+
+  W.zTop++;
+  const el = document.createElement('div');
+  el.className = 'widget';
+  el.dataset.wid = id;
+  el.style.cssText = `left:${x}px;top:${y}px;width:${def.w}px;height:${def.h}px;z-index:${W.zTop}`;
+  el.innerHTML = `
+    <div class="widget-hdr">
+      <span>${def.icon}</span>
+      <span class="widget-hdr-title">${def.title}</span>
+      <div class="widget-hdr-btns">
+        <button class="whb" onclick="toggleMinWidget('${id}')" title="Minimize">─</button>
+        <button class="whb" onclick="closeWidget('${id}')" title="Close" style="color:var(--red)">✕</button>
+      </div>
+    </div>
+    <div class="widget-body" id="wbody-${id}"></div>
+    <div class="widget-resize" id="wresize-${id}"></div>`;
+
+  layer.appendChild(el);
+  makeDraggable(el, el.querySelector('.widget-hdr'));
+  makeResizable(el, el.querySelector(`#wresize-${id}`));
+  el.addEventListener('mousedown', () => focusWidget(id));
+
+  const meta = {id, type, icon:def.icon, title:def.title, el};
+  W.widgets.push(meta);
+  mountWidget(id, type, document.getElementById(`wbody-${id}`));
+  updateWActiveList();
+}
+
+function saveStickyNotes() {
+  const data = W.widgets.filter(w=>w.type==='sticky').map(w => {
+    const ta = w.el.querySelector('textarea');
+    return { content: ta?.value||'', x: parseInt(w.el.style.left)||40, y: parseInt(w.el.style.top)||40, w: w.el.offsetWidth, h: w.el.offsetHeight };
+  });
+  localStorage.setItem('hub_stickies', JSON.stringify(data));
+}
+
+function restoreStickyNotes() {
+  try {
+    const saved = JSON.parse(localStorage.getItem('hub_stickies')||'[]');
+    const def = WIDGET_DEFS.sticky;
+    saved.forEach(s => {
+      const id = wuid();
+      const layer = document.getElementById('widget-layer');
+      W.zTop++;
+      const el = document.createElement('div');
+      el.className = 'widget'; el.dataset.wid = id;
+      el.style.cssText = `left:${s.x}px;top:${s.y}px;width:${s.w||def.w}px;height:${s.h||def.h}px;z-index:${W.zTop}`;
+      el.innerHTML = `<div class="widget-hdr"><span>${def.icon}</span><span class="widget-hdr-title">${def.title}</span><div class="widget-hdr-btns"><button class="whb" onclick="toggleMinWidget('${id}')" title="Minimize">─</button><button class="whb" onclick="closeWidget('${id}')" title="Close" style="color:var(--red)">✕</button></div></div><div class="widget-body" id="wbody-${id}"></div><div class="widget-resize" id="wresize-${id}"></div>`;
+      layer.appendChild(el);
+      makeDraggable(el, el.querySelector('.widget-hdr'));
+      makeResizable(el, el.querySelector(`#wresize-${id}`));
+      el.addEventListener('mousedown', () => focusWidget(id));
+      W.widgets.push({id, type:'sticky', icon:def.icon, title:def.title, el});
+      mountWidget(id, 'sticky', document.getElementById(`wbody-${id}`), s.content);
+    });
+  } catch(e) {}
+}
+
+function mountWidget(id, type, body, content='') {
+  if (type === 'terminal') {
+    body.innerHTML = `<div style="display:flex;flex-direction:column;height:100%">
+      <div class="wterm-out" id="wtout-${id}"><span style="color:var(--muted);font-size:10px">  ⌨ homeserver shell\n</span></div>
+      <div class="wterm-row">
+        <span style="font-family:var(--mono);font-size:9px;color:var(--teal);white-space:nowrap">$</span>
+        <input class="wterm-inp" id="wtinp-${id}" placeholder="command…" autocomplete="off" spellcheck="false">
+        <button class="btn p" style="font-size:10px;padding:2px 7px" onclick="runWTerm('${id}')">↵</button>
+      </div>
+    </div>`;
+    const inp = document.getElementById(`wtinp-${id}`);
+    if (inp) inp.addEventListener('keydown', e => { if (e.key==='Enter') runWTerm(id); });
+  }
+  else if (type === 'whiteboard') {
+    body.innerHTML = `<div class="wboard" id="wboard-${id}">
+      <canvas id="wcanvas-${id}"></canvas>
+      <div class="wboard-toolbar">
+        <button class="wbt active" id="wtool-draw-${id}" onclick="setWBTool('${id}','draw')">✏ Draw</button>
+        <button class="wbt" id="wtool-erase-${id}" onclick="setWBTool('${id}','erase')">⌫ Erase</button>
+        <button class="wbt" onclick="addSticky('${id}')">📌 Note</button>
+        <button class="wbt" onclick="clearBoard('${id}')">✕ Clear</button>
+        <input class="wbt-color" type="color" id="wcolor-${id}" value="#58a6ff" title="Color">
+      </div>
+    </div>`;
+    setTimeout(() => initBoard(id), 50);
+  }
+  else if (type === 'sticky') {
+    body.innerHTML = `<div style="padding:8px;height:100%">
+      <textarea id="sta-${id}" style="width:100%;height:100%;background:transparent;border:none;color:#e6d080;font-family:var(--ui);font-size:12px;resize:none;outline:none;line-height:1.6" placeholder="Type a note…"></textarea>
+    </div>`;
+    const ta = document.getElementById(`sta-${id}`);
+    if (content) ta.value = content;
+    ta.addEventListener('input', saveStickyNotes);
+  }
+  else if (type === 'stats') {
+    body.innerHTML = `<div class="wstats" id="wstats-${id}">
+      <div class="stat-row"><div class="stat-label"><span>RAM</span><span id="wram-${id}" class="stat-val">—</span></div><div class="stat-bar"><div class="stat-fill" id="wrambar-${id}" style="width:0%;background:var(--accent)"></div></div></div>
+      <div class="stat-row"><div class="stat-label"><span>Disk</span><span id="wdsk-${id}" class="stat-val">—</span></div><div class="stat-bar"><div class="stat-fill" id="wdskbar-${id}" style="width:0%;background:var(--green)"></div></div></div>
+      <div class="stat-row"><div class="stat-label"><span>Containers</span><span id="wct-${id}" class="stat-val">—</span></div></div>
+      <div class="stat-row"><div class="stat-label"><span>Load</span><span id="wload-${id}" class="stat-val">—</span></div></div>
+      <div class="stat-row"><div class="stat-label"><span>Uptime</span><span id="wup-${id}" class="stat-val">—</span></div></div>
+    </div>`;
+    updateStatsWidget(id);
+    const meta = W.widgets.find(w=>w.id===id);
+    if (meta) meta.statsInterval = setInterval(() => updateStatsWidget(id), 30000);
+  }
+  else if (type === 'logtail') {
+    body.innerHTML = `<div style="display:flex;flex-direction:column;height:100%;gap:0">
+      <div style="display:flex;gap:4px;padding:6px;border-bottom:1px solid var(--border);flex-shrink:0">
+        <input id="ltname-${id}" list="lt-ctrs-${id}" placeholder="container name…" style="flex:1;background:var(--panel2);border:1px solid var(--border2);border-radius:3px;color:var(--text);font-family:var(--mono);font-size:11px;padding:3px 6px">
+        <datalist id="lt-ctrs-${id}">${S.containers.map(c=>`<option value="${c.name}">`).join('')}</datalist>
+        <select id="ltlines-${id}" style="background:var(--panel2);border:1px solid var(--border2);border-radius:3px;color:var(--muted);font-size:11px;padding:3px 4px">
+          <option value="50">50</option><option value="100">100</option><option value="200">200</option>
+        </select>
+        <button onclick="tailLog('${id}')" style="background:var(--accent);color:#000;border:none;border-radius:3px;padding:3px 10px;cursor:pointer;font-size:11px;font-weight:600">Tail</button>
+      </div>
+      <div id="ltout-${id}" style="flex:1;overflow-y:auto;font-family:var(--mono);font-size:10px;color:var(--muted);line-height:1.6;background:var(--bg);padding:8px;white-space:pre-wrap;word-break:break-all">Pick a container and hit Tail…</div>
+    </div>`;
+  }
+  else if (type === 'ctrtoggle') {
+    body.innerHTML = `<div id="ctrtog-${id}" style="overflow-y:auto;height:100%;padding:4px 2px"></div>`;
+    updateCtrToggleWidget(id);
+  }
+  else if (type === 'timer') {
+    body.innerHTML = `<div style="display:flex;flex-direction:column;align-items:center;justify-content:center;height:100%;gap:10px;padding:8px">
+      <div id="tdisp-${id}" style="font-family:var(--mono);font-size:30px;color:var(--text);letter-spacing:3px;font-variant-numeric:tabular-nums">00:00</div>
+      <div style="display:flex;gap:6px">
+        <button onclick="timerToggle('${id}')" id="tbtn-${id}" style="background:var(--accent);color:#000;border:none;border-radius:4px;padding:5px 16px;cursor:pointer;font-size:12px;font-weight:700">Start</button>
+        <button onclick="timerReset('${id}')" style="background:var(--panel2);color:var(--text);border:1px solid var(--border2);border-radius:4px;padding:5px 11px;cursor:pointer;font-size:12px">Reset</button>
+      </div>
+      <div style="display:flex;gap:4px">
+        <button onclick="timerSet('${id}',5*60)"  style="background:var(--panel2);color:var(--muted);border:none;border-radius:3px;padding:3px 9px;cursor:pointer;font-size:10px">5m</button>
+        <button onclick="timerSet('${id}',15*60)" style="background:var(--panel2);color:var(--muted);border:none;border-radius:3px;padding:3px 9px;cursor:pointer;font-size:10px">15m</button>
+        <button onclick="timerSet('${id}',30*60)" style="background:var(--panel2);color:var(--muted);border:none;border-radius:3px;padding:3px 9px;cursor:pointer;font-size:10px">30m</button>
+        <button onclick="timerSet('${id}',60*60)" style="background:var(--panel2);color:var(--muted);border:none;border-radius:3px;padding:3px 9px;cursor:pointer;font-size:10px">1h</button>
+      </div>
+    </div>`;
+    const meta = W.widgets.find(w=>w.id===id);
+    if (meta) meta.timerState = {running:false, elapsed:0, countdown:null, interval:null};
+  }
+}
+
+function updateStatsWidget(id) {
+  const s = S.status; if (!s?.online) return;
+  const ramPct = s.ram_total_mb ? Math.round(s.ram_used_mb/s.ram_total_mb*100) : 0;
+  const dskPct = parseInt(s.disk_pct)||0;
+  const ramEl = document.getElementById(`wram-${id}`); if (ramEl) { ramEl.textContent = `${(s.ram_used_mb/1024).toFixed(1)}/${(s.ram_total_mb/1024).toFixed(0)}GB`; }
+  const ramBar = document.getElementById(`wrambar-${id}`); if (ramBar) ramBar.style.width = ramPct+'%';
+  const dskEl = document.getElementById(`wdsk-${id}`); if (dskEl) dskEl.textContent = `${s.disk_used}/${s.disk_total}`;
+  const dskBar = document.getElementById(`wdskbar-${id}`); if (dskBar) dskBar.style.width = dskPct+'%';
+  const ctEl = document.getElementById(`wct-${id}`); if (ctEl) ctEl.textContent = s.containers ?? '—';
+  const loadEl = document.getElementById(`wload-${id}`); if (loadEl) loadEl.textContent = s.load ?? '—';
+  const upEl = document.getElementById(`wup-${id}`); if (upEl) upEl.textContent = s.uptime ?? '—';
+}
+
+function focusWidget(id) {
+  W.zTop++;
+  const el = document.querySelector(`.widget[data-wid="${id}"]`);
+  if (el) el.style.zIndex = W.zTop;
+}
+
+function toggleMinWidget(id) {
+  const el = document.querySelector(`.widget[data-wid="${id}"]`);
+  if (el) el.classList.toggle('minimized');
+}
+
+function closeWidget(id) {
+  const el = document.querySelector(`.widget[data-wid="${id}"]`);
+  if (el) el.remove();
+  const meta = W.widgets.find(w=>w.id===id);
+  if (meta?.statsInterval) clearInterval(meta.statsInterval);
+  W.widgets = W.widgets.filter(w=>w.id!==id);
+  updateWActiveList();
+  saveStickyNotes();
+}
+
+// ── DRAG + RESIZE ─────────────────────────────────────────────────────────────
+function makeDraggable(el, handle) {
+  let ox, oy;
+  handle.addEventListener('mousedown', e => {
+    if (e.target.classList.contains('whb')) return;
+    ox = e.clientX - el.offsetLeft;
+    oy = e.clientY - el.offsetTop;
+    const layer = document.getElementById('widget-layer');
+    const lr = layer.getBoundingClientRect();
+    const move = e2 => {
+      const nx = Math.max(0, Math.min(e2.clientX - ox, lr.width - el.offsetWidth));
+      const ny = Math.max(0, Math.min(e2.clientY - oy, lr.height - el.offsetHeight));
+      el.style.left = nx + 'px'; el.style.top = ny + 'px';
+    };
+    const up = () => { document.removeEventListener('mousemove', move); document.removeEventListener('mouseup', up); };
+    document.addEventListener('mousemove', move);
+    document.addEventListener('mouseup', up);
+    e.preventDefault();
+  });
+}
+
+function makeResizable(el, handle) {
+  handle.addEventListener('mousedown', e => {
+    const sx = e.clientX, sy = e.clientY, sw = el.offsetWidth, sh = el.offsetHeight;
+    const move = e2 => {
+      el.style.width  = Math.max(200, sw + e2.clientX - sx) + 'px';
+      el.style.height = Math.max(120, sh + e2.clientY - sy) + 'px';
+      const id = el.dataset.wid;
+      const canvas = document.getElementById(`wcanvas-${id}`);
+      if (canvas) resizeCanvas(id);
+    };
+    const up = () => { document.removeEventListener('mousemove', move); document.removeEventListener('mouseup', up); };
+    document.addEventListener('mousemove', move);
+    document.addEventListener('mouseup', up);
+    e.preventDefault();
+  });
+}
+
+// ── WIDGET TERMINAL ───────────────────────────────────────────────────────────
+async function runWTerm(id) {
+  const inp = document.getElementById(`wtinp-${id}`); if (!inp) return;
+  const cmd = inp.value.trim(); if (!cmd) return;
+  inp.value = '';
+  pushHistory(cmd);
+  const out = document.getElementById(`wtout-${id}`); if (!out) return;
+  out.innerHTML += `<span style="color:var(--teal)">$ ${cmd}\n</span>`;
+  out.innerHTML += `<span style="color:var(--muted);font-style:italic">Running…\n</span>`;
+  out.scrollTop = out.scrollHeight;
+  try {
+    const r = await fetch(API+'/api/run',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({command:cmd})});
+    const d = await r.json();
+    const lines = out.querySelectorAll('span');
+    lines[lines.length-1].remove();
+    if (d.output) out.innerHTML += `<span style="color:#c9d1d9">${d.output}\n</span>`;
+    if (d.error)  out.innerHTML += `<span style="color:var(--red)">${d.error}\n</span>`;
+  } catch { out.innerHTML += `<span style="color:var(--red)">Hub server not running\n</span>`; }
+  out.scrollTop = out.scrollHeight;
+}
+
+// ── LOG TAIL WIDGET ───────────────────────────────────────────────────────────
+async function tailLog(id) {
+  const name = document.getElementById(`ltname-${id}`)?.value?.trim(); if (!name) return;
+  const lines = document.getElementById(`ltlines-${id}`)?.value || '50';
+  const out = document.getElementById(`ltout-${id}`); if (!out) return;
+  out.textContent = `Fetching ${lines} lines from ${name}…`;
+  try {
+    const r = await fetch(API+'/api/run',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({command:`docker logs ${name} --tail ${lines} 2>&1`})});
+    const d = await r.json();
+    out.textContent = d.output || d.error || '(no output)';
+    out.scrollTop = out.scrollHeight;
+  } catch { out.textContent = 'Hub server not running.'; }
+}
+
+// ── CONTAINER TOGGLE WIDGET ───────────────────────────────────────────────────
+function updateCtrToggleWidget(id) {
+  const el = document.getElementById(`ctrtog-${id}`); if (!el) return;
+  if (!S.containers.length) {
+    el.innerHTML = `<div style="padding:12px 8px;font-size:11px;color:var(--muted)">No container data — connect server</div>`;
+    return;
+  }
+  el.innerHTML = S.containers.map(c => `
+    <div style="display:flex;align-items:center;gap:6px;padding:5px 8px;border-bottom:1px solid var(--border)">
+      <span style="width:7px;height:7px;border-radius:50%;flex-shrink:0;background:${c.running?'var(--green)':'#444'}"></span>
+      <span style="flex:1;font-size:10px;font-family:var(--mono);color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${c.name}">${c.name}</span>
+      <button onclick="toggleContainer('${c.name}',${c.running},'${id}')" style="background:${c.running?'rgba(248,81,73,.18)':'rgba(63,185,80,.15)'};color:${c.running?'var(--red)':'var(--green)'};border:none;border-radius:3px;padding:2px 7px;cursor:pointer;font-size:10px;font-weight:600;flex-shrink:0">${c.running?'Stop':'Start'}</button>
+    </div>`).join('');
+}
+
+async function toggleContainer(name, isRunning, wid) {
+  const cmd = isRunning ? `docker stop ${name}` : `docker start ${name}`;
+  try {
+    await fetch(API+'/api/run',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({command:cmd})});
+    setTimeout(async () => {
+      await refresh(true);
+      W.widgets.filter(w=>w.type==='ctrtoggle').forEach(w=>updateCtrToggleWidget(w.id));
+      if (wpTab==='alerts') renderAlertsTab();
+    }, 1500);
+  } catch {}
+}
+
+// ── TIMER WIDGET ──────────────────────────────────────────────────────────────
+function timerFmt(sec) {
+  const h=Math.floor(sec/3600), m=Math.floor((sec%3600)/60), s=sec%60;
+  return h ? `${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`
+           : `${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`;
+}
+function timerToggle(id) {
+  const meta = W.widgets.find(w=>w.id===id); if (!meta) return;
+  const st = meta.timerState;
+  const disp = document.getElementById(`tdisp-${id}`);
+  const btn  = document.getElementById(`tbtn-${id}`);
+  if (st.running) {
+    clearInterval(st.interval); st.running=false;
+    if (btn) { btn.textContent='Start'; btn.style.background='var(--accent)'; btn.style.color='#000'; }
+  } else {
+    st.running=true;
+    if (btn) { btn.textContent='Pause'; btn.style.background='var(--yellow)'; btn.style.color='#000'; }
+    st.interval = setInterval(()=>{
+      if (st.countdown !== null) {
+        st.countdown = Math.max(0, st.countdown-1);
+        if (disp) disp.textContent = timerFmt(st.countdown);
+        if (st.countdown === 0) {
+          clearInterval(st.interval); st.running=false;
+          if (btn) { btn.textContent='Start'; btn.style.background='var(--accent)'; }
+          if (disp) disp.style.color='var(--red)';
+        }
+      } else {
+        st.elapsed++;
+        if (disp) disp.textContent = timerFmt(st.elapsed);
+      }
+    }, 1000);
+  }
+}
+function timerReset(id) {
+  const meta = W.widgets.find(w=>w.id===id); if (!meta) return;
+  const st = meta.timerState;
+  clearInterval(st.interval); st.running=false; st.elapsed=0; st.countdown=null;
+  const disp=document.getElementById(`tdisp-${id}`);
+  const btn=document.getElementById(`tbtn-${id}`);
+  if (disp) { disp.textContent='00:00'; disp.style.color='var(--text)'; }
+  if (btn)  { btn.textContent='Start'; btn.style.background='var(--accent)'; btn.style.color='#000'; }
+}
+function timerSet(id, sec) {
+  timerReset(id);
+  const meta = W.widgets.find(w=>w.id===id); if (!meta) return;
+  meta.timerState.countdown=sec;
+  const disp=document.getElementById(`tdisp-${id}`);
+  if (disp) { disp.textContent=timerFmt(sec); disp.style.color='var(--text)'; }
+}
+
+// ── WHITEBOARD ────────────────────────────────────────────────────────────────
+const boards = {};
+
+function initBoard(id) {
+  const board = document.getElementById(`wboard-${id}`);
+  const canvas = document.getElementById(`wcanvas-${id}`);
+  if (!board || !canvas) return;
+  boards[id] = { tool: 'draw', drawing: false, color: '#58a6ff', lw: 2 };
+  resizeCanvas(id);
+  const ctx = canvas.getContext('2d');
+  const b = boards[id];
+  canvas.addEventListener('mousedown', e => {
+    b.drawing = true;
+    const r = canvas.getBoundingClientRect();
+    ctx.beginPath(); ctx.moveTo(e.clientX - r.left, e.clientY - r.top);
+  });
+  canvas.addEventListener('mousemove', e => {
+    if (!b.drawing) return;
+    const r = canvas.getBoundingClientRect();
+    if (b.tool === 'erase') { ctx.clearRect(e.clientX - r.left - 10, e.clientY - r.top - 10, 20, 20); return; }
+    ctx.lineTo(e.clientX - r.left, e.clientY - r.top);
+    ctx.strokeStyle = b.color; ctx.lineWidth = b.lw; ctx.lineCap = 'round'; ctx.stroke();
+  });
+  canvas.addEventListener('mouseup', () => { b.drawing = false; });
+  canvas.addEventListener('mouseleave', () => { b.drawing = false; });
+  document.getElementById(`wcolor-${id}`)?.addEventListener('input', e => { boards[id].color = e.target.value; });
+}
+
+function resizeCanvas(id) {
+  const board = document.getElementById(`wboard-${id}`);
+  const canvas = document.getElementById(`wcanvas-${id}`);
+  if (!board || !canvas) return;
+  const imgData = canvas.getContext('2d').getImageData(0, 0, canvas.width, canvas.height);
+  canvas.width = board.clientWidth; canvas.height = board.clientHeight;
+  canvas.getContext('2d').putImageData(imgData, 0, 0);
+}
+
+function setWBTool(id, tool) {
+  if (boards[id]) boards[id].tool = tool;
+  document.getElementById(`wtool-draw-${id}`)?.classList.toggle('active', tool==='draw');
+  document.getElementById(`wtool-erase-${id}`)?.classList.toggle('active', tool==='erase');
+}
+
+function clearBoard(id) {
+  const canvas = document.getElementById(`wcanvas-${id}`); if (!canvas) return;
+  canvas.getContext('2d').clearRect(0, 0, canvas.width, canvas.height);
+  document.querySelectorAll(`#wboard-${id} .sticky`).forEach(s => s.remove());
+}
+
+function addSticky(boardId) {
+  const board = document.getElementById(`wboard-${boardId}`); if (!board) return;
+  const sid = wuid();
+  const s = document.createElement('div');
+  s.className = 'sticky';
+  s.dataset.sid = sid;
+  s.style.cssText = `left:${30 + Math.random()*80}px;top:${30 + Math.random()*80}px`;
+  s.contentEditable = true;
+  s.innerHTML = `<div class="sticky-del" onclick="this.parentElement.remove()">✕</div>📌 Note`;
+  board.appendChild(s);
+  makeDraggablePlain(s);
+  s.focus();
+}
+
+function makeDraggablePlain(el) {
+  let ox, oy, dragging = false;
+  el.addEventListener('mousedown', e => {
+    if (e.target.contentEditable === 'true' || e.target.classList.contains('sticky-del')) return;
+    dragging = true; ox = e.clientX - el.offsetLeft; oy = e.clientY - el.offsetTop; e.preventDefault();
+  });
+  document.addEventListener('mousemove', e => { if (dragging) { el.style.left=(e.clientX-ox)+'px'; el.style.top=(e.clientY-oy)+'px'; } });
+  document.addEventListener('mouseup', () => { dragging = false; });
+}
+
+// ── INIT ──────────────────────────────────────────────────────────────────────
+setCategory('server');
+createWorkspace({ title:'Home', icon:'⊞', pinned:true, viewType:'dashboard' });
+renderBookmarks();
+restoreStickyNotes();
+refresh(false);
+fetchIssues();
+setInterval(()=>refresh(false), 60000);
+setInterval(()=>{ W.widgets.filter(w=>w.type==='stats').forEach(w=>updateStatsWidget(w.id)); }, 30000);
+// Save sticky positions periodically (resize/drag don't fire input events)
+setInterval(saveStickyNotes, 5000);
+</script>
+</body>
+</html>
