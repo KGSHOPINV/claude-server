@@ -20,6 +20,7 @@
   --green:     #3fb950;
   --gdim:      #0d2a12;
   --red:       #f85149;
+  --blue:      #58a6ff;
   --rdim:      #3d1a1a;
   --yellow:    #d29922;
   --ydim:      #2d2008;
@@ -317,6 +318,19 @@ body.desk-mode #desk-exit { display:flex; align-items:center; gap:6px; }
 .docs-content th { background:var(--panel2); padding:6px 9px; font-size:10px; font-weight:700; text-align:left; border:1px solid var(--border); color:var(--muted); }
 .docs-content td { padding:6px 9px; font-size:11px; border:1px solid var(--border); color:#c9d1d9; }
 
+/* Login Gate */
+#login-gate { display:none; position:fixed; inset:0; background:var(--bg); z-index:500; align-items:center; justify-content:center; flex-direction:column; }
+#login-gate.show { display:flex; }
+#login-box { background:var(--panel); border:1px solid var(--border2); border-radius:8px; padding:32px 28px; width:320px; display:flex; flex-direction:column; gap:12px; box-shadow:0 24px 80px rgba(0,0,0,.6); }
+#login-logo { font-size:28px; font-weight:800; color:var(--accent); letter-spacing:-1px; text-align:center; }
+#login-title { font-size:11px; color:var(--muted); text-align:center; letter-spacing:.4px; text-transform:uppercase; margin-bottom:4px; }
+#login-err { background:rgba(248,81,73,.1); border:1px solid rgba(248,81,73,.3); border-radius:4px; color:#f85149; font-size:11px; padding:8px 10px; text-align:center; }
+#login-box input { background:var(--bg); border:1px solid var(--border2); border-radius:4px; color:var(--text); font-size:13px; padding:8px 12px; font-family:var(--ui); transition:border-color var(--t); }
+#login-box input:focus { outline:none; border-color:var(--accent); }
+#login-btn { background:var(--accent); color:#0d1117; border:none; border-radius:4px; font-size:13px; font-weight:700; padding:10px; cursor:pointer; font-family:var(--ui); transition:opacity var(--t); }
+#login-btn:hover { opacity:.85; }
+#login-hint { font-size:10px; color:var(--muted2); text-align:center; }
+
 /* Command Palette */
 #cmdpal { display:none; position:fixed; inset:0; background:rgba(0,0,0,.78); z-index:300; align-items:flex-start; justify-content:center; padding-top:80px; }
 #cmdpal.open { display:flex; }
@@ -333,6 +347,43 @@ body.desk-mode #desk-exit { display:flex; align-items:center; gap:6px; }
 .cp-item-icon { font-size:14px; flex-shrink:0; width:20px; text-align:center; }
 .cp-item-label { font-size:12px; color:var(--text); flex:1; }
 .cp-item-hint { font-size:10px; color:var(--muted2); font-family:var(--mono); flex-shrink:0; }
+
+/* Settings View */
+.view-settings { padding:12px; overflow-y:auto; height:100%; }
+.vs-section { background:var(--panel2); border:1px solid var(--border); border-radius:5px; padding:12px 14px; margin-bottom:10px; }
+.vs-hdr { font-size:10px; font-weight:700; letter-spacing:.5px; text-transform:uppercase; color:var(--muted2); margin-bottom:10px; }
+.vs-row { display:flex; align-items:center; justify-content:space-between; gap:10px; margin-bottom:8px; font-size:12px; }
+.vs-row label { color:var(--muted); flex-shrink:0; width:100px; }
+.vs-row select, .vs-inp { background:var(--bg); border:1px solid var(--border2); border-radius:3px; color:var(--text); font-size:11px; padding:4px 8px; font-family:var(--ui); flex:1; transition:border-color var(--t); }
+.vs-row select:focus, .vs-inp:focus { outline:none; border-color:var(--accent); }
+.accent-swatch { width:18px; height:18px; border-radius:50%; cursor:pointer; border:2px solid transparent; transition:border-color .15s; }
+.accent-swatch:hover { border-color:var(--text); }
+
+/* Storage View */
+.view-storage { padding:12px; overflow-y:auto; height:100%; }
+.stor-block { background:var(--panel2); border:1px solid var(--border); border-radius:5px; padding:10px 12px; margin-bottom:8px; }
+.stor-hdr { font-size:10px; font-weight:700; letter-spacing:.5px; text-transform:uppercase; color:var(--muted2); margin-bottom:6px; }
+.stor-pre { font-family:var(--mono); font-size:11px; color:var(--text); white-space:pre; line-height:1.6; }
+
+/* Files View */
+.view-files { display:flex; flex-direction:column; height:100%; }
+.files-bar { display:flex; gap:4px; padding:4px 6px; background:var(--panel2); border-bottom:1px solid var(--border); flex-shrink:0; align-items:center; }
+.file-row { display:flex; align-items:center; gap:8px; padding:4px 10px; font-size:11px; cursor:pointer; transition:background var(--t); border-bottom:1px solid rgba(255,255,255,.03); }
+.file-row:hover { background:rgba(255,255,255,.04); }
+.file-row .ficon { width:16px; text-align:center; flex-shrink:0; font-size:12px; }
+.file-row .fname { font-family:var(--mono); color:var(--text); flex:1; }
+.file-row .fsize { color:var(--muted2); font-family:var(--mono); font-size:10px; flex-shrink:0; }
+.file-row .fdate { color:var(--muted2); font-size:10px; flex-shrink:0; width:90px; }
+
+/* Journal View */
+.view-journal { display:flex; flex-direction:column; height:100%; }
+.jnl-bar { display:flex; gap:4px; padding:6px 8px; background:var(--panel2); border-bottom:1px solid var(--border); flex-shrink:0; }
+.jnl-row { padding:8px 12px; border-bottom:1px solid rgba(255,255,255,.03); font-size:11px; }
+.jnl-ts { font-size:9px; color:var(--muted2); font-family:var(--mono); margin-bottom:2px; }
+.jnl-type { display:inline-block; font-size:8px; font-weight:700; letter-spacing:.4px; text-transform:uppercase; padding:1px 5px; border-radius:3px; margin-right:6px; }
+.jnl-type.cmd  { background:rgba(57,208,196,.12); color:var(--accent); }
+.jnl-type.manual { background:rgba(88,166,255,.12); color:var(--blue); }
+.jnl-body { color:var(--text); font-family:var(--mono); }
 
 /* Runbooks */
 .view-runbooks { display:flex; height:100%; overflow:hidden; }
@@ -464,6 +515,20 @@ body.desk-mode #desk-exit { display:flex; align-items:center; gap:6px; }
     <button class="tbtn" onclick="hardRefresh()">↻ Refresh</button>
     <button class="tbtn" onclick="openCmdPal()" title="Global search (Ctrl+K)">⌘ Search</button>
     <button class="tbtn" onclick="enterDeskMode()" title="Desk Mode — focus your widgets" id="desk-btn">⊡ Desk</button>
+    <span id="hub-user-badge" style="font-size:10px;color:var(--muted2);padding:0 6px;cursor:pointer" onclick="openView('settings')" title="Settings">⚙</span>
+  </div>
+</div>
+
+<!-- LOGIN GATE -->
+<div id="login-gate">
+  <div id="login-box">
+    <div id="login-logo">⊞ Hub</div>
+    <div id="login-title">Server Control Panel</div>
+    <div id="login-err" style="display:none"></div>
+    <input id="login-user" type="text" placeholder="Username" autocomplete="username" value="admin">
+    <input id="login-pass" type="password" placeholder="Password" autocomplete="current-password">
+    <button id="login-btn" onclick="doLogin()">Sign In</button>
+    <div id="login-hint">Default: admin / admin</div>
   </div>
 </div>
 
@@ -765,6 +830,9 @@ const CATEGORIES = {
         {icon:'🗺', label:'Infra Map',   action:()=>openView('map')},
         {icon:'⚑', label:'Issues',      action:()=>openView('issues')},
         {icon:'🌐', label:'Browser',     action:()=>openView('browser')},
+        {icon:'💾', label:'Storage',     action:()=>openView('storage')},
+        {icon:'📁', label:'Files',       action:()=>openView('files')},
+        {icon:'📓', label:'Journal',     action:()=>openView('journal')},
       ]},
       {label:'Ops', items:[
         {icon:'▶',  label:'Runbooks',    action:()=>openView('runbooks')},
@@ -805,6 +873,7 @@ const CATEGORIES = {
         {icon:'🔐', label:'Vault',        action:()=>openView('vault')},
         {icon:'🤖', label:'AI Chat',      action:()=>openView('chat')},
         {icon:'▶',  label:'Runbooks',     action:()=>openView('runbooks')},
+        {icon:'⚙', label:'Settings',     action:()=>openView('settings')},
       ]},
     ]
   },
@@ -943,8 +1012,8 @@ function openView(viewType, config={}) {
   // Reuse existing workspace with this view, or create new
   const existing = S.workspaces.find(ws => ws.panes.some(p=>p.viewType===viewType && !ws.panes.some(p=>p.viewType==='iframe')));
   if (existing) { activateWorkspace(existing.id); return; }
-  const titles = { dashboard:'Dashboard', terminal:'Terminal', logs:'Logs', docs:'Docs', map:'Infra Map', vault:'Vault', issues:'Issues', network:'Network', chat:'AI Chat' };
-  const icons  = { dashboard:'⊞', terminal:'⌨', logs:'📋', docs:'📚', map:'🗺', vault:'🔐', issues:'⚑', network:'🌐', chat:'🤖' };
+  const titles = { dashboard:'Dashboard', terminal:'Terminal', logs:'Logs', docs:'Docs', map:'Infra Map', vault:'Vault', issues:'Issues', network:'Network', chat:'AI Chat', settings:'Settings', storage:'Storage', files:'Files', journal:'Journal' };
+  const icons  = { dashboard:'⊞', terminal:'⌨', logs:'📋', docs:'📚', map:'🗺', vault:'🔐', issues:'⚑', network:'🌐', chat:'🤖', settings:'⚙', storage:'💾', files:'📁', journal:'📓' };
   createWorkspace({ title: titles[viewType]||viewType, icon: icons[viewType]||'⊞', viewType, viewConfig: config });
 }
 
@@ -1068,6 +1137,10 @@ const VIEW_DEFS = {
   network:   {icon:'🌐', title:'Network'},
   chat:      {icon:'🤖', title:'AI Chat'},
   browser:   {icon:'🌐', title:'Browser'},
+  settings:  {icon:'⚙', title:'Settings'},
+  storage:   {icon:'💾', title:'Storage'},
+  files:     {icon:'📁', title:'Files'},
+  journal:   {icon:'📓', title:'Journal'},
   runbooks:  {icon:'▶',  title:'Runbooks'},
   iframe:    {icon:'🔗', title:'Service'},
   blank:     {icon:'○',  title:'New Pane'},
@@ -1302,6 +1375,74 @@ function mountPaneContent(wsId, paneId, viewType, viewConfig, body) {
       </div>`;
       if (viewConfig.url) loadBrowser(key);
       break;
+    case 'settings':
+      body.innerHTML = `<div class="view-settings">
+        <div class="vs-section">
+          <div class="vs-hdr">Appearance</div>
+          <div class="vs-row"><label>Theme</label>
+            <select id="cfg-theme" onchange="applyTheme(this.value)">
+              <option value="dark">Dark</option><option value="light">Light</option>
+            </select>
+          </div>
+          <div class="vs-row"><label>Accent color</label>
+            <div style="display:flex;gap:6px">
+              ${['#39d0c4','#58a6ff','#d29922','#f85149','#3fb950','#a371f7'].map(c=>`<div class="accent-swatch" style="background:${c}" onclick="setAccent('${c}')" title="${c}"></div>`).join('')}
+            </div>
+          </div>
+        </div>
+        <div class="vs-section">
+          <div class="vs-hdr">Connection</div>
+          <div class="vs-row"><label>Local IP</label><input id="cfg-local-ip" class="vs-inp" value="${SRV}" placeholder="192.168.1.229"></div>
+          <div class="vs-row"><label>Tailscale IP</label><input id="cfg-ts-ip" class="vs-inp" placeholder="100.75.1.105"></div>
+          <div class="vs-row"><label>SSH User</label><input id="cfg-ssh-user" class="vs-inp" value="admin1" placeholder="admin1"></div>
+          <div class="vs-row"><label>Server Port</label><input id="cfg-port" class="vs-inp" value="8765" placeholder="8765"></div>
+          <button class="btn p" style="margin-top:4px" onclick="saveSettings()">Save Connection</button>
+        </div>
+        <div class="vs-section">
+          <div class="vs-hdr">Users</div>
+          <div id="users-list" style="margin-bottom:8px"></div>
+          <div style="display:flex;gap:6px">
+            <input id="new-usr" class="vs-inp" placeholder="Username" style="width:110px">
+            <input id="new-pw" class="vs-inp" type="password" placeholder="Password" style="width:110px">
+            <button class="btn p" onclick="addUser()">Add User</button>
+          </div>
+        </div>
+        <div class="vs-section">
+          <div class="vs-hdr">Danger Zone</div>
+          <button class="btn" style="border-color:var(--red);color:var(--red)" onclick="doLogout()">Sign Out</button>
+        </div>
+      </div>`;
+      loadUsersPanel();
+      break;
+
+    case 'storage':
+      body.innerHTML = `<div class="view-storage"><div style="padding:12px;color:var(--muted);font-size:11px">Loading storage info…</div></div>`;
+      loadStorageView(key);
+      break;
+
+    case 'files':
+      body.innerHTML = `<div class="view-files">
+        <div class="files-bar">
+          <button onclick="filesNav('${key}','..')" class="btn" style="padding:2px 8px;font-size:11px">↑ Up</button>
+          <input id="fpath-${key}" class="vs-inp" value="/home/admin1" style="flex:1;font-family:var(--mono);font-size:11px" onkeydown="if(event.key==='Enter')loadFiles('${key}',this.value)">
+          <button onclick="loadFiles('${key}',document.getElementById('fpath-${key}').value)" class="btn" style="padding:2px 8px">Go</button>
+        </div>
+        <div id="flist-${key}" style="overflow-y:auto;flex:1;padding:4px 0"></div>
+      </div>`;
+      loadFiles(key, '/home/admin1');
+      break;
+
+    case 'journal':
+      body.innerHTML = `<div class="view-journal">
+        <div class="jnl-bar">
+          <input id="jnl-inp-${key}" class="vs-inp" placeholder="Add a journal entry…" style="flex:1" onkeydown="if(event.key==='Enter')addJournalEntry('${key}')">
+          <button onclick="addJournalEntry('${key}')" class="btn p" style="padding:3px 12px">Add</button>
+        </div>
+        <div id="jnl-list-${key}" style="overflow-y:auto;flex:1;padding:4px 0"></div>
+      </div>`;
+      loadJournal(key);
+      break;
+
     case 'runbooks':
       mountRunbooksView(key, body);
       break;
@@ -2637,6 +2778,179 @@ function makeDraggablePlain(el) {
   document.addEventListener('mouseup', () => { dragging = false; });
 }
 
+// ── AUTH ─────────────────────────────────────────────────────────────────────
+let HUB_TOKEN = sessionStorage.getItem('hub_token') || '';
+let HUB_USER  = sessionStorage.getItem('hub_user')  || '';
+
+async function checkLogin() {
+  if (!HUB_TOKEN) { showLogin(); return; }
+  try {
+    const r = await fetch(API+'/api/auth/check', {headers:{'X-Hub-Token':HUB_TOKEN}});
+    const d = await r.json();
+    if (d.ok) { hideLogin(); }
+    else { HUB_TOKEN=''; HUB_USER=''; sessionStorage.removeItem('hub_token'); showLogin(); }
+  } catch { hideLogin(); } // server offline — let them in but limit ops
+}
+
+function showLogin() { document.getElementById('login-gate').classList.add('show'); setTimeout(()=>document.getElementById('login-pass').focus(),100); }
+function hideLogin() { document.getElementById('login-gate').classList.remove('show'); }
+
+async function doLogin() {
+  const user = document.getElementById('login-user').value.trim();
+  const pass = document.getElementById('login-pass').value;
+  const err  = document.getElementById('login-err');
+  const btn  = document.getElementById('login-btn');
+  if (!user || !pass) { err.textContent='Enter username and password'; err.style.display='block'; return; }
+  btn.textContent='Signing in…'; btn.disabled=true;
+  try {
+    const r = await fetch(API+'/api/auth/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({username:user,password:pass})});
+    const d = await r.json();
+    if (d.ok) {
+      HUB_TOKEN = d.token; HUB_USER = d.user;
+      sessionStorage.setItem('hub_token', HUB_TOKEN);
+      sessionStorage.setItem('hub_user',  HUB_USER);
+      hideLogin(); err.style.display='none';
+      const badge = document.getElementById('hub-user-badge');
+      if (badge) badge.textContent = '⚙ ' + HUB_USER;
+    } else {
+      err.textContent = d.error || 'Login failed'; err.style.display='block';
+    }
+  } catch(e) { err.textContent='Server unreachable'; err.style.display='block'; }
+  btn.textContent='Sign In'; btn.disabled=false;
+}
+
+document.addEventListener('keydown', e=>{
+  if (e.key==='Enter' && document.getElementById('login-gate').classList.contains('show')) doLogin();
+});
+
+function doLogout() {
+  fetch(API+'/api/auth/logout',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({token:HUB_TOKEN})});
+  HUB_TOKEN=''; HUB_USER='';
+  sessionStorage.removeItem('hub_token'); sessionStorage.removeItem('hub_user');
+  showLogin();
+}
+
+// ── SETTINGS ─────────────────────────────────────────────────────────────────
+function applyTheme(t) {
+  document.documentElement.setAttribute('data-theme', t);
+  localStorage.setItem('hub_theme', t);
+}
+function setAccent(color) {
+  document.documentElement.style.setProperty('--accent', color);
+  localStorage.setItem('hub_accent', color);
+}
+async function saveSettings() {
+  const cfg = {
+    local_ip:  document.getElementById('cfg-local-ip')?.value||'',
+    ts_ip:     document.getElementById('cfg-ts-ip')?.value||'',
+    ssh_user:  document.getElementById('cfg-ssh-user')?.value||'',
+    hub_port:  document.getElementById('cfg-port')?.value||'8765',
+  };
+  await fetch(API+'/api/config',{method:'POST',headers:{'Content-Type':'application/json','X-Hub-Token':HUB_TOKEN},body:JSON.stringify(cfg)});
+  showToast('Settings saved');
+}
+async function loadUsersPanel() {
+  const el = document.getElementById('users-list'); if(!el) return;
+  const r = await fetch(API+'/api/users',{headers:{'X-Hub-Token':HUB_TOKEN}});
+  const users = await r.json();
+  el.innerHTML = users.map(u=>`<div style="display:flex;align-items:center;gap:8px;padding:4px 0;font-size:11px">
+    <span style="flex:1;color:var(--text)">${u.display||u.username}</span>
+    <span style="color:var(--muted2);font-size:10px">${u.role}</span>
+    ${u.username!=='admin'?`<button class="btn" style="padding:1px 7px;font-size:10px" onclick="deleteUser(${u.id})">✕</button>`:''}
+  </div>`).join('');
+}
+async function addUser() {
+  const u=document.getElementById('new-usr').value.trim(), p=document.getElementById('new-pw').value;
+  if(!u||!p){showToast('Enter username and password');return;}
+  const r=await fetch(API+'/api/users',{method:'POST',headers:{'Content-Type':'application/json','X-Hub-Token':HUB_TOKEN},body:JSON.stringify({action:'add',username:u,password:p,display:u})});
+  const d=await r.json();
+  if(d.ok){document.getElementById('new-usr').value='';document.getElementById('new-pw').value='';loadUsersPanel();showToast('User added');}
+  else showToast('Error: '+d.error);
+}
+async function deleteUser(id) {
+  await fetch(API+'/api/users',{method:'POST',headers:{'Content-Type':'application/json','X-Hub-Token':HUB_TOKEN},body:JSON.stringify({action:'delete',id})});
+  loadUsersPanel();
+}
+
+function showToast(msg) {
+  let t=document.getElementById('hub-toast');
+  if(!t){t=document.createElement('div');t.id='hub-toast';t.style.cssText='position:fixed;bottom:32px;left:50%;transform:translateX(-50%);background:var(--panel2);border:1px solid var(--border2);border-radius:20px;padding:6px 18px;font-size:12px;color:var(--text);z-index:400;opacity:0;transition:opacity .2s;pointer-events:none';document.body.appendChild(t);}
+  t.textContent=msg;t.style.opacity='1';
+  clearTimeout(t._t);t._t=setTimeout(()=>t.style.opacity='0',2500);
+}
+
+// ── STORAGE VIEW ──────────────────────────────────────────────────────────────
+async function loadStorageView(key) {
+  // Find the view-storage div — it's the only one in the active pane for this key
+  // The pane data-pane attribute contains the paneId part of key (after wsId-)
+  const paneId = key.split('-').slice(1).join('-');
+  const paneEl = document.querySelector(`[data-pane="${paneId}"]`);
+  const el = paneEl ? paneEl.querySelector('.view-storage') : null;
+  if(!el) return;
+  try {
+    const r = await fetch(API+'/api/storage'); const d = await r.json();
+    el.innerHTML = `
+      <div class="stor-block"><div class="stor-hdr">Disk Usage</div><div class="stor-pre">${d.disk||'unavailable'}</div></div>
+      <div class="stor-block"><div class="stor-hdr">Docker System</div><div class="stor-pre">${d.docker_df||'unavailable'}</div></div>
+      <div class="stor-block"><div class="stor-hdr">Key Directories</div><div class="stor-pre">${d.dirs||'unavailable'}</div></div>
+      <div class="stor-block"><div class="stor-hdr">Docker Volumes</div><div class="stor-pre">${d.volumes||'none'}</div></div>`;
+  } catch(e) {
+    el.innerHTML = `<div style="padding:12px;color:var(--red);font-size:11px">Failed to load storage info: ${e.message}</div>`;
+  }
+}
+
+// ── FILE MANAGER ──────────────────────────────────────────────────────────────
+async function loadFiles(key, path) {
+  const inp = document.getElementById(`fpath-${key}`); if(inp) inp.value = path;
+  const el = document.getElementById(`flist-${key}`); if(!el) return;
+  el.innerHTML = '<div style="padding:12px;color:var(--muted);font-size:11px">Loading…</div>';
+  const r = await fetch(`${API}/api/files?path=${encodeURIComponent(path)}`);
+  const d = await r.json();
+  if(d.error){el.innerHTML=`<div style="padding:12px;color:var(--red);font-size:11px">${d.error}</div>`;return;}
+  const lines = (d.listing||'').split('\n').filter(l=>l.trim()&&!l.startsWith('total'));
+  el.innerHTML = lines.map(line=>{
+    const parts = line.trim().split(/\s+/);
+    if(parts.length < 9) return '';
+    const perms=parts[0], size=parts[4], date=parts[5]+' '+parts[6], name=parts.slice(8).join(' ');
+    const isDir = perms.startsWith('d');
+    const isLink = perms.startsWith('l');
+    const icon = isDir ? '📁' : isLink ? '🔗' : name.match(/\.(sh|py|js|ts|go|rs)$/) ? '📄' : name.match(/\.(zip|tar|gz|bz2)$/) ? '🗜' : '📄';
+    const safePath = (path+'/'+name).replace(/\/\//g,'/');
+    return `<div class="file-row" onclick="${isDir?`loadFiles('${key}','${safePath.replace(/'/g,"\\'")}')`:''}" style="${isDir?'':'cursor:default'}">
+      <span class="ficon">${icon}</span>
+      <span class="fname">${name}</span>
+      <span class="fsize">${isDir?'—':size}</span>
+      <span class="fdate">${date}</span>
+    </div>`;
+  }).join('');
+}
+
+function filesNav(key, rel) {
+  const inp = document.getElementById(`fpath-${key}`);
+  if(!inp) return;
+  const cur = inp.value.replace(/\/$/, '');
+  if(rel==='..') { const up=cur.split('/').slice(0,-1).join('/')||'/'; loadFiles(key,up); }
+  else loadFiles(key, cur+'/'+rel);
+}
+
+// ── JOURNAL ───────────────────────────────────────────────────────────────────
+async function loadJournal(key) {
+  const el = document.getElementById(`jnl-list-${key}`); if(!el) return;
+  const r = await fetch(API+'/api/journal'); const entries = await r.json();
+  if(!entries.length){el.innerHTML='<div style="padding:16px;color:var(--muted);font-size:11px;text-align:center">No journal entries yet</div>';return;}
+  el.innerHTML = entries.map(e=>`<div class="jnl-row">
+    <div class="jnl-ts">${(e.ts||'').replace('T',' ').slice(0,16)}${e.user?' · '+e.user:''}</div>
+    <span class="jnl-type ${e.type}">${e.type}</span>
+    <span class="jnl-body">${e.body}</span>
+  </div>`).join('');
+}
+
+async function addJournalEntry(key) {
+  const inp = document.getElementById(`jnl-inp-${key}`); if(!inp||!inp.value.trim()) return;
+  await fetch(API+'/api/journal',{method:'POST',headers:{'Content-Type':'application/json','X-Hub-Token':HUB_TOKEN},body:JSON.stringify({type:'manual',body:inp.value.trim(),user:HUB_USER})});
+  inp.value=''; loadJournal(key);
+}
+
 // ── COMMAND PALETTE ───────────────────────────────────────────────────────────
 let _cpActive = 0, _cpFiltered = [];
 
@@ -2738,6 +3052,16 @@ document.addEventListener('keydown', e => {
 });
 
 // ── INIT ──────────────────────────────────────────────────────────────────────
+// Restore theme/accent
+const savedTheme = localStorage.getItem('hub_theme');
+if (savedTheme) document.documentElement.setAttribute('data-theme', savedTheme);
+const savedAccent = localStorage.getItem('hub_accent');
+if (savedAccent) document.documentElement.style.setProperty('--accent', savedAccent);
+// Check login
+checkLogin();
+// Show username in top bar
+const badge = document.getElementById('hub-user-badge');
+if (badge && HUB_USER) badge.textContent = '⚙ ' + HUB_USER;
 setCategory('server');
 createWorkspace({ title:'Home', icon:'⊞', pinned:true, viewType:'dashboard' });
 renderBookmarks();

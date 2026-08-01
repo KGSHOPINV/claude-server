@@ -5,9 +5,12 @@ Run: python hub/server.py
 Then open: http://localhost:8765
 """
 
+import hashlib
 import http.server
 import json
 import os
+import secrets
+import shutil
 import sqlite3
 import ssl
 import subprocess
@@ -102,6 +105,8 @@ def ssh_run(cmd, timeout=15):
 
 _cache = {'status': None, 'ts': 0, 'containers': None, 'containers_ts': 0}
 _lock = threading.Lock()
+_sessions = {}  # token -> {user, created}
+_users_lock = threading.Lock()
 
 def get_status(force=False):
     with _lock:
@@ -246,6 +251,133 @@ def issues_get():
     except Exception:
         return []
 
+def db_ensure_tables():
+    try:
+        conn = db_conn()
+        conn.execute("""CREATE TABLE IF NOT EXISTS users (
+            id INTEGER PRIMARY KEY,
+            username TEXT UNIQUE NOT NULL,
+            display TEXT,
+            password_hash TEXT NOT NULL,
+            role TEXT DEFAULT 'admin',
+            created TEXT
+        )""")
+        conn.execute("""CREATE TABLE IF NOT EXISTS hub_config (
+            key TEXT PRIMARY KEY,
+            value TEXT,
+            updated TEXT
+        )""")
+        conn.execute("""CREATE TABLE IF NOT EXISTS journal (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            ts TEXT NOT NULL,
+            type TEXT NOT NULL,
+            body TEXT NOT NULL,
+            user TEXT DEFAULT ''
+        )""")
+        # Seed default admin if no users exist
+        row = conn.execute("SELECT COUNT(*) as c FROM users").fetchone()
+        if row['c'] == 0:
+            h = hashlib.sha256(b'admin').hexdigest()
+            conn.execute("INSERT INTO users (username,display,password_hash,role,created) VALUES (?,?,?,?,?)",
+                ('admin','Administrator',h,'admin',datetime.now().isoformat()))
+        conn.commit()
+        conn.close()
+    except Exception as e:
+        print(f'  DB init error: {e}')
+
+def config_get(key, default=None):
+    try:
+        conn = db_conn()
+        row = conn.execute("SELECT value FROM hub_config WHERE key=?", (key,)).fetchone()
+        conn.close()
+        return row['value'] if row else default
+    except Exception:
+        return default
+
+def config_set(key, value):
+    try:
+        conn = db_conn()
+        ts = datetime.now().isoformat()
+        conn.execute("INSERT INTO hub_config(key,value,updated) VALUES(?,?,?) ON CONFLICT(key) DO UPDATE SET value=?,updated=?",
+            (key, value, ts, value, ts))
+        conn.commit()
+        conn.close()
+        return True
+    except Exception as e:
+        return str(e)
+
+def users_list():
+    try:
+        conn = db_conn()
+        rows = conn.execute("SELECT id,username,display,role,created FROM users ORDER BY id").fetchall()
+        conn.close()
+        return [dict(r) for r in rows]
+    except Exception:
+        return []
+
+def user_auth(username, password):
+    try:
+        h = hashlib.sha256(password.encode()).hexdigest()
+        conn = db_conn()
+        row = conn.execute("SELECT * FROM users WHERE username=? AND password_hash=?", (username, h)).fetchone()
+        conn.close()
+        return dict(row) if row else None
+    except Exception:
+        return None
+
+def journal_add(type_, body, user=''):
+    try:
+        conn = db_conn()
+        conn.execute("INSERT INTO journal(ts,type,body,user) VALUES(?,?,?,?)",
+            (datetime.now().isoformat(), type_, body, user))
+        conn.commit()
+        conn.close()
+    except Exception:
+        pass
+
+def journal_get(limit=100):
+    try:
+        conn = db_conn()
+        rows = conn.execute("SELECT * FROM journal ORDER BY id DESC LIMIT ?", (limit,)).fetchall()
+        conn.close()
+        return [dict(r) for r in rows]
+    except Exception:
+        return []
+
+def get_storage_info():
+    results = {}
+    # Disk usage
+    r = ssh_run("df -h / /srv 2>/dev/null | tail -n +2")
+    results['disk'] = r.get('output','') if r.get('online') else ''
+    # Docker volumes
+    r2 = ssh_run("docker system df 2>/dev/null")
+    results['docker_df'] = r2.get('output','') if r2.get('online') else ''
+    # Key directory sizes
+    r3 = ssh_run("du -sh /srv/docker /srv/backups /home/admin1 2>/dev/null")
+    results['dirs'] = r3.get('output','') if r3.get('online') else ''
+    # Docker volumes list
+    r4 = ssh_run("docker volume ls --format '{{.Name}}' 2>/dev/null | head -30")
+    results['volumes'] = r4.get('output','') if r4.get('online') else ''
+    return results
+
+def get_files(path):
+    safe = path.replace('..','').replace('~','').strip()
+    if not safe.startswith('/'):
+        safe = '/home/admin1'
+    r = ssh_run(f"ls -lah --time-style=short-iso '{safe}' 2>&1 | head -60")
+    return {'path': safe, 'listing': r.get('output',''), 'error': r.get('error','') if not r.get('online') else ''}
+
+def check_auth(handler):
+    token = handler.headers.get('X-Hub-Token','')
+    if not token:
+        # Also accept from query string
+        qs = handler.path.split('?',1)[1] if '?' in handler.path else ''
+        for part in qs.split('&'):
+            if part.startswith('token='):
+                token = part[6:]
+    with _users_lock:
+        return _sessions.get(token)
+
 # ── HTTP handler ───────────────────────────────────────────────────────────────
 
 class Handler(http.server.BaseHTTPRequestHandler):
@@ -265,7 +397,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
         self.send_response(200)
         self.send_header('Access-Control-Allow-Origin', '*')
         self.send_header('Access-Control-Allow-Methods', 'GET, POST, OPTIONS')
-        self.send_header('Access-Control-Allow-Headers', 'Content-Type')
+        self.send_header('Access-Control-Allow-Headers', 'Content-Type, X-Hub-Token')
         self.end_headers()
 
     def get_body(self):
@@ -337,6 +469,45 @@ class Handler(http.server.BaseHTTPRequestHandler):
             except FileNotFoundError:
                 self.send_response(404); self.end_headers()
 
+        elif p == '/api/auth/check':
+            sess = check_auth(self)
+            if sess:
+                self.send_json({'ok': True, 'user': sess['user']})
+            else:
+                self.send_json({'ok': False}, 401)
+
+        elif p == '/api/storage':
+            self.send_json(get_storage_info())
+
+        elif p == '/api/files':
+            path = '/home/admin1'
+            if '?' in self.path:
+                for part in self.path.split('?',1)[1].split('&'):
+                    if part.startswith('path='):
+                        path = part[5:].replace('%2F','/')
+            self.send_json(get_files(path))
+
+        elif p == '/api/journal':
+            limit = 100
+            if '?' in self.path:
+                for part in self.path.split('?',1)[1].split('&'):
+                    if part.startswith('limit='):
+                        try: limit = int(part[6:])
+                        except: pass
+            self.send_json(journal_get(limit))
+
+        elif p == '/api/config':
+            try:
+                conn = db_conn()
+                rows = conn.execute("SELECT key,value FROM hub_config").fetchall()
+                conn.close()
+                self.send_json({r['key']:r['value'] for r in rows})
+            except Exception:
+                self.send_json({})
+
+        elif p == '/api/users':
+            self.send_json(users_list())
+
         elif p.startswith('/proxy/'):
             # /proxy/3000/some/path?query=string
             remainder = p[7:]  # e.g. "3000/some/path"
@@ -393,12 +564,109 @@ class Handler(http.server.BaseHTTPRequestHandler):
             get_containers(force=True)
             self.send_json({'ok': True})
 
+        elif p == '/api/auth/login':
+            username = body.get('username','').strip()
+            password = body.get('password','')
+            user = user_auth(username, password)
+            if user:
+                token = secrets.token_hex(32)
+                with _users_lock:
+                    _sessions[token] = {'user': username, 'role': user.get('role','admin'), 'created': datetime.now().isoformat()}
+                self.send_json({'ok': True, 'token': token, 'user': username, 'role': user.get('role','admin')})
+            else:
+                self.send_json({'ok': False, 'error': 'Invalid username or password'}, 401)
+
+        elif p == '/api/auth/logout':
+            token = body.get('token','')
+            with _users_lock:
+                _sessions.pop(token, None)
+            self.send_json({'ok': True})
+
+        elif p == '/api/config':
+            for k, v in body.items():
+                config_set(k, str(v))
+            self.send_json({'ok': True})
+
+        elif p == '/api/journal':
+            body_text = body.get('body','').strip()
+            if body_text:
+                journal_add(body.get('type','manual'), body_text, body.get('user',''))
+                self.send_json({'ok': True})
+            else:
+                self.send_json({'ok': False, 'error': 'No body'}, 400)
+
+        elif p == '/api/service/install':
+            name = body.get('name','').strip().lower()
+            INSTALLABLE = {
+                'n8n':       'cd /srv/docker/n8n && docker compose up -d',
+                'redis':     'cd /srv/docker/redis && docker compose up -d',
+                'surrealdb': 'cd /srv/docker/surrealdb && docker compose up -d',
+                'minio':     'cd /srv/docker/minio && docker compose up -d',
+                'adminer':   'cd /srv/docker/adminer && docker compose up -d',
+                'mailpit':   'cd /srv/docker/mailpit && docker compose up -d',
+                'wikijs':    'cd /srv/docker/wikijs && docker compose up -d',
+            }
+            if name not in INSTALLABLE:
+                self.send_json({'ok': False, 'error': f'Unknown service: {name}'}, 400)
+                return
+            result = ssh_run(INSTALLABLE[name], timeout=60)
+            self.send_json({'ok': result.get('exitcode',1)==0, 'output': result.get('output',''), 'error': result.get('error','')})
+
+        elif p == '/api/users':
+            action = body.get('action','')
+            if action == 'add':
+                username = body.get('username','').strip()
+                password = body.get('password','')
+                display = body.get('display', username)
+                role = body.get('role', 'viewer')
+                if not username or not password:
+                    self.send_json({'ok': False, 'error': 'Username and password required'}, 400)
+                    return
+                h = hashlib.sha256(password.encode()).hexdigest()
+                try:
+                    conn = db_conn()
+                    conn.execute("INSERT INTO users(username,display,password_hash,role,created) VALUES(?,?,?,?,?)",
+                        (username, display, h, role, datetime.now().isoformat()))
+                    conn.commit()
+                    conn.close()
+                    self.send_json({'ok': True})
+                except Exception as e:
+                    self.send_json({'ok': False, 'error': str(e)})
+            elif action == 'delete':
+                uid = body.get('id')
+                try:
+                    conn = db_conn()
+                    conn.execute("DELETE FROM users WHERE id=? AND username != 'admin'", (uid,))
+                    conn.commit()
+                    conn.close()
+                    self.send_json({'ok': True})
+                except Exception as e:
+                    self.send_json({'ok': False, 'error': str(e)})
+            elif action == 'passwd':
+                uid = body.get('id')
+                pw = body.get('password','')
+                if not pw:
+                    self.send_json({'ok': False, 'error': 'Password required'}, 400)
+                    return
+                h = hashlib.sha256(pw.encode()).hexdigest()
+                try:
+                    conn = db_conn()
+                    conn.execute("UPDATE users SET password_hash=? WHERE id=?", (h, uid))
+                    conn.commit()
+                    conn.close()
+                    self.send_json({'ok': True})
+                except Exception as e:
+                    self.send_json({'ok': False, 'error': str(e)})
+            else:
+                self.send_json({'ok': False, 'error': 'Unknown action'}, 400)
+
         else:
             self.send_response(404)
             self.end_headers()
 
 
 if __name__ == '__main__':
+    db_ensure_tables()
     print(f'\n  Server Hub API  —  http://localhost:{PORT}')
     print(f'  SSH: {SSH_HOST}  |  DB: {DB_PATH}\n')
     server = http.server.HTTPServer(('localhost', PORT), Handler)
