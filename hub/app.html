@@ -702,8 +702,8 @@ body.desk-mode #desk-exit { display:flex; align-items:center; gap:6px; }
 
 <script>
 'use strict';
-const API = 'http://localhost:8765';
-const SRV = '192.168.1.229';
+const API = window.location.origin;  // works from any host — localhost, Tailscale IP, LAN IP
+const SRV = window.location.hostname === 'localhost' ? '192.168.1.229' : window.location.hostname;
 
 // ── GLOBAL STATE ────────────────────────────────────────────────────────────
 const S = {
