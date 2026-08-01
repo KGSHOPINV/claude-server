@@ -21,27 +21,30 @@ import urllib.error
 import urllib.request
 from datetime import datetime
 
-PORT = 8765
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-DB_PATH = os.path.join(BASE_DIR, '..', 'db', 'server.db')
-APP_PATH = os.path.join(BASE_DIR, 'app.html')
-GUIDES_DIR = os.path.join(BASE_DIR, '..', 'guides')
+PORT      = int(os.environ.get('HUB_PORT', 8765))
+BASE_DIR  = os.path.dirname(os.path.abspath(__file__))
+DB_PATH   = os.environ.get('HUB_DB',     os.path.join(BASE_DIR, '..', 'db', 'server.db'))
+APP_PATH  = os.path.join(BASE_DIR, 'app.html')
+GUIDES_DIR= os.environ.get('HUB_GUIDES', os.path.join(BASE_DIR, '..', 'guides'))
 
-HTTPS_PORTS = {9443, 9090}  # ports that use HTTPS (self-signed certs)
+# LOCAL_MODE=1 → run commands directly (no SSH); used when hub runs ON the server
+LOCAL_MODE = os.environ.get('HUB_LOCAL', '0') == '1'
 
-# SSL context that skips cert verification for local self-signed certs
+HTTPS_PORTS = {9443, 9090}
+
 _ssl_ctx = ssl.create_default_context()
 _ssl_ctx.check_hostname = False
 _ssl_ctx.verify_mode = ssl.CERT_NONE
-SSH_HOST = 'homeserver'
-SERVER_IP = '192.168.1.229'
+SSH_HOST   = os.environ.get('HUB_SSH_HOST', 'homeserver')
+SERVER_IP  = os.environ.get('HUB_SERVER_IP', '192.168.1.229')
 
 # ── Proxy ─────────────────────────────────────────────────────────────────────
 
 def proxy_fetch(port, subpath, query=''):
     """Proxy a request to a local service, stripping X-Frame-Options."""
     scheme = 'https' if port in HTTPS_PORTS else 'http'
-    url = f'{scheme}://{SERVER_IP}:{port}/{subpath}'
+    target = 'localhost' if LOCAL_MODE else SERVER_IP
+    url = f'{scheme}://{target}:{port}/{subpath}'
     if query:
         url += '?' + query
     try:
@@ -85,8 +88,9 @@ def proxy_fetch(port, subpath, query=''):
 
 def ssh_run(cmd, timeout=15):
     try:
+        args = ['bash', '-c', cmd] if LOCAL_MODE else ['ssh', SSH_HOST, cmd]
         r = subprocess.run(
-            ['ssh', SSH_HOST, cmd],
+            args,
             capture_output=True, text=True, timeout=timeout
         )
         return {
