@@ -25,7 +25,8 @@ from datetime import datetime
 PORT      = int(os.environ.get('HUB_PORT', 8765))
 BASE_DIR  = os.path.dirname(os.path.abspath(__file__))
 DB_PATH   = os.environ.get('HUB_DB',     os.path.join(BASE_DIR, '..', 'db', 'server.db'))
-APP_PATH  = os.path.join(BASE_DIR, 'app.html')
+APP_PATH    = os.path.join(BASE_DIR, 'app.html')
+MOBILE_PATH = os.path.join(BASE_DIR, 'mobile.html')
 GUIDES_DIR= os.environ.get('HUB_GUIDES', os.path.join(BASE_DIR, '..', 'guides'))
 
 # LOCAL_MODE=1 → run commands directly (no SSH); used when hub runs ON the server
@@ -503,9 +504,10 @@ class Handler(http.server.BaseHTTPRequestHandler):
         p = self.path.split('?')[0]
         force = 'force' in self.path
 
-        if p == '/':
+        if p in ('/', '/mobile'):
+            path = MOBILE_PATH if p == '/mobile' else APP_PATH
             try:
-                with open(APP_PATH, 'rb') as f:
+                with open(path, 'rb') as f:
                     content = f.read()
                 self.send_response(200)
                 self.send_header('Content-Type', 'text/html; charset=utf-8')

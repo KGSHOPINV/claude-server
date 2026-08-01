@@ -1,0 +1,525 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Hub</title>
+  <style>
+    :root {
+      --bg:#0d1117; --panel:#161b22; --panel2:#1c2128; --border:#30363d;
+      --text:#e6edf3; --muted:#7d8590; --muted2:#484f58;
+      --green:#3fb950; --red:#f85149; --blue:#58a6ff; --yellow:#d29922;
+      --accent:#238636; --mono:'SF Mono','Fira Code',monospace;
+    }
+    *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+    html,body{height:100%;background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;font-size:14px}
+
+    /* ── LOGIN ── */
+    #gate{display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:100dvh;gap:14px;padding:24px}
+    #gate-logo{font-size:40px;line-height:1}
+    #gate h1{font-size:22px;font-weight:700}
+    #gate p{color:var(--muted);font-size:13px;text-align:center}
+    #gate input{width:100%;max-width:340px;background:var(--panel);border:1px solid var(--border);border-radius:10px;color:var(--text);padding:13px 16px;font-size:15px;outline:none;transition:border .2s}
+    #gate input:focus{border-color:var(--blue)}
+    #gate button{width:100%;max-width:340px;background:var(--accent);color:#fff;border:none;border-radius:10px;padding:14px;font-size:15px;font-weight:600;cursor:pointer}
+    #gate button:active{opacity:.85}
+    #gate-err{color:var(--red);font-size:12px;min-height:16px}
+
+    /* ── SHELL ── */
+    #app{display:none;height:100dvh;display:none;flex-direction:column}
+
+    /* top bar */
+    #topbar{background:var(--panel);border-bottom:1px solid var(--border);padding:12px 16px;display:flex;align-items:center;justify-content:space-between;flex-shrink:0;position:sticky;top:0;z-index:50}
+    #tb-left{display:flex;align-items:center;gap:8px;font-weight:700;font-size:16px}
+    #srv-dot{width:8px;height:8px;border-radius:50%;background:var(--muted)}
+    #srv-dot.on{background:var(--green)}
+    #srv-dot.off{background:var(--red)}
+    #tb-right{display:flex;gap:8px}
+    .tbtn{background:var(--panel2);border:1px solid var(--border);border-radius:7px;color:var(--text);padding:6px 12px;font-size:12px;cursor:pointer}
+
+    /* pages */
+    #pages{flex:1;overflow-y:auto;padding-bottom:70px}
+    .page{display:none;padding:0 0 16px}
+    .page.on{display:block}
+
+    /* sections */
+    .sec{padding:16px}
+    .sec+.sec{padding-top:0}
+    .sec-hdr{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.6px;color:var(--muted);margin-bottom:12px}
+
+    /* stat grid */
+    .stat-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+    .stat-card{background:var(--panel);border:1px solid var(--border);border-radius:10px;padding:14px 12px}
+    .stat-lbl{font-size:11px;color:var(--muted);margin-bottom:4px}
+    .stat-val{font-size:24px;font-weight:700;line-height:1}
+    .stat-sub{font-size:11px;color:var(--muted);margin-top:3px}
+    .bar{height:4px;background:var(--border);border-radius:2px;margin-top:8px;overflow:hidden}
+    .bar-fill{height:100%;border-radius:2px;background:var(--green);transition:width .4s}
+    .bar-fill.w{background:var(--yellow)}
+    .bar-fill.c{background:var(--red)}
+
+    /* alerts */
+    .alert{display:flex;align-items:center;gap:10px;background:var(--panel);border:1px solid var(--border);border-radius:10px;padding:12px;margin-bottom:8px}
+    .alert.crit{border-color:var(--red);background:#1c0f0f}
+    .alert.warn{border-color:var(--yellow);background:#1a150a}
+    .alert-icon{font-size:18px;flex-shrink:0}
+    .alert-body{flex:1;font-size:13px}
+    .alert-title{font-weight:600}
+    .alert-sub{font-size:11px;color:var(--muted);margin-top:2px}
+
+    /* containers */
+    #clist .item{display:flex;align-items:center;gap:10px;padding:11px 0;border-bottom:1px solid var(--border)}
+    #clist .item:last-child{border-bottom:none}
+    .c-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0}
+    .c-dot.up{background:var(--green)}
+    .c-dot.dn{background:var(--muted2)}
+    .c-name{flex:1;font-size:13px;font-weight:500;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+    .c-st{font-size:11px;color:var(--muted);min-width:28px;text-align:right}
+    .c-btn{border:1px solid var(--border);border-radius:7px;color:var(--text);background:none;padding:5px 10px;font-size:12px;cursor:pointer;min-width:44px;text-align:center}
+    .c-btn:active{opacity:.6}
+    .c-btn.go{border-color:var(--green);color:var(--green)}
+    .c-btn.st{border-color:var(--red);color:var(--red)}
+    .c-btn:disabled{opacity:.35;cursor:default}
+
+    /* quick actions */
+    .qa-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+    .qa-card{background:var(--panel);border:1px solid var(--border);border-radius:10px;padding:16px 12px;display:flex;flex-direction:column;align-items:center;gap:8px;cursor:pointer;text-align:center}
+    .qa-card:active{background:var(--panel2)}
+    .qa-ico{font-size:26px}
+    .qa-lbl{font-size:12px;font-weight:600;line-height:1.3}
+    .qa-desc{font-size:11px;color:var(--muted);line-height:1.3}
+
+    /* n8n workflows */
+    .wf-item{background:var(--panel);border:1px solid var(--border);border-radius:10px;padding:14px;margin-bottom:10px;display:flex;align-items:flex-start;gap:12px}
+    .wf-ico{font-size:24px;flex-shrink:0;margin-top:2px}
+    .wf-body{flex:1;min-width:0}
+    .wf-name{font-weight:600;font-size:14px}
+    .wf-desc{font-size:12px;color:var(--muted);margin-top:3px;line-height:1.4}
+    .wf-actions{display:flex;gap:8px;margin-top:10px}
+    .wf-btn{border:1px solid var(--border);border-radius:7px;background:none;color:var(--text);padding:6px 12px;font-size:12px;cursor:pointer}
+    .wf-btn.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+    .wf-btn:active{opacity:.75}
+
+    /* terminal */
+    #term-out{font-family:var(--mono);font-size:12px;white-space:pre-wrap;word-break:break-all;padding:12px;min-height:160px;max-height:50dvh;overflow-y:auto;background:var(--panel);border:1px solid var(--border);border-radius:10px 10px 0 0;color:#a5d6ff}
+    #term-bar{display:flex;gap:6px;background:var(--panel);border:1px solid var(--border);border-top:none;border-radius:0 0 10px 10px;padding:8px 10px}
+    #term-in{flex:1;background:transparent;border:none;color:var(--text);font-family:var(--mono);font-size:13px;outline:none}
+    #term-run{background:var(--accent);border:none;border-radius:7px;color:#fff;padding:7px 14px;font-size:13px;font-weight:600;cursor:pointer}
+
+    /* output sheet */
+    #sheet{position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:200;display:none;align-items:flex-end}
+    #sheet.on{display:flex}
+    #sheet-inner{background:var(--panel);border-radius:16px 16px 0 0;width:100%;max-height:70dvh;display:flex;flex-direction:column;padding-bottom:env(safe-area-inset-bottom)}
+    #sheet-hdr{display:flex;align-items:center;justify-content:space-between;padding:14px 16px;border-bottom:1px solid var(--border);flex-shrink:0}
+    #sheet-title{font-weight:700;font-size:15px}
+    #sheet-close{background:none;border:none;color:var(--muted);font-size:18px;cursor:pointer;padding:4px}
+    #sheet-body{overflow-y:auto;padding:14px 16px;font-family:var(--mono);font-size:12px;white-space:pre-wrap;word-break:break-all;color:#a5d6ff;flex:1}
+    #sheet-spin{padding:20px;color:var(--muted);font-family:var(--mono);font-size:13px}
+
+    /* bottom nav */
+    #bnav{position:fixed;bottom:0;left:0;right:0;background:var(--panel);border-top:1px solid var(--border);display:flex;padding-bottom:env(safe-area-inset-bottom);z-index:100}
+    .bn{flex:1;background:none;border:none;color:var(--muted);padding:10px 4px 8px;display:flex;flex-direction:column;align-items:center;gap:3px;cursor:pointer;font-size:10px;font-weight:500}
+    .bn.on{color:var(--blue)}
+    .bn-i{font-size:20px;line-height:1}
+
+    /* misc */
+    .empty{color:var(--muted);font-size:12px;padding:8px 0}
+    .pill{display:inline-block;font-size:10px;font-weight:700;padding:2px 7px;border-radius:20px;background:var(--panel2);color:var(--muted);vertical-align:middle}
+    .pill.up{background:#0d2818;color:var(--green)}
+    .pill.dn{background:#1c0f0f;color:var(--red)}
+  </style>
+</head>
+<body>
+
+<!-- LOGIN -->
+<div id="gate">
+  <div id="gate-logo">⊞</div>
+  <h1>Server Hub</h1>
+  <p>Sign in to manage your server</p>
+  <input id="g-user" type="text" placeholder="Username" value="admin" autocomplete="username">
+  <input id="g-pass" type="password" placeholder="Password" autocomplete="current-password">
+  <button id="g-btn" onclick="doLogin()">Sign In</button>
+  <div id="gate-err"></div>
+</div>
+
+<!-- APP -->
+<div id="app">
+  <div id="topbar">
+    <div id="tb-left"><div id="srv-dot"></div>Server Hub</div>
+    <div id="tb-right">
+      <button class="tbtn" onclick="hardRefresh()" title="Refresh">↻</button>
+      <button class="tbtn" onclick="doLogout()">Sign out</button>
+    </div>
+  </div>
+
+  <div id="pages">
+
+    <!-- STATUS PAGE -->
+    <div id="pg-status" class="page on">
+      <div class="sec">
+        <div class="sec-hdr">Health</div>
+        <div class="stat-grid">
+          <div class="stat-card">
+            <div class="stat-lbl">RAM</div>
+            <div class="stat-val" id="s-ram">—</div>
+            <div class="stat-sub" id="s-ram-sub"></div>
+            <div class="bar"><div class="bar-fill" id="s-ram-bar" style="width:0"></div></div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-lbl">Disk</div>
+            <div class="stat-val" id="s-disk">—</div>
+            <div class="stat-sub" id="s-disk-sub"></div>
+            <div class="bar"><div class="bar-fill" id="s-disk-bar" style="width:0"></div></div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-lbl">Containers</div>
+            <div class="stat-val" id="s-cnt">—</div>
+            <div class="stat-sub">running</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-lbl">Load (1m)</div>
+            <div class="stat-val" id="s-load" style="font-size:20px;padding-top:4px">—</div>
+            <div class="stat-sub" id="s-up"></div>
+          </div>
+        </div>
+      </div>
+      <div class="sec" id="alerts-sec" style="display:none">
+        <div class="sec-hdr">Alerts</div>
+        <div id="alerts-body"></div>
+      </div>
+      <div class="sec">
+        <div class="sec-hdr">Integrations</div>
+        <div id="int-body" class="empty">Loading…</div>
+      </div>
+    </div>
+
+    <!-- CONTAINERS PAGE -->
+    <div id="pg-containers" class="page">
+      <div class="sec">
+        <div class="sec-hdr" style="display:flex;justify-content:space-between;align-items:center">
+          Containers
+          <button class="tbtn" onclick="loadContainers()">↻</button>
+        </div>
+        <div id="clist" class="empty">Loading…</div>
+      </div>
+    </div>
+
+    <!-- ACTIONS PAGE -->
+    <div id="pg-actions" class="page">
+      <div class="sec">
+        <div class="sec-hdr">Quick Scripts</div>
+        <div class="qa-grid" id="qa-grid"></div>
+      </div>
+      <div class="sec">
+        <div class="sec-hdr">n8n Workflow Templates</div>
+        <div id="wf-list"></div>
+        <div style="margin-top:4px">
+          <a id="n8n-link" href="#" target="_blank" class="tbtn" style="display:inline-block;text-decoration:none">Open n8n →</a>
+        </div>
+      </div>
+    </div>
+
+    <!-- TERMINAL PAGE -->
+    <div id="pg-terminal" class="page">
+      <div class="sec">
+        <div class="sec-hdr">Terminal</div>
+        <div id="term-out">$ Ready\n</div>
+        <div id="term-bar">
+          <input id="term-in" placeholder="command…" autocorrect="off" autocapitalize="off" spellcheck="false">
+          <button id="term-run" onclick="termRun()">Run</button>
+        </div>
+      </div>
+    </div>
+
+  </div><!-- /pages -->
+
+  <!-- BOTTOM NAV -->
+  <nav id="bnav">
+    <button class="bn on" onclick="nav('status',this)"><span class="bn-i">⊞</span>Status</button>
+    <button class="bn" onclick="nav('containers',this)"><span class="bn-i">📦</span>Servers</button>
+    <button class="bn" onclick="nav('actions',this)"><span class="bn-i">⚡</span>Actions</button>
+    <button class="bn" onclick="nav('terminal',this)"><span class="bn-i">⌨</span>Shell</button>
+  </nav>
+</div>
+
+<!-- OUTPUT SHEET -->
+<div id="sheet" onclick="e=>{ if(e.target===this)closeSheet() }">
+  <div id="sheet-inner">
+    <div id="sheet-hdr">
+      <span id="sheet-title"></span>
+      <button id="sheet-close" onclick="closeSheet()">✕</button>
+    </div>
+    <div id="sheet-spin">Running…</div>
+    <div id="sheet-body" style="display:none"></div>
+  </div>
+</div>
+
+<script>
+const API = window.location.origin;
+let TOKEN = sessionStorage.getItem('hub_m_token') || '';
+
+// ── AUTH ──────────────────────────────────────────────────────────────────────
+async function doLogin() {
+  const btn = document.getElementById('g-btn');
+  const err = document.getElementById('gate-err');
+  btn.textContent = 'Signing in…'; btn.disabled = true; err.textContent = '';
+  try {
+    const r = await fetch(API+'/api/auth/login', {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({username: document.getElementById('g-user').value.trim(), password: document.getElementById('g-pass').value})
+    });
+    const d = await r.json();
+    if (d.ok) { TOKEN = d.token; sessionStorage.setItem('hub_m_token', TOKEN); showApp(); }
+    else { err.textContent = d.error || 'Invalid credentials'; }
+  } catch { err.textContent = 'Cannot reach hub server'; }
+  btn.textContent = 'Sign In'; btn.disabled = false;
+}
+
+function doLogout() { sessionStorage.clear(); location.reload(); }
+
+function hdrs() { return {'Content-Type':'application/json','X-Hub-Token':TOKEN}; }
+async function GET(p) { const r = await fetch(API+p, {headers:hdrs()}); return r.json(); }
+async function POST(p, b) { const r = await fetch(API+p, {method:'POST', headers:hdrs(), body:JSON.stringify(b)}); return r.json(); }
+
+// ── NAV ───────────────────────────────────────────────────────────────────────
+function nav(page, btn) {
+  document.querySelectorAll('.page').forEach(p=>p.classList.remove('on'));
+  document.querySelectorAll('.bn').forEach(b=>b.classList.remove('on'));
+  document.getElementById('pg-'+page).classList.add('on');
+  btn.classList.add('on');
+  if (page==='containers') loadContainers();
+  if (page==='actions') loadActions();
+}
+
+// ── STATUS ────────────────────────────────────────────────────────────────────
+async function loadStatus() {
+  try {
+    const s = await GET('/api/status');
+    const dot = document.getElementById('srv-dot');
+    dot.className = s.online ? 'on' : 'off';
+    if (!s.online) return;
+    const rp = Math.round(s.ram_used_mb / s.ram_total_mb * 100);
+    set('s-ram', rp+'%');
+    set('s-ram-sub', Math.round(s.ram_used_mb/1024)+'G / '+Math.round(s.ram_total_mb/1024)+'G');
+    setBar('s-ram-bar', rp);
+    set('s-disk', s.disk_pct);
+    set('s-disk-sub', s.disk_used+' / '+s.disk_total);
+    setBar('s-disk-bar', parseInt(s.disk_pct));
+    set('s-cnt', s.containers);
+    set('s-load', s.load?.split(' ')[0]||'—');
+    set('s-up', s.uptime||'');
+    buildAlerts(s);
+  } catch(e) { document.getElementById('srv-dot').className='off'; }
+  loadIntegrations();
+}
+
+function set(id, v) { const el=document.getElementById(id); if(el) el.textContent=v; }
+function setBar(id, pct) {
+  const el = document.getElementById(id); if(!el) return;
+  el.style.width = pct+'%';
+  el.className = 'bar-fill' + (pct>85?' c':pct>70?' w':'');
+}
+
+function buildAlerts(s) {
+  const alerts = [];
+  const rp = Math.round(s.ram_used_mb / s.ram_total_mb * 100);
+  const dp = parseInt(s.disk_pct);
+  if (rp > 85) alerts.push({lvl:'crit', icon:'🔴', title:'RAM Critical', sub:`${rp}% used — consider restarting heavy containers`});
+  else if (rp > 70) alerts.push({lvl:'warn', icon:'🟡', title:'RAM High', sub:`${rp}% used`});
+  if (dp > 85) alerts.push({lvl:'crit', icon:'🔴', title:'Disk Critical', sub:`${s.disk_pct} used — run Docker prune`});
+  else if (dp > 70) alerts.push({lvl:'warn', icon:'🟡', title:'Disk High', sub:`${s.disk_pct} used`});
+  const sec = document.getElementById('alerts-sec');
+  const body = document.getElementById('alerts-body');
+  if (!alerts.length) { sec.style.display='none'; return; }
+  sec.style.display='block';
+  body.innerHTML = alerts.map(a=>`
+    <div class="alert ${a.lvl}">
+      <div class="alert-icon">${a.icon}</div>
+      <div class="alert-body"><div class="alert-title">${a.title}</div><div class="alert-sub">${a.sub}</div></div>
+    </div>`).join('');
+}
+
+async function loadIntegrations() {
+  try {
+    const d = await GET('/api/integrations');
+    const items = [
+      {name:'Redis',     ok:d.redis?.running,     info: d.redis?.running ? 'PONG' : 'offline'},
+      {name:'SurrealDB', ok:d.surrealdb?.running,  info: d.surrealdb?.running ? 'healthy' : 'offline'},
+      {name:'n8n',       ok:d.n8n?.running,        info: d.n8n?.running ? 'ready' : 'offline'},
+    ];
+    document.getElementById('int-body').innerHTML = items.map(it=>`
+      <div style="display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--border)">
+        <div class="c-dot ${it.ok?'up':'dn'}"></div>
+        <div style="flex:1;font-size:13px;font-weight:500">${it.name}</div>
+        <div class="pill ${it.ok?'up':'dn'}">${it.info}</div>
+      </div>`).join('');
+    // wire n8n link
+    if (d.n8n?.ui) document.getElementById('n8n-link').href = d.n8n.ui;
+  } catch { document.getElementById('int-body').textContent = 'Could not reach hub'; }
+}
+
+async function hardRefresh() { await loadStatus(); }
+
+// ── CONTAINERS ────────────────────────────────────────────────────────────────
+async function loadContainers() {
+  const el = document.getElementById('clist');
+  el.innerHTML = '<div class="empty">Loading…</div>';
+  try {
+    const cs = await GET('/api/containers');
+    if (!cs.length) { el.innerHTML = '<div class="empty">No containers found</div>'; return; }
+    el.innerHTML = '<div>'+cs.map((c,i)=>`
+      <div class="item" id="ci-${i}">
+        <div class="c-dot ${c.running?'up':'dn'}"></div>
+        <div class="c-name" title="${c.name}">${c.name}</div>
+        <div class="c-st">${c.running?'up':'off'}</div>
+        <button class="c-btn ${c.running?'st':'go'}" id="cb-${i}" onclick="toggleC('${c.name}',${c.running},${i})">
+          ${c.running?'Stop':'Start'}
+        </button>
+      </div>`).join('')+'</div>';
+  } catch { el.innerHTML = '<div class="empty">Failed to load</div>'; }
+}
+
+async function toggleC(name, isUp, idx) {
+  const btn = document.getElementById('cb-'+idx); if(!btn) return;
+  btn.textContent='…'; btn.disabled=true;
+  try {
+    await POST('/api/run', {command: isUp ? `docker stop ${name}` : `docker start ${name}`});
+    setTimeout(loadContainers, 800);
+  } catch { btn.textContent=isUp?'Stop':'Start'; btn.disabled=false; }
+}
+
+// ── ACTIONS ───────────────────────────────────────────────────────────────────
+const QUICK_ACTIONS = [
+  {ico:'🧹', lbl:'Docker Prune', desc:'Free unused images & volumes', cmd:'docker system prune -f && docker volume prune -f'},
+  {ico:'💾', lbl:'Disk Usage',   desc:'Show disk usage breakdown',    cmd:'df -h / /srv 2>/dev/null; du -sh /srv/docker/* 2>/dev/null | sort -rh | head -10'},
+  {ico:'🧠', lbl:'RAM Usage',    desc:'Memory by process',            cmd:"free -h; echo '---'; ps aux --sort=-%mem | head -12"},
+  {ico:'📋', lbl:'Error Logs',   desc:'Recent system errors',         cmd:'journalctl -n 40 --no-pager -p err 2>/dev/null || dmesg | grep -i error | tail -20'},
+  {ico:'🌐', lbl:'Open Ports',   desc:'What is listening',            cmd:'ss -tlnp | grep LISTEN'},
+  {ico:'🔄', lbl:'Update Images',desc:'Pull latest for all containers',cmd:"docker ps --format '{{.Names}}' | xargs -I{} sh -c 'echo \"Pulling {}:\"; docker pull $(docker inspect --format=\"{{.Config.Image}}\" {}) 2>&1 | tail -1'"},
+  {ico:'📦', lbl:'All Containers',desc:'Full container status',       cmd:'docker ps -a --format "table {{.Names}}\t{{.Status}}\t{{.Ports}}"'},
+  {ico:'⚡', lbl:'Server Stats', desc:'CPU, RAM, load, uptime',       cmd:'uptime; echo; free -h; echo; top -bn1 | head -8'},
+  {ico:'🔒', lbl:'Security Scan',desc:'Recent auth failures',         cmd:'journalctl -u ssh --no-pager -n 30 2>/dev/null | grep -i "fail\\|invalid\\|error"'},
+  {ico:'🗂', lbl:'Docker Sizes', desc:'Image and volume sizes',       cmd:'docker system df -v 2>/dev/null | head -40'},
+];
+
+const N8N_WORKFLOWS = [
+  {
+    ico:'❤️', name:'Server Health Alert',
+    desc:'Runs every 5 min. Sends a push notification to your phone when RAM, disk, or CPU hits critical levels.',
+    trigger:'Schedule (every 5 min)', actions:['Check /api/status', 'If RAM>85% or Disk>85%', 'Send ntfy notification'],
+  },
+  {
+    ico:'📦', name:'Container Down Alert',
+    desc:'Monitors your key containers. Alerts you if Portainer, NPM, or any critical service goes offline.',
+    trigger:'Schedule (every 10 min)', actions:['Check /api/containers', 'Find any stopped containers', 'Send ntfy notification'],
+  },
+  {
+    ico:'📊', name:'Weekly Server Digest',
+    desc:'Every Monday morning: uptime, disk usage, container health, and any errors from the past week.',
+    trigger:'Schedule (Mon 8am)', actions:['Collect status + logs', 'Format summary', 'Send ntfy or email'],
+  },
+  {
+    ico:'🧹', name:'Auto Docker Prune',
+    desc:'Runs docker system prune every Sunday night to reclaim disk space from unused images and volumes.',
+    trigger:'Schedule (Sun 2am)', actions:['SSH run: docker system prune -f', 'Log result to hub journal'],
+  },
+];
+
+function loadActions() {
+  document.getElementById('qa-grid').innerHTML = QUICK_ACTIONS.map((a,i)=>`
+    <div class="qa-card" onclick="runAction(${i})">
+      <div class="qa-ico">${a.ico}</div>
+      <div class="qa-lbl">${a.lbl}</div>
+      <div class="qa-desc">${a.desc}</div>
+    </div>`).join('');
+
+  document.getElementById('wf-list').innerHTML = N8N_WORKFLOWS.map(w=>`
+    <div class="wf-item">
+      <div class="wf-ico">${w.ico}</div>
+      <div class="wf-body">
+        <div class="wf-name">${w.name}</div>
+        <div class="wf-desc">${w.desc}</div>
+        <div style="margin-top:8px;font-size:11px;color:var(--muted)">
+          <strong>Trigger:</strong> ${w.trigger}<br>
+          <strong>Steps:</strong> ${w.actions.join(' → ')}
+        </div>
+        <div class="wf-actions">
+          <button class="wf-btn primary" onclick="openN8n()">Set up in n8n →</button>
+        </div>
+      </div>
+    </div>`).join('');
+}
+
+async function runAction(idx) {
+  const a = QUICK_ACTIONS[idx];
+  openSheet(a.lbl);
+  try {
+    const d = await POST('/api/run', {command: a.cmd});
+    showSheetResult(d.output || d.error || '(no output)');
+  } catch { showSheetResult('Error reaching hub server'); }
+}
+
+function openN8n() {
+  const link = document.getElementById('n8n-link').href;
+  if (link && link !== '#') window.open(link, '_blank');
+  else showSheet('n8n', 'n8n is not running. Start it from the Containers tab first.');
+}
+
+// ── SHEET ─────────────────────────────────────────────────────────────────────
+function openSheet(title) {
+  document.getElementById('sheet-title').textContent = title;
+  document.getElementById('sheet-spin').style.display='block';
+  document.getElementById('sheet-body').style.display='none';
+  document.getElementById('sheet').classList.add('on');
+}
+function showSheetResult(text) {
+  document.getElementById('sheet-spin').style.display='none';
+  const b = document.getElementById('sheet-body');
+  b.style.display='block'; b.textContent=text;
+}
+function closeSheet() { document.getElementById('sheet').classList.remove('on'); }
+function showSheet(title, text) { openSheet(title); setTimeout(()=>showSheetResult(text),50); }
+
+// ── TERMINAL ─────────────────────────────────────────────────────────────────
+const termHist = []; let termHIdx = -1;
+async function termRun() {
+  const inp = document.getElementById('term-in');
+  const cmd = inp.value.trim(); if(!cmd) return;
+  termHist.unshift(cmd); termHIdx=-1;
+  const out = document.getElementById('term-out');
+  out.textContent += `$ ${cmd}\n`;
+  inp.value='';
+  try {
+    const d = await POST('/api/run', {command:cmd});
+    out.textContent += (d.output||d.error||'(no output)')+'\n';
+  } catch { out.textContent+='Error: could not reach hub\n'; }
+  out.scrollTop=out.scrollHeight;
+}
+
+// ── INIT ─────────────────────────────────────────────────────────────────────
+function showApp() {
+  document.getElementById('gate').style.display='none';
+  document.getElementById('app').style.display='flex';
+  loadStatus();
+  setInterval(loadStatus, 30000);
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+  document.getElementById('g-pass').addEventListener('keydown', e => { if(e.key==='Enter') doLogin(); });
+  document.getElementById('term-in').addEventListener('keydown', e => {
+    if (e.key==='Enter') termRun();
+    if (e.key==='ArrowUp') { termHIdx=Math.min(termHIdx+1,termHist.length-1); e.target.value=termHist[termHIdx]||''; }
+    if (e.key==='ArrowDown') { termHIdx=Math.max(termHIdx-1,-1); e.target.value=termHIdx<0?'':termHist[termHIdx]; }
+  });
+  document.getElementById('sheet').addEventListener('click', e=>{ if(e.target===document.getElementById('sheet')) closeSheet(); });
+
+  if (TOKEN) {
+    fetch(API+'/api/auth/check', {headers:hdrs()})
+      .then(r=>r.json())
+      .then(d=>{ if(d.ok) showApp(); else { TOKEN=''; sessionStorage.clear(); } })
+      .catch(()=>{ document.getElementById('gate-err').textContent='Hub server unreachable'; });
+  }
+});
+</script>
+</body>
+</html>
