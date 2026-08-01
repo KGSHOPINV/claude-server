@@ -245,9 +245,10 @@ SERVICES = [
     {'name': 'Netdata',     'port': 19999, 'group': 'Monitoring',     'description': 'Real-time metrics',     'installed': True},
     {'name': 'Dozzle',      'port': 8090,  'group': 'Monitoring',     'description': 'Container log viewer',  'installed': True},
     {'name': 'ntfy',        'port': 8085,  'group': 'Notifications',  'description': 'Push notifications',    'installed': True},
-    {'name': 'n8n',         'port': 5678,  'group': 'Tools',          'description': 'Workflow automation',   'installed': False},
+    {'name': 'n8n',         'port': 5678,  'group': 'Tools',          'description': 'Workflow automation',   'installed': True},
     {'name': 'Supabase',    'port': 8000,  'group': 'Tools',          'description': 'Database platform',     'installed': False},
-    {'name': 'Redis',       'port': 6379,  'group': 'Tools',          'description': 'Cache / key-value',     'installed': False, 'no_ui': True},
+    {'name': 'Redis',       'port': 6379,  'group': 'Tools',          'description': 'Cache / key-value',     'installed': True,  'no_ui': True},
+    {'name': 'SurrealDB',   'port': 8001,  'group': 'Tools',          'description': 'Multi-model / graph DB','installed': True},
     {'name': 'MinIO',       'port': 9001,  'group': 'Tools',          'description': 'Object storage (S3)',   'installed': False},
     {'name': 'Adminer',     'port': 8082,  'group': 'Tools',          'description': 'Database browser',      'installed': False},
     {'name': 'Mailpit',     'port': 8025,  'group': 'Tools',          'description': 'Dev email catcher',     'installed': False},
@@ -425,6 +426,42 @@ def get_files(path):
     r = ssh_run(f"ls -lah --time-style=short-iso '{safe}' 2>&1 | head -60")
     return {'path': safe, 'listing': r.get('output',''), 'error': r.get('error','') if not r.get('online') else ''}
 
+def get_integrations():
+    """Live health check for Redis, SurrealDB, n8n."""
+    results = {}
+
+    # Redis — PING via docker exec
+    r = ssh_run("docker exec redis redis-cli ping 2>/dev/null")
+    results['redis'] = {
+        'running': r.get('output','').strip() == 'PONG',
+        'info': r.get('output','').strip() or r.get('error',''),
+    }
+    # Redis keyspace stats
+    r2 = ssh_run("docker exec redis redis-cli info keyspace 2>/dev/null")
+    results['redis']['keyspace'] = r2.get('output','').strip()
+
+    # SurrealDB — HTTP 200 with empty body means healthy
+    r3 = ssh_run("curl -s -o /dev/null -w '%{http_code}' http://localhost:8001/health 2>/dev/null")
+    surreal_code = r3.get('output','').strip()
+    results['surrealdb'] = {
+        'running': surreal_code == '200',
+        'info': f'HTTP {surreal_code}' if surreal_code else r3.get('error',''),
+        'url': f'http://{SERVER_IP}:8001',
+        'user': 'root',
+    }
+
+    # n8n — check its health endpoint
+    r4 = ssh_run("curl -s -o /dev/null -w '%{http_code}' http://localhost:5678/healthz 2>/dev/null")
+    code = r4.get('output','').strip()
+    results['n8n'] = {
+        'running': code == '200',
+        'info': f'HTTP {code}' if code else r4.get('error',''),
+        'webhook_base': f'http://{SERVER_IP}:5678/webhook/',
+        'ui': f'http://{SERVER_IP}:5678',
+    }
+
+    return results
+
 def check_auth(handler):
     token = handler.headers.get('X-Hub-Token','')
     if not token:
@@ -565,6 +602,9 @@ class Handler(http.server.BaseHTTPRequestHandler):
 
         elif p == '/api/users':
             self.send_json(users_list())
+
+        elif p == '/api/integrations':
+            self.send_json(get_integrations())
 
         elif p.startswith('/proxy/'):
             # /proxy/3000/some/path?query=string
