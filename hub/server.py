@@ -504,8 +504,15 @@ class Handler(http.server.BaseHTTPRequestHandler):
         p = self.path.split('?')[0]
         force = 'force' in self.path
 
-        if p in ('/', '/mobile'):
-            path = MOBILE_PATH if p == '/mobile' else APP_PATH
+        if p in ('/', '/mobile', '/desktop'):
+            ua = self.headers.get('User-Agent', '')
+            is_mobile = any(x in ua for x in ('Mobile','Android','iPhone','iPad','iPod','BlackBerry','Windows Phone'))
+            if p == '/' and is_mobile:
+                self.send_response(302)
+                self.send_header('Location', '/mobile')
+                self.end_headers()
+                return
+            path = MOBILE_PATH if (p == '/mobile' or (p == '/' and is_mobile)) else APP_PATH
             try:
                 with open(path, 'rb') as f:
                     content = f.read()
