@@ -216,16 +216,29 @@ body { font-family:var(--ui); background:var(--bg); color:var(--text); height:10
 .psb { background:none; border:none; color:var(--muted2); cursor:pointer; font-size:11px; padding:2px 4px; border-radius:3px; transition:background var(--t),color var(--t); }
 .psb:hover { background:var(--panel); color:var(--text); }
 .pane-body { flex:1; overflow:hidden; position:relative; }
+.pane-resizer { flex-shrink:0; background:var(--border); transition:background var(--t); position:relative; z-index:2; }
+.pane-resizer:hover, .pane-resizer.dragging { background:var(--accent); }
+.pane-resizer-col { width:4px; cursor:col-resize; }
+.pane-resizer-row { height:4px; cursor:row-resize; width:100%; }
 
 /* ── DESK MODE ──────────────────────────────────── */
 #desk-overlay { display:none; position:fixed; inset:0; z-index:48;
-  background-color:rgba(5,10,18,.9);
-  background-image:radial-gradient(circle, rgba(88,166,255,.07) 1px, transparent 1px);
-  background-size:24px 24px;
-  backdrop-filter:blur(8px);
-  -webkit-backdrop-filter:blur(8px); }
-body.desk-mode #desk-overlay { display:block; }
+  background-color:rgba(5,10,18,.93);
+  backdrop-filter:blur(10px); -webkit-backdrop-filter:blur(10px); }
+body.desk-mode #desk-overlay { display:grid; grid-template-columns:300px 1fr; }
 body.desk-mode #widget-layer { z-index:60; }
+#desk-left { border-right:1px solid rgba(88,166,255,.08); display:flex; flex-direction:column;
+  background-image:radial-gradient(circle, rgba(88,166,255,.05) 1px, transparent 1px);
+  background-size:24px 24px; }
+#desk-right { display:flex; flex-direction:column;
+  background-image:radial-gradient(circle, rgba(57,208,196,.04) 1px, transparent 1px);
+  background-size:28px 28px; }
+.desk-phdr { display:flex; align-items:center; justify-content:space-between; padding:10px 14px 8px;
+  border-bottom:1px solid rgba(255,255,255,.04); font-size:10px; font-weight:700;
+  letter-spacing:.6px; text-transform:uppercase; color:rgba(255,255,255,.18); }
+.desk-pbtn { background:rgba(255,255,255,.06); border:1px solid rgba(255,255,255,.1); border-radius:3px;
+  color:rgba(255,255,255,.4); font-size:11px; padding:2px 8px; cursor:pointer; transition:all .15s; font-family:var(--ui); }
+.desk-pbtn:hover { background:rgba(57,208,196,.18); color:rgba(255,255,255,.85); border-color:rgba(57,208,196,.3); }
 #desk-exit { display:none; position:fixed; top:12px; right:16px; z-index:70;
   background:rgba(22,27,34,.95); border:1px solid var(--border2); border-radius:20px;
   color:var(--muted); font-size:11px; padding:5px 14px; cursor:pointer;
@@ -303,6 +316,23 @@ body.desk-mode #desk-exit { display:flex; align-items:center; gap:6px; }
 .docs-content table { border-collapse:collapse; margin:8px 0; }
 .docs-content th { background:var(--panel2); padding:6px 9px; font-size:10px; font-weight:700; text-align:left; border:1px solid var(--border); color:var(--muted); }
 .docs-content td { padding:6px 9px; font-size:11px; border:1px solid var(--border); color:#c9d1d9; }
+
+/* Command Palette */
+#cmdpal { display:none; position:fixed; inset:0; background:rgba(0,0,0,.78); z-index:300; align-items:flex-start; justify-content:center; padding-top:80px; }
+#cmdpal.open { display:flex; }
+.cmdpal-inner { background:var(--panel); border:1px solid var(--border2); border-radius:8px; width:540px; max-width:calc(100vw - 32px); overflow:hidden; box-shadow:0 24px 80px rgba(0,0,0,.9); }
+.cmdpal-search { display:flex; align-items:center; gap:8px; padding:10px 14px; border-bottom:1px solid var(--border); }
+.cmdpal-search input { flex:1; background:transparent; border:none; font-size:14px; color:var(--text); font-family:var(--ui); }
+.cmdpal-search input:focus { outline:none; }
+.cmdpal-search input::placeholder { color:var(--muted); }
+.cmdpal-search kbd { font-size:10px; color:var(--muted2); background:var(--panel2); border:1px solid var(--border2); border-radius:3px; padding:2px 5px; font-family:var(--mono); flex-shrink:0; }
+#cmdpal-results { max-height:min(420px,calc(100vh - 200px)); overflow-y:auto; }
+.cp-group { font-size:9px; font-weight:700; letter-spacing:.6px; text-transform:uppercase; color:var(--muted2); padding:8px 14px 3px; }
+.cp-item { display:flex; align-items:center; gap:10px; padding:8px 14px; cursor:pointer; transition:background var(--t); }
+.cp-item:hover, .cp-item.cp-active { background:rgba(57,208,196,.09); }
+.cp-item-icon { font-size:14px; flex-shrink:0; width:20px; text-align:center; }
+.cp-item-label { font-size:12px; color:var(--text); flex:1; }
+.cp-item-hint { font-size:10px; color:var(--muted2); font-family:var(--mono); flex-shrink:0; }
 
 /* Runbooks */
 .view-runbooks { display:flex; height:100%; overflow:hidden; }
@@ -432,12 +462,44 @@ body.desk-mode #desk-exit { display:flex; align-items:center; gap:6px; }
   <div id="top-r">
     <span style="color:var(--muted);font-family:var(--mono);font-size:10px" id="t-clock"></span>
     <button class="tbtn" onclick="hardRefresh()">↻ Refresh</button>
+    <button class="tbtn" onclick="openCmdPal()" title="Global search (Ctrl+K)">⌘ Search</button>
     <button class="tbtn" onclick="enterDeskMode()" title="Desk Mode — focus your widgets" id="desk-btn">⊡ Desk</button>
   </div>
 </div>
 
+<!-- COMMAND PALETTE -->
+<div id="cmdpal" onclick="if(event.target===this)closeCmdPal()">
+  <div class="cmdpal-inner">
+    <div class="cmdpal-search">
+      <span style="color:var(--muted);font-size:14px">🔍</span>
+      <input id="cmdpal-input" placeholder="Search views, services, runbooks, commands, docs…" autocomplete="off" spellcheck="false">
+      <kbd>esc</kbd>
+    </div>
+    <div id="cmdpal-results"></div>
+  </div>
+</div>
+
 <!-- DESK MODE OVERLAY -->
-<div id="desk-overlay"></div>
+<div id="desk-overlay">
+  <div id="desk-left">
+    <div class="desk-phdr">
+      <span>📌 Stickies</span>
+      <button class="desk-pbtn" onclick="spawnWidget('sticky');setTimeout(layoutDeskWidgets,100)">+ New</button>
+    </div>
+  </div>
+  <div id="desk-right">
+    <div class="desk-phdr">
+      <span>⊞ Widgets</span>
+      <div style="display:flex;gap:4px">
+        <button class="desk-pbtn" onclick="spawnWidget('terminal');setTimeout(layoutDeskWidgets,100)" title="Terminal">⌨</button>
+        <button class="desk-pbtn" onclick="spawnWidget('stats');setTimeout(layoutDeskWidgets,100)" title="Stats">📊</button>
+        <button class="desk-pbtn" onclick="spawnWidget('timer');setTimeout(layoutDeskWidgets,100)" title="Timer">⏱</button>
+        <button class="desk-pbtn" onclick="spawnWidget('logtail');setTimeout(layoutDeskWidgets,100)" title="Log Tail">📋</button>
+        <button class="desk-pbtn" onclick="spawnWidget('ctrtoggle');setTimeout(layoutDeskWidgets,100)" title="Containers">🐳</button>
+      </div>
+    </div>
+  </div>
+</div>
 <button id="desk-exit" onclick="exitDeskMode()">✕ Exit Desk</button>
 <!-- WIDGET LAYER — fixed, always on top of everything -->
 <div id="widget-layer"></div>
@@ -702,6 +764,7 @@ const CATEGORIES = {
         {icon:'⊞', label:'Dashboard',   action:()=>openView('dashboard')},
         {icon:'🗺', label:'Infra Map',   action:()=>openView('map')},
         {icon:'⚑', label:'Issues',      action:()=>openView('issues')},
+        {icon:'🌐', label:'Browser',     action:()=>openView('browser')},
       ]},
       {label:'Ops', items:[
         {icon:'▶',  label:'Runbooks',    action:()=>openView('runbooks')},
@@ -736,6 +799,7 @@ const CATEGORIES = {
         {icon:'⌨', label:'Terminal',     action:()=>openView('terminal')},
         {icon:'📋', label:'Container Logs', action:()=>openView('logs')},
         {icon:'🌐', label:'Network',      action:()=>openView('network')},
+        {icon:'🌐', label:'Browser',      action:()=>openView('browser')},
       ]},
       {label:'Admin', items:[
         {icon:'🔐', label:'Vault',        action:()=>openView('vault')},
@@ -953,7 +1017,22 @@ function renderWorkspace(ws) {
 }
 
 function renderPaneGrid(ws) {
-  return `<div class="pane-grid ${ws.layout}" data-ws-grid="${ws.id}">
+  const id = `grid-${ws.id}`;
+  if (ws.layout === 'l2h') {
+    return `<div class="pane-grid l2h" id="${id}" data-ws-grid="${ws.id}" style="grid-template-columns:1fr 4px 1fr">
+      ${renderPane(ws.id, ws.panes[0])}
+      <div class="pane-resizer pane-resizer-col" onmousedown="startPaneResize(event,'${ws.id}','col')"></div>
+      ${renderPane(ws.id, ws.panes[1] || ws.panes[0])}
+    </div>`;
+  }
+  if (ws.layout === 'l2v') {
+    return `<div class="pane-grid l2v" id="${id}" data-ws-grid="${ws.id}" style="grid-template-rows:1fr 4px 1fr">
+      ${renderPane(ws.id, ws.panes[0])}
+      <div class="pane-resizer pane-resizer-row" onmousedown="startPaneResize(event,'${ws.id}','row')"></div>
+      ${renderPane(ws.id, ws.panes[1] || ws.panes[0])}
+    </div>`;
+  }
+  return `<div class="pane-grid ${ws.layout}" id="${id}" data-ws-grid="${ws.id}">
     ${ws.panes.map(p => renderPane(ws.id, p)).join('')}
   </div>`;
 }
@@ -988,6 +1067,7 @@ const VIEW_DEFS = {
   issues:    {icon:'⚑',  title:'Issues'},
   network:   {icon:'🌐', title:'Network'},
   chat:      {icon:'🤖', title:'AI Chat'},
+  browser:   {icon:'🌐', title:'Browser'},
   runbooks:  {icon:'▶',  title:'Runbooks'},
   iframe:    {icon:'🔗', title:'Service'},
   blank:     {icon:'○',  title:'New Pane'},
@@ -1208,6 +1288,19 @@ function mountPaneContent(wsId, paneId, viewType, viewConfig, body) {
         <div class="net-card"><h4>Fail2Ban SSH</h4><div class="net-pre" id="nf2b-${key}">Click Load</div></div>
         <div class="net-card"><h4>Listening Ports</h4><div class="net-pre" id="npts-${key}">Click Load</div></div>
       </div>`;
+      break;
+    case 'browser':
+      body.innerHTML = `<div style="display:flex;flex-direction:column;height:100%">
+        <div style="display:flex;gap:4px;padding:4px 6px;background:var(--panel2);border-bottom:1px solid var(--border);flex-shrink:0;align-items:center">
+          <button onclick="browserNav('${key}','back')"  class="btn" style="padding:2px 8px;font-size:12px">←</button>
+          <button onclick="browserNav('${key}','fwd')"   class="btn" style="padding:2px 8px;font-size:12px">→</button>
+          <button onclick="browserNav('${key}','reload')" class="btn" style="padding:2px 8px;font-size:12px">↻</button>
+          <input id="burl-${key}" value="${viewConfig.url||''}" placeholder="https://… or :PORT for local" style="flex:1;background:var(--bg);border:1px solid var(--border2);border-radius:3px;color:var(--text);font-family:var(--mono);font-size:11px;padding:3px 8px;min-width:0" onkeydown="if(event.key==='Enter')loadBrowser('${key}')">
+          <button onclick="loadBrowser('${key}')" class="btn p" style="padding:3px 10px;font-size:11px">Go</button>
+        </div>
+        <iframe id="bframe-${key}" style="flex:1;border:none;background:#fff" sandbox="allow-same-origin allow-scripts allow-forms allow-popups allow-pointer-lock"></iframe>
+      </div>`;
+      if (viewConfig.url) loadBrowser(key);
       break;
     case 'runbooks':
       mountRunbooksView(key, body);
@@ -1782,14 +1875,33 @@ function hardRefresh() { refresh(true); fetchIssues(); }
 // ── DESK MODE ─────────────────────────────────────────────────────────────────
 function enterDeskMode() {
   document.body.classList.add('desk-mode');
-  // Spawn a terminal widget if none exist so the desk isn't empty
-  if (!W.widgets.length) spawnWidget('terminal');
+  if (!W.widgets.length) spawnWidget('sticky');
+  setTimeout(layoutDeskWidgets, 50);
 }
+
 function exitDeskMode() {
   document.body.classList.remove('desk-mode');
 }
-// Escape key exits desk mode
-document.addEventListener('keydown', e => { if (e.key === 'Escape') exitDeskMode(); });
+
+function layoutDeskWidgets() {
+  const leftW = 300; // width of left panel in desk mode
+  const margin = 12, gap = 10;
+  let stickyTop = 52, otherTop = 52, otherCol = 0;
+  const sW = 210, sH = 180, wW = 240, wH = 210;
+  W.widgets.forEach(w => {
+    if (w.type === 'sticky') {
+      w.el.style.left = `${margin + otherCol * 0}px`;
+      w.el.style.top  = `${stickyTop}px`;
+      w.el.style.width = `${Math.min(sW, leftW - margin*2)}px`;
+      stickyTop += sH + gap;
+    } else {
+      const col = otherCol % 2;
+      w.el.style.left = `${leftW + margin + col * (wW + gap)}px`;
+      w.el.style.top  = `${otherTop + Math.floor(otherCol / 2) * (wH + gap)}px`;
+      otherCol++;
+    }
+  });
+}
 
 // ── BOOKMARK BAR ─────────────────────────────────────────────────────────────
 let bookmarks = JSON.parse(localStorage.getItem('hub_bookmarks')||'[]');
@@ -2251,6 +2363,33 @@ function closeWidget(id) {
   saveStickyNotes();
 }
 
+// ── PANE RESIZE ───────────────────────────────────────────────────────────────
+let _pr = null;
+function startPaneResize(e, wsId, dir) {
+  e.preventDefault();
+  const grid = document.getElementById(`grid-${wsId}`); if (!grid) return;
+  const rect = grid.getBoundingClientRect();
+  const resizer = e.currentTarget; resizer.classList.add('dragging');
+  _pr = {dir, grid, rect, resizer};
+  document.addEventListener('mousemove', doPaneResize);
+  document.addEventListener('mouseup', stopPaneResize, {once:true});
+}
+function doPaneResize(e) {
+  if (!_pr) return;
+  const {dir,grid,rect} = _pr;
+  if (dir==='col') {
+    const pct = Math.max(15,Math.min(85,(e.clientX-rect.left)/rect.width*100));
+    grid.style.gridTemplateColumns = `${pct}fr 4px ${100-pct}fr`;
+  } else {
+    const pct = Math.max(15,Math.min(85,(e.clientY-rect.top)/rect.height*100));
+    grid.style.gridTemplateRows = `${pct}fr 4px ${100-pct}fr`;
+  }
+}
+function stopPaneResize() {
+  if (_pr) { _pr.resizer.classList.remove('dragging'); _pr=null; }
+  document.removeEventListener('mousemove', doPaneResize);
+}
+
 // ── DRAG + RESIZE ─────────────────────────────────────────────────────────────
 function makeDraggable(el, handle) {
   let ox, oy;
@@ -2308,6 +2447,30 @@ async function runWTerm(id) {
     if (d.error)  out.innerHTML += `<span style="color:var(--red)">${d.error}\n</span>`;
   } catch { out.innerHTML += `<span style="color:var(--red)">Hub server not running\n</span>`; }
   out.scrollTop = out.scrollHeight;
+}
+
+// ── BROWSER PANE ─────────────────────────────────────────────────────────────
+function loadBrowser(key) {
+  let url = document.getElementById(`burl-${key}`)?.value?.trim(); if (!url) return;
+  // Short form: :3000 → route as local service
+  if (/^:\d+/.test(url)) { const port=url.slice(1).split('/')[0]; url=`http://${SRV}:${port}/${url.slice(port.length+1)}`; }
+  if (!url.startsWith('http')) url='https://'+url;
+  document.getElementById(`burl-${key}`).value = url;
+  const frame = document.getElementById(`bframe-${key}`); if (!frame) return;
+  try {
+    const u = new URL(url);
+    const isLocal = u.hostname===SRV||u.hostname==='192.168.1.229'||u.hostname==='localhost'||u.hostname==='127.0.0.1';
+    if (isLocal) {
+      const port = u.port || (u.protocol==='https:'?'443':'80');
+      frame.src = `${API}/proxy/${port}/${u.pathname.slice(1)}${u.search}`;
+    } else { frame.src = url; }
+  } catch { frame.src = url; }
+}
+function browserNav(key, dir) {
+  const f = document.getElementById(`bframe-${key}`); if (!f) return;
+  if (dir==='back')   try{f.contentWindow.history.back();}catch{}
+  if (dir==='fwd')    try{f.contentWindow.history.forward();}catch{}
+  if (dir==='reload') try{f.contentWindow.location.reload();}catch{f.src=f.src;}
 }
 
 // ── LOG TAIL WIDGET ───────────────────────────────────────────────────────────
@@ -2473,6 +2636,106 @@ function makeDraggablePlain(el) {
   document.addEventListener('mousemove', e => { if (dragging) { el.style.left=(e.clientX-ox)+'px'; el.style.top=(e.clientY-oy)+'px'; } });
   document.addEventListener('mouseup', () => { dragging = false; });
 }
+
+// ── COMMAND PALETTE ───────────────────────────────────────────────────────────
+let _cpActive = 0, _cpFiltered = [];
+
+function buildCmdIndex() {
+  const items = [];
+  // Views
+  Object.entries(VIEW_DEFS).filter(([k])=>k!=='blank'&&k!=='iframe').forEach(([k,v])=>{
+    items.push({grp:'Views', icon:v.icon, label:`Open ${v.title}`, hint:'view', action:()=>openView(k), kw:[k,v.title.toLowerCase()]});
+  });
+  // Services
+  S.services.filter(s=>s.installed&&!s.no_ui).forEach(s=>{
+    const url = `http${s.https?'s':''}://${SRV}:${s.port}`;
+    items.push({grp:'Services', icon:'🔗', label:`Open ${s.name}`, hint:`:${s.port}`, action:()=>openIframeWs(s.name,s.port,url), kw:[s.name.toLowerCase(),s.group?.toLowerCase()||'']});
+  });
+  // Runbooks
+  RUNBOOKS.forEach(rb=>{
+    items.push({grp:'Runbooks', icon:rb.icon, label:`Run: ${rb.name}`, hint:'runbook', action:()=>{ openView('runbooks'); setTimeout(()=>openRunbook(rb.id),300); }, kw:[rb.name.toLowerCase(),'runbook']});
+  });
+  // Quick shell commands
+  [{icon:'🐳',label:'docker ps',cmd:'docker ps --format "table {{.Names}}\\t{{.Status}}"'},
+   {icon:'🏥',label:'health-check',cmd:'health-check'},
+   {icon:'💾',label:'df -h',cmd:'df -h /'},
+   {icon:'📊',label:'free -h',cmd:'free -h'},
+   {icon:'⏱',label:'uptime',cmd:'uptime'},
+   {icon:'🔓',label:'unban my IP',cmd:'sudo fail2ban-client set sshd unbanip 192.168.1.192'},
+   {icon:'🧹',label:'docker prune',cmd:'docker system prune -f'},
+  ].forEach(c=>items.push({grp:'Shell', icon:c.icon, label:`$ ${c.label}`, hint:'ssh run', action:()=>runFromPalette(c.cmd), kw:[c.label,'shell','cmd']}));
+  // Docs
+  S.docs.forEach(d=>items.push({grp:'Docs', icon:'📄', label:`Docs: ${d.title}`, hint:'guide', action:()=>openDocWs(d.file,d.title), kw:[d.title.toLowerCase(),'doc','guide']}));
+  // Bookmarks
+  bookmarks.forEach(b=>items.push({grp:'Bookmarks', icon:b.icon||'⭐', label:b.label, hint:'fav', action:()=>runBookmark(b), kw:[b.label.toLowerCase(),'fav','bookmark']}));
+  return items;
+}
+
+function openCmdPal() {
+  const pal = document.getElementById('cmdpal'); if (!pal) return;
+  pal.classList.add('open');
+  const inp = document.getElementById('cmdpal-input');
+  inp.value = ''; inp.focus();
+  _cpActive = 0;
+  renderCmdPalResults('');
+}
+
+function closeCmdPal() {
+  document.getElementById('cmdpal')?.classList.remove('open');
+}
+
+function renderCmdPalResults(q) {
+  const res = document.getElementById('cmdpal-results'); if (!res) return;
+  const idx = buildCmdIndex();
+  const query = q.toLowerCase().trim();
+  _cpFiltered = !query ? idx.slice(0,14) : idx.filter(i=>i.label.toLowerCase().includes(query)||i.kw?.some(k=>k.includes(query))).slice(0,18);
+  if (!_cpFiltered.length) {
+    res.innerHTML = query.length > 1
+      ? `<div class="cp-item" data-cpi="0" onclick="runFromPalette(document.getElementById('cmdpal-input').value)"><span class="cp-item-icon">⌨</span><span class="cp-item-label">Run: <code style="font-family:var(--mono)">${q}</code></span><span class="cp-item-hint">SSH</span></div>`
+      : `<div style="padding:16px;text-align:center;color:var(--muted);font-size:11px">No results</div>`;
+    _cpFiltered = [{icon:'⌨',label:'Run: '+q,hint:'SSH',action:()=>runFromPalette(q)}];
+    return;
+  }
+  let html = '', lastGrp = '';
+  _cpFiltered.forEach((item,i)=>{
+    if (item.grp !== lastGrp) { html += `<div class="cp-group">${item.grp}</div>`; lastGrp = item.grp; }
+    html += `<div class="cp-item${i===_cpActive?' cp-active':''}" data-cpi="${i}" onclick="execCpItem(${i})">`+
+      `<span class="cp-item-icon">${item.icon}</span>`+
+      `<span class="cp-item-label">${item.label}</span>`+
+      `<span class="cp-item-hint">${item.hint||''}</span></div>`;
+  });
+  res.innerHTML = html;
+}
+
+function execCpItem(i) {
+  const item = _cpFiltered[i]; if (!item) return;
+  closeCmdPal(); item.action();
+}
+
+function runFromPalette(cmd) {
+  closeCmdPal(); openView('terminal');
+  setTimeout(()=>{
+    const ws = S.workspaces.find(w=>w.id===S.activeWs);
+    const pane = ws?.panes.find(p=>p.viewType==='terminal');
+    if (pane) { const key=ws.id+'-'+pane.id; const inp=document.getElementById(`tinp-${key}`); if(inp){inp.value=cmd;runTerm(key);} }
+  }, 400);
+}
+
+document.addEventListener('input', e=>{
+  if (e.target.id==='cmdpal-input') { _cpActive=0; renderCmdPalResults(e.target.value); }
+});
+
+document.addEventListener('keydown', e => {
+  const palOpen = document.getElementById('cmdpal')?.classList.contains('open');
+  if ((e.ctrlKey||e.metaKey) && e.key==='k') { e.preventDefault(); palOpen ? closeCmdPal() : openCmdPal(); return; }
+  if (e.key==='Escape') { if (palOpen) { closeCmdPal(); return; } exitDeskMode(); return; }
+  if (palOpen) {
+    const items = document.querySelectorAll('.cp-item[data-cpi]');
+    if (e.key==='ArrowDown') { e.preventDefault(); _cpActive=Math.min(_cpActive+1,items.length-1); items.forEach((r,i)=>r.classList.toggle('cp-active',i===_cpActive)); items[_cpActive]?.scrollIntoView({block:'nearest'}); }
+    if (e.key==='ArrowUp')   { e.preventDefault(); _cpActive=Math.max(_cpActive-1,0); items.forEach((r,i)=>r.classList.toggle('cp-active',i===_cpActive)); items[_cpActive]?.scrollIntoView({block:'nearest'}); }
+    if (e.key==='Enter')     { e.preventDefault(); execCpItem(_cpActive); }
+  }
+});
 
 // ── INIT ──────────────────────────────────────────────────────────────────────
 setCategory('server');
