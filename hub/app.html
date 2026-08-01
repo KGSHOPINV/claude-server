@@ -773,6 +773,23 @@ body.desk-mode #desk-exit { display:flex; align-items:center; gap:6px; }
 const API = window.location.origin;  // works from any host — localhost, Tailscale IP, LAN IP
 const SRV = window.location.hostname === 'localhost' ? '192.168.1.229' : window.location.hostname;
 
+// ── Client-side API cache ──────────────────────────────────────────────────────
+// Avoids re-fetching on every view switch. TTLs in ms.
+const _CACHE_TTL = { status: 30000, containers: 20000, services: 20000 };
+const _cache = {};
+async function apiFetch(endpoint, opts) {
+  const ttl = !opts && _CACHE_TTL[endpoint.split('/').pop()];
+  if (ttl) {
+    const hit = _cache[endpoint];
+    if (hit && Date.now() - hit.ts < ttl) return hit.data;
+  }
+  const r = await fetch(API + endpoint, opts);
+  const data = await r.json();
+  if (ttl) _cache[endpoint] = { data, ts: Date.now() };
+  return data;
+}
+function invalidateCache() { Object.keys(_cache).forEach(k => delete _cache[k]); }
+
 // ── GLOBAL STATE ────────────────────────────────────────────────────────────
 const S = {
   status: null,
@@ -805,8 +822,8 @@ setInterval(() => {
 // ── STATUS ───────────────────────────────────────────────────────────────────
 async function fetchStatus(force=false) {
   try {
-    const r = await fetch(API + '/api/status' + (force?'?force=1':''));
-    S.status = await r.json();
+    if (force) delete _cache['/api/status'];
+    S.status = await apiFetch('/api/status' + (force?'?force=1':''));
     applyStatus();
   } catch { applyStatus(false); }
 }
@@ -854,8 +871,7 @@ let customSvcs = JSON.parse(localStorage.getItem('hub_custom')||'[]');
 async function fetchServices() {
   let svcs = [...KNOWN_SVCS, ...customSvcs];
   try {
-    const r = await fetch(API+'/api/services');
-    const live = await r.json();
+    const live = await apiFetch('/api/services');
     svcs = [...live, ...customSvcs.filter(c=>!live.find(l=>l.name===c.name))];
   } catch {}
   S.services = svcs;
@@ -864,8 +880,7 @@ async function fetchServices() {
 
 async function fetchContainers() {
   try {
-    const r = await fetch(API+'/api/containers');
-    S.containers = await r.json();
+    S.containers = await apiFetch('/api/containers');
   } catch { S.containers = []; }
 }
 
@@ -2079,7 +2094,7 @@ async function refresh(force=false) {
   await fetchServices();
   await fetchContainers();
 }
-function hardRefresh() { refresh(true); fetchIssues(); }
+function hardRefresh() { invalidateCache(); refresh(true); fetchIssues(); }
 
 // ── DESK MODE ─────────────────────────────────────────────────────────────────
 function enterDeskMode() {

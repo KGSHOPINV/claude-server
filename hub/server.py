@@ -7,6 +7,7 @@ Then open: http://localhost:8765
 
 import hashlib
 import http.server
+import re
 import socketserver
 import json
 import os
@@ -38,10 +39,64 @@ _ssl_ctx.verify_mode = ssl.CERT_NONE
 SSH_HOST   = os.environ.get('HUB_SSH_HOST', 'homeserver')
 SERVER_IP  = os.environ.get('HUB_SERVER_IP', '192.168.1.229')
 
+# ── Proxy cache ───────────────────────────────────────────────────────────────
+# HTML pages: 5s TTL (they change). JS/CSS/images: 60s TTL (static assets).
+
+_proxy_cache = {}
+_pcache_lock = threading.Lock()
+
+def _pcache_get(key):
+    with _pcache_lock:
+        hit = _proxy_cache.get(key)
+    if not hit:
+        return None
+    content, ct, status, ts = hit
+    ttl = 5 if 'text/html' in ct else 60
+    return (content, ct, status) if time.time() - ts < ttl else None
+
+def _pcache_put(key, content, ct, status):
+    with _pcache_lock:
+        if len(_proxy_cache) > 400:
+            oldest = min(_proxy_cache, key=lambda k: _proxy_cache[k][3])
+            del _proxy_cache[oldest]
+        _proxy_cache[key] = (content, ct, status, time.time())
+
+def _rewrite_proxy_html(html, port):
+    """Inject <base> and rewrite absolute src/href/action attrs through proxy."""
+    base_tag = f'<base href="/proxy/{port}/">'
+    if '<head>' in html:
+        html = html.replace('<head>', f'<head>\n  {base_tag}', 1)
+    elif '<head ' in html.lower():
+        idx = html.lower().index('<head')
+        end = html.index('>', idx)
+        html = html[:end+1] + f'\n  {base_tag}' + html[end+1:]
+    else:
+        html = f'<head>{base_tag}</head>' + html
+    # Rewrite remaining absolute-path attrs that <base> won't catch (e.g. in JS templates)
+    def _sub(m):
+        attr, q, path = m.group(1), m.group(2), m.group(3)
+        skip = ('http://', 'https://', '//', '#', 'data:', 'javascript:', 'mailto:')
+        return m.group(0) if any(path.startswith(s) for s in skip) else f'{attr}={q}/proxy/{port}{path}'
+    html = re.sub(r'((?:src|href|action|data-src))=(["\'])(/[^"\']*)', _sub, html)
+    return html
+
+def _rewrite_proxy_css(css, port):
+    """Rewrite url(/path) references in CSS through proxy."""
+    def _sub(m):
+        path = m.group(1)
+        skip = ('http://', 'https://', '//', 'data:', '#')
+        return m.group(0) if any(path.startswith(s) for s in skip) else f'url("/proxy/{port}{path}")'
+    return re.sub(r'url\(["\']?(/[^"\')\s]+)["\']?\)', _sub, css)
+
 # ── Proxy ─────────────────────────────────────────────────────────────────────
 
 def proxy_fetch(port, subpath, query=''):
     """Proxy a request to a local service, stripping X-Frame-Options."""
+    cache_key = (port, subpath, query)
+    cached = _pcache_get(cache_key)
+    if cached:
+        return cached
+
     scheme = 'https' if port in HTTPS_PORTS else 'http'
     target = 'localhost' if LOCAL_MODE else SERVER_IP
     url = f'{scheme}://{target}:{port}/{subpath}'
@@ -63,25 +118,21 @@ def proxy_fetch(port, subpath, query=''):
         ct = 'text/html; charset=utf-8'
         status = 502
 
-    # Inject <base> tag so relative URLs resolve back through the proxy (not directly
-    # to the service IP, which breaks remote/Tailscale access)
-    if status < 400 and 'text/html' in ct:
-        base_url = f'/proxy/{port}/'
-        try:
-            html = content.decode('utf-8', errors='replace')
-            base_tag = f'<base href="{base_url}">'
-            if '<head>' in html:
-                html = html.replace('<head>', f'<head>\n  {base_tag}', 1)
-            elif '<head ' in html.lower():
-                idx = html.lower().index('<head')
-                end = html.index('>', idx)
-                html = html[:end+1] + f'\n  {base_tag}' + html[end+1:]
-            else:
-                html = f'<head>{base_tag}</head>' + html
-            content = html.encode('utf-8')
-        except Exception:
-            pass
+    if status < 400:
+        if 'text/html' in ct:
+            try:
+                html = _rewrite_proxy_html(content.decode('utf-8', errors='replace'), port)
+                content = html.encode('utf-8')
+            except Exception:
+                pass
+        elif 'text/css' in ct:
+            try:
+                css = _rewrite_proxy_css(content.decode('utf-8', errors='replace'), port)
+                content = css.encode('utf-8')
+            except Exception:
+                pass
 
+    _pcache_put(cache_key, content, ct, status)
     return content, ct, status
 
 
