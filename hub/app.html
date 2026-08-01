@@ -978,27 +978,35 @@ function setCategory(cat) {
   refreshCategoryNav();
 }
 
+// Action registry — rebuilt each render. Onclick just passes a number, no quoting issues.
+const _navAct = [];
+
 function refreshCategoryNav() {
+  _navAct.length = 0;
   const cat = S.activeCategory;
   const body = document.getElementById('secnav-body');
   let html = '';
 
-  const starBtn = (icon, label, type, extra={}) => {
-    const fav = isFav(label);
-    const extraStr = JSON.stringify(extra).replace(/"/g,'&quot;');
-    return `<button class="sec-star${fav?' fav':''}" title="${fav?'Remove favorite':'Add to favorites'}"
-      onclick="event.stopPropagation();toggleFav('${icon}','${label.replace(/'/g,'\\\'').replace(/"/g,'&quot;')}','${type}','${extraStr}')">${fav?'★':'☆'}</button>`;
+  // Register an action and return its onclick string
+  const reg = (fn) => { const i = _navAct.push(fn) - 1; return `_navAct[${i}]()`; };
+
+  const starBtn = (bk) => {
+    const fav = isFav(bk.label);
+    const si = reg(() => { event.stopPropagation(); toggleFav(bk.icon, bk.label, bk.type, JSON.stringify(bk.extra||{})); });
+    return `<button class="sec-star${fav?' fav':''}" title="${fav?'Remove':'Star'}" onclick="${si}">${fav?'★':'☆'}</button>`;
   };
 
   if (cat === 'favorites') {
     if (!bookmarks.length) {
-      html = '<div style="padding:16px 10px;color:var(--muted);font-size:11px;line-height:1.7">No favorites yet.<br>Hover any item in the nav and click ☆ to star it.</div>';
+      html = '<div style="padding:16px 10px;color:var(--muted);font-size:11px;line-height:1.7">No favorites yet.<br>Hover any item and click ☆ to star it.</div>';
     } else {
       html = '<div class="sec-group"><div class="sec-group-label">Starred</div>';
       bookmarks.forEach((bk, i) => {
-        html += `<div class="sec-item" onclick="runBookmark(${JSON.stringify(bk).replace(/"/g,'&quot;')})">
+        const ci = reg(() => runBookmark(bk));
+        const ri = reg(() => { event.stopPropagation(); removeBookmark(i); });
+        html += `<div class="sec-item" onclick="${ci}">
           <span class="sec-item-icon">${bk.icon}</span>${bk.label}
-          <button class="sec-star fav" onclick="event.stopPropagation();removeBookmark(${i})">★</button>
+          <button class="sec-star fav" onclick="${ri}">★</button>
         </div>`;
       });
       html += '</div>';
@@ -1014,14 +1022,15 @@ function refreshCategoryNav() {
       groups[g].forEach(s => {
         const inst = s.installed!==false;
         const url = `${s.https?'https':'http'}://${SRV}:${s.port}`;
-        const badge = !inst ? 'off' : s.running ? 'up' : s.noui ? 'na' : '';
-        const badgeText = !inst ? 'N/A' : s.running ? 'up' : s.noui ? 'no UI' : '?';
-        const extra = {port:s.port, url, viewType:'iframe'};
-        html += `<div class="sec-item" onclick="${inst&&!s.noui?`openIframeWs('${s.name}',${s.port},'${url}')`:''}" title="${s.desc||''}">
+        const badge = !inst ? 'off' : s.running ? 'up' : s.no_ui ? 'na' : '';
+        const badgeText = !inst ? 'N/A' : s.running ? 'up' : s.no_ui ? 'no UI' : '?';
+        const ci = inst && !s.no_ui ? reg(() => openIframeWs(s.name, s.port, url)) : reg(()=>{});
+        const sb = inst && !s.no_ui ? starBtn({icon:'🌐', label:s.name, type:'iframe', extra:{port:s.port, url, viewType:'iframe'}}) : '';
+        html += `<div class="sec-item" onclick="${ci}">
           <span class="sec-item-icon">${s.https?'🔒':'🌐'}</span>
           ${s.name}
           ${badge?`<span class="sec-item-badge badge-${badge}">${badgeText}</span>`:''}
-          ${inst&&!s.noui ? starBtn('🌐', s.name, 'iframe', extra) : ''}
+          ${sb}
         </div>`;
       });
       html += '</div>';
@@ -1036,22 +1045,24 @@ function refreshCategoryNav() {
     } else {
       html = '<div class="sec-group"><div class="sec-group-label">Guides</div>';
       S.docs.forEach(d => {
-        html += `<div class="sec-item" onclick="openDocWs('${d.file}','${d.title}')">
+        const ci = reg(() => openDocWs(d.file, d.title));
+        html += `<div class="sec-item" onclick="${ci}">
           <span class="sec-item-icon">📄</span>${d.title}
-          ${starBtn('📄', d.title, 'doc', {file:d.file})}
+          ${starBtn({icon:'📄', label:d.title, type:'doc', extra:{file:d.file}})}
         </div>`;
       });
       html += '</div>';
     }
+
   } else {
     const sections = CATEGORIES[cat]?.sections || [];
     sections.forEach(sec => {
-      if (sec.label) html += `<div class="sec-group"><div class="sec-group-label">${sec.label}</div>`;
-      else html += '<div class="sec-group">';
-      sec.items.forEach((item, idx) => {
-        html += `<div class="sec-item" onclick="catAction(${JSON.stringify(cat)},${JSON.stringify(sec.label)},${idx})">
+      html += `<div class="sec-group">${sec.label?`<div class="sec-group-label">${sec.label}</div>`:''}`
+      sec.items.forEach(item => {
+        const ci = reg(item.action);
+        html += `<div class="sec-item" onclick="${ci}">
           <span class="sec-item-icon">${item.icon}</span>${item.label}
-          ${starBtn(item.icon, item.label, 'view', {viewType: item.label.toLowerCase().replace(/\s+/g,'')==='artificialchat'?'chat':item.label.toLowerCase().replace(/\s+/g,'').replace('inframap','map').replace('dashboard','dashboard')})}
+          ${starBtn({icon:item.icon, label:item.label, type:'view', extra:{}})}
         </div>`;
       });
       html += '</div>';
@@ -1059,14 +1070,6 @@ function refreshCategoryNav() {
   }
 
   body.innerHTML = html;
-}
-
-// Because inline onclick can't call closures, map category actions by index
-function catAction(cat, sectionLabel, idx) {
-  const cat_def = CATEGORIES[cat];
-  if (!cat_def) return;
-  const sec = cat_def.sections.find(s=>s.label===sectionLabel);
-  if (sec && sec.items[idx]) sec.items[idx].action();
 }
 
 function toggleSecNav() {
