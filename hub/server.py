@@ -62,7 +62,14 @@ def _pcache_put(key, content, ct, status):
         _proxy_cache[key] = (content, ct, status, time.time())
 
 def _rewrite_proxy_html(html, port):
-    """Inject <base> and rewrite absolute src/href/action attrs through proxy."""
+    """Rewrite absolute src/href/action attrs through proxy, then inject <base>."""
+    # Rewrite first so the injected <base> tag itself doesn't get double-processed
+    def _sub(m):
+        attr, q, path = m.group(1), m.group(2), m.group(3)
+        skip = ('http://', 'https://', '//', '#', 'data:', 'javascript:', 'mailto:')
+        return m.group(0) if any(path.startswith(s) for s in skip) else f'{attr}={q}/proxy/{port}{path}'
+    html = re.sub(r'((?:src|href|action|data-src))=(["\'])(/[^"\']*)', _sub, html)
+    # Now inject <base> so any remaining relative URLs (in JS etc.) also resolve through proxy
     base_tag = f'<base href="/proxy/{port}/">'
     if '<head>' in html:
         html = html.replace('<head>', f'<head>\n  {base_tag}', 1)
@@ -72,12 +79,6 @@ def _rewrite_proxy_html(html, port):
         html = html[:end+1] + f'\n  {base_tag}' + html[end+1:]
     else:
         html = f'<head>{base_tag}</head>' + html
-    # Rewrite remaining absolute-path attrs that <base> won't catch (e.g. in JS templates)
-    def _sub(m):
-        attr, q, path = m.group(1), m.group(2), m.group(3)
-        skip = ('http://', 'https://', '//', '#', 'data:', 'javascript:', 'mailto:')
-        return m.group(0) if any(path.startswith(s) for s in skip) else f'{attr}={q}/proxy/{port}{path}'
-    html = re.sub(r'((?:src|href|action|data-src))=(["\'])(/[^"\']*)', _sub, html)
     return html
 
 def _rewrite_proxy_css(css, port):
