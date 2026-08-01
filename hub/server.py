@@ -63,9 +63,10 @@ def proxy_fetch(port, subpath, query=''):
         ct = 'text/html; charset=utf-8'
         status = 502
 
-    # Inject <base> tag so relative URLs in the proxied page resolve correctly
+    # Inject <base> tag so relative URLs resolve back through the proxy (not directly
+    # to the service IP, which breaks remote/Tailscale access)
     if status < 400 and 'text/html' in ct:
-        base_url = f'{scheme}://{SERVER_IP}:{port}/'
+        base_url = f'/proxy/{port}/'
         try:
             html = content.decode('utf-8', errors='replace')
             base_tag = f'<base href="{base_url}">'

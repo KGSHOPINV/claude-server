@@ -2672,7 +2672,10 @@ function loadBrowser(key) {
     if (isLocal) {
       const port = u.port || (u.protocol==='https:'?'443':'80');
       frame.src = `${API}/proxy/${port}/${u.pathname.slice(1)}${u.search}`;
-    } else { frame.src = url; }
+    } else {
+      frame.src = '';
+      frame.srcdoc = `<html><body style="background:#0d1117;color:#cdd9e5;font-family:system-ui;display:flex;height:100%;align-items:center;justify-content:center;flex-direction:column;gap:12px;margin:0;padding:20px;text-align:center"><p style="opacity:.6;font-size:13px;max-width:320px">External sites block embedding (X-Frame-Options). Use the link below to open it.</p><a href="${url}" target="_blank" style="background:#238636;color:#fff;padding:8px 18px;border-radius:6px;text-decoration:none;font-size:13px">Open ${u.hostname} in new tab ↗</a></body></html>`;
+    }
   } catch { frame.src = url; }
 }
 function browserNav(key, dir) {
