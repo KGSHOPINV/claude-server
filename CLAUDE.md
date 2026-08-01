@@ -8,9 +8,12 @@
 
 | Key | Value |
 |-----|-------|
-| Server IP | 192.168.1.229 |
+| Server IP (local) | 192.168.1.229 |
+| Server IP (Tailscale) | 100.75.1.105 |
 | SSH User | admin1 |
-| SSH Command | `ssh admin1@192.168.1.229` |
+| SSH Command (local) | `ssh admin1@192.168.1.229` |
+| SSH Command (remote) | `ssh admin1@100.75.1.105` |
+| Tailscale name | fks-services |
 | OS | Ubuntu 24.04 LTS |
 | RAM | 216 GB |
 | GPU | None (CPU only) |
