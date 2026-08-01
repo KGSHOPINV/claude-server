@@ -676,7 +676,7 @@ if __name__ == '__main__':
     print(f'  SSH: {SSH_HOST}  |  DB: {DB_PATH}\n')
     class ThreadedServer(socketserver.ThreadingMixIn, http.server.HTTPServer):
         daemon_threads = True
-    server = ThreadedServer(('localhost', PORT), Handler)
+    server = ThreadedServer(('0.0.0.0', PORT), Handler)
     try:
         server.serve_forever()
     except KeyboardInterrupt:
