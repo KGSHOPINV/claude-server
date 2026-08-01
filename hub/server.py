@@ -7,6 +7,7 @@ Then open: http://localhost:8765
 
 import hashlib
 import http.server
+import socketserver
 import json
 import os
 import secrets
@@ -669,7 +670,9 @@ if __name__ == '__main__':
     db_ensure_tables()
     print(f'\n  Server Hub API  —  http://localhost:{PORT}')
     print(f'  SSH: {SSH_HOST}  |  DB: {DB_PATH}\n')
-    server = http.server.HTTPServer(('localhost', PORT), Handler)
+    class ThreadedServer(socketserver.ThreadingMixIn, http.server.HTTPServer):
+        daemon_threads = True
+    server = ThreadedServer(('localhost', PORT), Handler)
     try:
         server.serve_forever()
     except KeyboardInterrupt:
