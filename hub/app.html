@@ -497,6 +497,64 @@ body.desk-mode #desk-exit { display:flex; align-items:center; gap:6px; }
 ::-webkit-scrollbar { width:5px; height:5px; }
 ::-webkit-scrollbar-track { background:transparent; }
 ::-webkit-scrollbar-thumb { background:var(--border2); border-radius:3px; }
+
+/* ── MOBILE ──────────────────────────────────────────────────────────────── */
+@media (max-width: 768px) {
+  :root { --cat-w:0px; --sec-w:0px; --wpanel-w:0px; --wdock-w:0px; --top-h:32px; }
+
+  /* Hide desktop chrome */
+  #catnav, #secnav, #wpanel, #wdock { display:none !important; }
+  #wsbar { padding-left:6px; padding-right:6px; }
+  #bkbar { display:none; }
+
+  /* Top bar — compact */
+  #top { font-size:10px; gap:6px; padding:0 8px; flex-wrap:nowrap; overflow:hidden; }
+  #top .tbtn { display:none; }
+  #top .tbtn:last-child { display:flex; } /* keep Refresh */
+
+  /* Workspace fills full width */
+  #wsarea { width:100%; }
+  #main { overflow:hidden; }
+
+  /* Mobile nav bar fixed at bottom */
+  #mob-nav { display:flex; }
+
+  /* Pane header compact */
+  .pane-hdr { font-size:10px; padding:0 6px; }
+  .pane-hdr-btn { font-size:10px; padding:0 4px; }
+
+  /* Terminal — constrain height */
+  .view-term { height:100%; max-height:100%; overflow:hidden; }
+  .term-output { flex:1; overflow-y:auto; min-height:0; max-height:calc(100vh - 180px); }
+  .term-inp-row { flex-shrink:0; }
+
+  /* Dashboard tiles stack */
+  .dash-group-grid { grid-template-columns:1fr 1fr !important; }
+
+  /* Settings/storage/files — full scroll */
+  .view-settings, .view-storage { padding:8px; }
+  .vs-row { flex-direction:column; align-items:flex-start; gap:4px; }
+  .vs-row label { width:auto; }
+
+  /* Command palette full width */
+  .cmdpal-inner { width:calc(100vw - 16px); }
+}
+
+/* Mobile bottom nav */
+#mob-nav { display:none; position:fixed; bottom:0; left:0; right:0; height:52px;
+  background:var(--panel); border-top:1px solid var(--border); z-index:90;
+  align-items:stretch; justify-content:space-around; }
+.mob-nav-btn { display:flex; flex-direction:column; align-items:center; justify-content:center;
+  gap:2px; font-size:8px; color:var(--muted); cursor:pointer; flex:1;
+  transition:color var(--t); padding:0 4px; border:none; background:none; font-family:var(--ui); }
+.mob-nav-btn .mni { font-size:18px; line-height:1; }
+.mob-nav-btn.active, .mob-nav-btn:hover { color:var(--accent); }
+
+@media (max-width: 768px) {
+  /* Make room for mobile nav bar */
+  #foot { display:none; }
+  #wsarea { padding-bottom:52px; }
+}
 </style>
 </head>
 <body>
@@ -566,6 +624,16 @@ body.desk-mode #desk-exit { display:flex; align-items:center; gap:6px; }
   </div>
 </div>
 <button id="desk-exit" onclick="exitDeskMode()">✕ Exit Desk</button>
+
+<!-- MOBILE NAV BAR -->
+<div id="mob-nav">
+  <button class="mob-nav-btn" onclick="mobNav('dashboard')" data-mob="dashboard"><span class="mni">⊞</span>Dash</button>
+  <button class="mob-nav-btn" onclick="mobNav('terminal')"  data-mob="terminal" ><span class="mni">⌨</span>Shell</button>
+  <button class="mob-nav-btn" onclick="mobNav('storage')"   data-mob="storage"  ><span class="mni">💾</span>Storage</button>
+  <button class="mob-nav-btn" onclick="mobNav('runbooks')"  data-mob="runbooks" ><span class="mni">▶</span>Run</button>
+  <button class="mob-nav-btn" onclick="openCmdPal()"                             ><span class="mni">🔍</span>Search</button>
+  <button class="mob-nav-btn" onclick="mobNav('settings')"  data-mob="settings" ><span class="mni">⚙</span>More</button>
+</div>
 <!-- WIDGET LAYER — fixed, always on top of everything -->
 <div id="widget-layer"></div>
 
@@ -3050,6 +3118,14 @@ document.addEventListener('keydown', e => {
     if (e.key==='Enter')     { e.preventDefault(); execCpItem(_cpActive); }
   }
 });
+
+// ── MOBILE NAV ────────────────────────────────────────────────────────────────
+function mobNav(view) {
+  openView(view);
+  document.querySelectorAll('.mob-nav-btn').forEach(b => b.classList.remove('active'));
+  const btn = document.querySelector(`.mob-nav-btn[data-mob="${view}"]`);
+  if (btn) btn.classList.add('active');
+}
 
 // ── INIT ──────────────────────────────────────────────────────────────────────
 // Restore theme/accent
