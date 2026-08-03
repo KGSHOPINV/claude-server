@@ -790,6 +790,35 @@ async function apiFetch(endpoint, opts) {
 }
 function invalidateCache() { Object.keys(_cache).forEach(k => delete _cache[k]); }
 
+async function saveAIConfig() {
+  const provider = document.getElementById('ai-provider')?.value;
+  const api_key  = document.getElementById('ai-key')?.value.trim();
+  if (!api_key) { alert('Enter an API key first.'); return; }
+  await fetch(API + 'ai/config', {method:'POST', headers:{'Content-Type':'application/json','X-Hub-Token':localStorage.getItem('hub_token')||''}, body: JSON.stringify({provider, api_key})});
+  document.getElementById('ai-test-result').textContent = 'Saved. Click Test to verify.';
+}
+
+async function testAIChat() {
+  const el = document.getElementById('ai-test-result');
+  el.textContent = 'Testing...';
+  try {
+    const r = await fetch(API + 'ai/chat', {method:'POST', headers:{'Content-Type':'application/json','X-Hub-Token':localStorage.getItem('hub_token')||''}, body: JSON.stringify({message:'Reply with just: OK'})});
+    const d = await r.json();
+    el.textContent = d.error ? 'Error: ' + d.error : 'Works! Provider: ' + d.provider;
+  } catch(e) { el.textContent = 'Network error: ' + e.message; }
+}
+
+async function loadAISettings() {
+  try {
+    const r = await fetch(API + 'ai/config');
+    const d = await r.json();
+    const sel = document.getElementById('ai-provider');
+    if (sel && d.provider) sel.value = d.provider;
+    const keyEl = document.getElementById('ai-key');
+    if (keyEl) keyEl.placeholder = d.has_key ? '(key saved — paste to replace)' : 'sk-ant-... / sk-... / AIza...';
+  } catch(e) {}
+}
+
 async function downloadManifest() {
   const r = await fetch(API + 'manifest');
   const data = await r.json();
@@ -1507,6 +1536,24 @@ function mountPaneContent(wsId, paneId, viewType, viewConfig, body) {
           </div>
         </div>
         <div class="vs-section">
+          <div class="vs-hdr">AI Assistant</div>
+          <div class="vs-row"><label>Provider</label>
+            <select id="ai-provider" class="vs-inp" style="width:130px">
+              <option value="claude">Claude (Anthropic)</option>
+              <option value="openai">OpenAI (GPT-4o)</option>
+              <option value="gemini">Gemini (Google)</option>
+            </select>
+          </div>
+          <div class="vs-row"><label>API Key</label>
+            <input id="ai-key" class="vs-inp" type="password" placeholder="sk-ant-... / sk-... / AIza..." style="flex:1">
+          </div>
+          <div style="display:flex;gap:6px;margin-top:4px">
+            <button class="btn p" onclick="saveAIConfig()">Save AI Key</button>
+            <button class="btn" onclick="testAIChat()">Test</button>
+          </div>
+          <div id="ai-test-result" style="font-size:11px;color:var(--muted);margin-top:6px"></div>
+        </div>
+        <div class="vs-section">
           <div class="vs-hdr">System Snapshot</div>
           <div class="vs-row" style="flex-direction:column;align-items:flex-start;gap:6px">
             <div style="font-size:11px;color:var(--muted)">Download a full JSON snapshot of all services, containers, health, and server info.</div>
@@ -1519,6 +1566,7 @@ function mountPaneContent(wsId, paneId, viewType, viewConfig, body) {
         </div>
       </div>`;
       loadUsersPanel();
+      loadAISettings();
       break;
 
     case 'storage':

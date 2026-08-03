@@ -492,6 +492,110 @@ def get_manifest():
     }
 
 
+def ai_system_prompt():
+    """Build a concise server-aware system prompt from live state."""
+    status = _cache.get('status') or {}
+    containers = _cache.get('containers') or []
+    running = [c['name'] for c in containers if c.get('running')]
+    lines = [
+        'You are an AI assistant with full context about this Linux server.',
+        f'Hostname: {SERVER_IP}  |  OS: Ubuntu  |  Mode: {"local" if LOCAL_MODE else "remote"}',
+        f'RAM: {status.get("ram_used_mb","?")}MB / {status.get("ram_total_mb","?")}MB  '
+        f'|  Disk: {status.get("disk_used","?")} / {status.get("disk_total","?")} ({status.get("disk_pct","?")})',
+        f'Load: {status.get("load","?")}  |  Uptime: {status.get("uptime","?")}',
+        f'Running containers ({len(running)}): {", ".join(running[:12]) or "none"}',
+        '',
+        'Answer concisely. For server tasks suggest shell commands. '
+        'If shown a photo, describe what you see and relate it to server/infrastructure context if relevant.',
+    ]
+    return '\n'.join(lines)
+
+def ai_chat(message, image_b64=None, image_type='image/jpeg'):
+    """Call Claude or OpenAI depending on which key is configured."""
+    provider = config_get('ai_provider', 'claude')
+    api_key  = config_get('ai_api_key', os.environ.get('HUB_AI_KEY', ''))
+    if not api_key:
+        return {'error': 'No AI API key configured. Add one in Hub Settings → AI.'}
+
+    system = ai_system_prompt()
+
+    try:
+        if provider in ('claude', 'anthropic'):
+            content = []
+            if image_b64:
+                content.append({'type': 'image', 'source': {
+                    'type': 'base64', 'media_type': image_type, 'data': image_b64}})
+            content.append({'type': 'text', 'text': message})
+            payload = json.dumps({
+                'model': 'claude-opus-5-20251101',
+                'max_tokens': 1024,
+                'system': system,
+                'messages': [{'role': 'user', 'content': content}],
+            }).encode()
+            req = urllib.request.Request(
+                'https://api.anthropic.com/v1/messages',
+                data=payload,
+                headers={
+                    'x-api-key': api_key,
+                    'anthropic-version': '2023-06-01',
+                    'content-type': 'application/json',
+                }, method='POST')
+            with urllib.request.urlopen(req, timeout=30) as r:
+                data = json.loads(r.read())
+            return {'reply': data['content'][0]['text'], 'provider': 'claude'}
+
+        elif provider in ('openai', 'gpt'):
+            content = []
+            if image_b64:
+                content.append({'type': 'image_url', 'image_url': {
+                    'url': f'data:{image_type};base64,{image_b64}'}})
+            content.append({'type': 'text', 'text': message})
+            payload = json.dumps({
+                'model': 'gpt-4o',
+                'max_tokens': 1024,
+                'messages': [
+                    {'role': 'system', 'content': system},
+                    {'role': 'user', 'content': content if image_b64 else message},
+                ],
+            }).encode()
+            req = urllib.request.Request(
+                'https://api.openai.com/v1/chat/completions',
+                data=payload,
+                headers={
+                    'Authorization': f'Bearer {api_key}',
+                    'content-type': 'application/json',
+                }, method='POST')
+            with urllib.request.urlopen(req, timeout=30) as r:
+                data = json.loads(r.read())
+            return {'reply': data['choices'][0]['message']['content'], 'provider': 'openai'}
+
+        elif provider == 'gemini':
+            parts = []
+            if image_b64:
+                parts.append({'inline_data': {'mime_type': image_type, 'data': image_b64}})
+            parts.append({'text': message})
+            payload = json.dumps({
+                'system_instruction': {'parts': [{'text': system}]},
+                'contents': [{'parts': parts}],
+                'generationConfig': {'maxOutputTokens': 1024},
+            }).encode()
+            url = f'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key={api_key}'
+            req = urllib.request.Request(url, data=payload,
+                headers={'content-type': 'application/json'}, method='POST')
+            with urllib.request.urlopen(req, timeout=30) as r:
+                data = json.loads(r.read())
+            return {'reply': data['candidates'][0]['content']['parts'][0]['text'], 'provider': 'gemini'}
+
+        else:
+            return {'error': f'Unknown provider: {provider}'}
+
+    except urllib.error.HTTPError as e:
+        body = e.read().decode('utf-8', errors='replace')[:300]
+        return {'error': f'API error {e.code}: {body}'}
+    except Exception as e:
+        return {'error': str(e)}
+
+
 def get_integrations():
     """Live health check for Redis, SurrealDB, n8n."""
     results = {}
@@ -680,6 +784,12 @@ class Handler(http.server.BaseHTTPRequestHandler):
         elif p == '/api/integrations':
             self.send_json(get_integrations())
 
+        elif p == '/api/ai/config':
+            self.send_json({
+                'provider': config_get('ai_provider', 'claude'),
+                'has_key': bool(config_get('ai_api_key', os.environ.get('HUB_AI_KEY', ''))),
+            })
+
         elif p == '/api/manifest':
             data = get_manifest()
             body = json.dumps(data, default=str, indent=2).encode()
@@ -779,6 +889,23 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 self.send_json({'ok': True})
             else:
                 self.send_json({'ok': False, 'error': 'No body'}, 400)
+
+        elif p == '/api/ai/chat':
+            message    = body.get('message', '').strip()
+            image_b64  = body.get('image')       # base64 string, no data-URI prefix
+            image_type = body.get('image_type', 'image/jpeg')
+            if not message and not image_b64:
+                self.send_json({'error': 'No message or image'}, 400)
+                return
+            result = ai_chat(message or 'Describe this image in the context of my server.', image_b64, image_type)
+            self.send_json(result)
+
+        elif p == '/api/ai/config':
+            provider = body.get('provider', '').strip()
+            api_key  = body.get('api_key', '').strip()
+            if provider: config_set('ai_provider', provider)
+            if api_key:  config_set('ai_api_key', api_key)
+            self.send_json({'ok': True})
 
         elif p == '/api/service/install':
             name = body.get('name','').strip().lower()

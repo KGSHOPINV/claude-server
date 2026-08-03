@@ -116,6 +116,34 @@
     #sheet-body{overflow-y:auto;padding:14px 16px;font-family:var(--mono);font-size:12px;white-space:pre-wrap;word-break:break-all;color:#a5d6ff;flex:1}
     #sheet-spin{padding:20px;color:var(--muted);font-family:var(--mono);font-size:13px}
 
+    /* AI chat page */
+    #pg-ai{display:none;flex-direction:column;height:calc(100dvh - 52px - 56px)}
+    #pg-ai.on{display:flex}
+    #ai-msgs{flex:1;overflow-y:auto;padding:12px 16px;display:flex;flex-direction:column;gap:10px}
+    .ai-msg{max-width:88%;padding:10px 13px;border-radius:14px;font-size:13px;line-height:1.5;word-break:break-word;white-space:pre-wrap}
+    .ai-msg.user{align-self:flex-end;background:var(--blue);color:#000;border-radius:14px 14px 3px 14px}
+    .ai-msg.ai{align-self:flex-start;background:var(--panel);border:1px solid var(--border);border-radius:14px 14px 14px 3px}
+    .ai-msg.err{background:#1c0f0f;border-color:var(--red);color:var(--red)}
+    .ai-img-preview{max-width:160px;max-height:120px;border-radius:8px;object-fit:cover;margin-bottom:6px;display:block}
+    #ai-bar{display:flex;flex-direction:column;gap:0;background:var(--panel);border-top:1px solid var(--border);padding:10px 12px;padding-bottom:calc(10px + env(safe-area-inset-bottom));flex-shrink:0}
+    #ai-preview-row{display:none;align-items:center;gap:8px;margin-bottom:8px;padding:6px 8px;background:var(--panel2);border-radius:8px}
+    #ai-preview-row img{height:48px;width:48px;object-fit:cover;border-radius:6px}
+    #ai-preview-row button{background:none;border:none;color:var(--muted);font-size:16px;cursor:pointer;padding:2px}
+    #ai-input-row{display:flex;gap:8px;align-items:flex-end}
+    #ai-inp{flex:1;background:var(--panel2);border:1px solid var(--border);border-radius:22px;color:var(--text);padding:10px 16px;font-size:14px;resize:none;max-height:100px;outline:none;font-family:inherit;line-height:1.4}
+    #ai-inp:focus{border-color:var(--blue)}
+    #ai-cam{background:none;border:1px solid var(--border);border-radius:50%;color:var(--muted);width:40px;height:40px;font-size:18px;cursor:pointer;flex-shrink:0;display:flex;align-items:center;justify-content:center}
+    #ai-cam.active{border-color:var(--blue);color:var(--blue)}
+    #ai-send{background:var(--blue);border:none;border-radius:50%;color:#000;width:40px;height:40px;font-size:18px;cursor:pointer;flex-shrink:0;display:flex;align-items:center;justify-content:center;font-weight:700}
+    #ai-send:disabled{opacity:.35;cursor:default}
+    .ai-thinking{display:flex;gap:4px;align-items:center;padding:10px 13px;background:var(--panel);border:1px solid var(--border);border-radius:14px;align-self:flex-start}
+    .ai-thinking span{width:6px;height:6px;border-radius:50%;background:var(--muted);animation:blink 1.2s infinite}
+    .ai-thinking span:nth-child(2){animation-delay:.2s}
+    .ai-thinking span:nth-child(3){animation-delay:.4s}
+    @keyframes blink{0%,80%,100%{opacity:.2}40%{opacity:1}}
+    #ai-no-key{text-align:center;padding:32px 20px;color:var(--muted);font-size:13px}
+    #ai-no-key a{color:var(--blue);text-decoration:none}
+
     /* bottom nav */
     #bnav{position:fixed;bottom:0;left:0;right:0;background:var(--panel);border-top:1px solid var(--border);display:flex;padding-bottom:env(safe-area-inset-bottom);z-index:100}
     .bn{flex:1;background:none;border:none;color:var(--muted);padding:10px 4px 8px;display:flex;flex-direction:column;align-items:center;gap:3px;cursor:pointer;font-size:10px;font-weight:500}
@@ -238,12 +266,39 @@
     <a href="/desktop" style="color:var(--muted);text-decoration:none">Switch to desktop view →</a>
   </div>
 
+  <!-- AI CHAT PAGE -->
+  <div id="pg-ai" class="page">
+    <div id="ai-msgs">
+      <div id="ai-no-key" style="display:none">
+        No AI key configured.<br>
+        Add one in the desktop hub:<br>
+        <a href="/desktop">Settings → AI Assistant</a>
+      </div>
+    </div>
+    <div id="ai-bar">
+      <div id="ai-preview-row">
+        <img id="ai-preview-img" src="" alt="">
+        <span style="flex:1;font-size:11px;color:var(--muted)">Photo attached</span>
+        <button onclick="clearImage()">✕</button>
+      </div>
+      <div id="ai-input-row">
+        <textarea id="ai-inp" placeholder="Ask about your server…" rows="1"
+          onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();sendAI()}"
+          oninput="this.style.height='auto';this.style.height=Math.min(this.scrollHeight,100)+'px'"></textarea>
+        <button id="ai-cam" onclick="document.getElementById('ai-file').click()" title="Attach photo">📷</button>
+        <button id="ai-send" onclick="sendAI()">↑</button>
+      </div>
+      <input id="ai-file" type="file" accept="image/*" capture="environment" style="display:none" onchange="handleImagePick(this)">
+    </div>
+  </div>
+
   <!-- BOTTOM NAV -->
   <nav id="bnav">
     <button class="bn on" onclick="nav('status',this)"><span class="bn-i">⊞</span>Status</button>
     <button class="bn" onclick="nav('containers',this)"><span class="bn-i">📦</span>Servers</button>
     <button class="bn" onclick="nav('actions',this)"><span class="bn-i">⚡</span>Actions</button>
     <button class="bn" onclick="nav('terminal',this)"><span class="bn-i">⌨</span>Shell</button>
+    <button class="bn" onclick="nav('ai',this)"><span class="bn-i">✦</span>AI</button>
   </nav>
 </div>
 
@@ -294,6 +349,7 @@ function nav(page, btn) {
   btn.classList.add('on');
   if (page==='containers') loadContainers();
   if (page==='actions') loadActions();
+  if (page==='ai') initAI();
 }
 
 // ── STATUS ────────────────────────────────────────────────────────────────────
@@ -525,6 +581,114 @@ document.addEventListener('DOMContentLoaded', () => {
       .catch(()=>{ document.getElementById('gate-err').textContent='Hub server unreachable'; });
   }
 });
+
+// ── AI CHAT ───────────────────────────────────────────────────────────────────
+let _aiImage = null;
+let _aiImageType = 'image/jpeg';
+let _aiReady = false;
+
+async function initAI() {
+  if (_aiReady) return;
+  try {
+    const cfg = await GET('/api/ai/config');
+    if (!cfg.has_key) {
+      document.getElementById('ai-no-key').style.display = 'block';
+      document.getElementById('ai-send').disabled = true;
+    } else {
+      document.getElementById('ai-no-key').style.display = 'none';
+      document.getElementById('ai-send').disabled = false;
+      appendAIMsg('ai', '✦ Ready. I know your server — ask me anything, or snap a photo.');
+    }
+    _aiReady = true;
+  } catch(e) {
+    appendAIMsg('err', 'Could not reach hub: ' + e.message);
+  }
+}
+
+function appendAIMsg(role, text, imgSrc) {
+  const msgs = document.getElementById('ai-msgs');
+  const div = document.createElement('div');
+  div.className = 'ai-msg ' + role;
+  if (imgSrc) {
+    const img = document.createElement('img');
+    img.src = imgSrc; img.className = 'ai-img-preview'; div.appendChild(img);
+  }
+  div.appendChild(document.createTextNode(text));
+  msgs.appendChild(div);
+  msgs.scrollTop = msgs.scrollHeight;
+  return div;
+}
+
+function showThinking() {
+  const msgs = document.getElementById('ai-msgs');
+  const div = document.createElement('div');
+  div.className = 'ai-thinking'; div.id = 'ai-thinking';
+  div.innerHTML = '<span></span><span></span><span></span>';
+  msgs.appendChild(div);
+  msgs.scrollTop = msgs.scrollHeight;
+}
+
+function removeThinking() {
+  document.getElementById('ai-thinking')?.remove();
+}
+
+function handleImagePick(input) {
+  const file = input.files[0];
+  if (!file) return;
+  _aiImageType = file.type || 'image/jpeg';
+  const reader = new FileReader();
+  reader.onload = e => {
+    const dataUrl = e.target.result;
+    // strip the data-URI prefix, keep only base64
+    _aiImage = dataUrl.split(',')[1];
+    const preview = document.getElementById('ai-preview-img');
+    preview.src = dataUrl;
+    document.getElementById('ai-preview-row').style.display = 'flex';
+    document.getElementById('ai-cam').classList.add('active');
+  };
+  reader.readAsDataURL(file);
+  input.value = '';
+}
+
+function clearImage() {
+  _aiImage = null;
+  document.getElementById('ai-preview-row').style.display = 'none';
+  document.getElementById('ai-cam').classList.remove('active');
+}
+
+async function sendAI() {
+  const inp = document.getElementById('ai-inp');
+  const msg = inp.value.trim();
+  if (!msg && !_aiImage) return;
+
+  const imgSrc = _aiImage ? document.getElementById('ai-preview-img').src : null;
+  appendAIMsg('user', msg || '(photo)', imgSrc);
+  inp.value = ''; inp.style.height = 'auto';
+
+  const imageToSend = _aiImage;
+  const imageType   = _aiImageType;
+  clearImage();
+
+  document.getElementById('ai-send').disabled = true;
+  showThinking();
+
+  try {
+    const r = await fetch(API+'/api/ai/chat', {
+      method: 'POST',
+      headers: hdrs(),
+      body: JSON.stringify({message: msg, image: imageToSend, image_type: imageType})
+    });
+    const d = await r.json();
+    removeThinking();
+    appendAIMsg(d.error ? 'err' : 'ai', d.error || d.reply);
+  } catch(e) {
+    removeThinking();
+    appendAIMsg('err', 'Network error: ' + e.message);
+  } finally {
+    document.getElementById('ai-send').disabled = false;
+    document.getElementById('ai-inp').focus();
+  }
+}
 </script>
 </body>
 </html>
