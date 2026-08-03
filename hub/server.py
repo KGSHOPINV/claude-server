@@ -427,6 +427,71 @@ def get_files(path):
     r = ssh_run(f"ls -lah --time-style=short-iso '{safe}' 2>&1 | head -60")
     return {'path': safe, 'listing': r.get('output',''), 'error': r.get('error','') if not r.get('online') else ''}
 
+def get_manifest():
+    """Full system snapshot — server info, all services, containers, health."""
+    now = datetime.now().isoformat()
+
+    # One SSH call for server identity
+    info_r = ssh_run(
+        'printf "%s\t%s\t%s\t%s\t%s\t%s" '
+        '"$(hostname)" '
+        '"$(lsb_release -rs 2>/dev/null)" '
+        '"$(uname -r)" '
+        '"$(ip route get 1 2>/dev/null | awk \'{print $7}\' | head -1)" '
+        '"$(tailscale ip -4 2>/dev/null || echo none)" '
+        '"$(nproc)"'
+    )
+    server = {}
+    if info_r.get('online') and info_r.get('output'):
+        parts = info_r['output'].split('\t')
+        server = {
+            'hostname': parts[0] if len(parts) > 0 else '',
+            'os': f'Ubuntu {parts[1]}' if len(parts) > 1 else '',
+            'kernel': parts[2] if len(parts) > 2 else '',
+            'local_ip': parts[3] if len(parts) > 3 else '',
+            'tailscale_ip': parts[4] if len(parts) > 4 else 'none',
+            'cpu_cores': int(parts[5]) if len(parts) > 5 and parts[5].strip().isdigit() else 0,
+        }
+
+    status = get_status()
+    if status.get('ram_total_mb'):
+        server['ram_total_gb'] = round(status['ram_total_mb'] / 1024, 1)
+
+    containers = get_containers()
+    services = build_services(containers)
+
+    # Hub git ref (if running from a git checkout)
+    git_r = ssh_run('cd ~/hub && git log -1 --format="%h %s" 2>/dev/null || echo unknown')
+    hub_ref = git_r.get('output', 'unknown').strip() if git_r.get('online') else 'unknown'
+
+    # Docker disk usage
+    docker_r = ssh_run("docker system df --format '{{.Type}}\t{{.Active}}\t{{.Size}}' 2>/dev/null")
+
+    return {
+        'generated_at': now,
+        'hub_ref': hub_ref,
+        'server': server,
+        'uptime': status.get('uptime', ''),
+        'load': status.get('load', ''),
+        'disk': {'used': status.get('disk_used', ''), 'total': status.get('disk_total', ''), 'pct': status.get('disk_pct', '')},
+        'containers': {
+            'total': len(containers),
+            'running': sum(1 for c in containers if c['running']),
+            'stopped': sum(1 for c in containers if not c['running']),
+            'list': containers,
+        },
+        'services': [
+            {'name': s['name'], 'group': s['group'], 'port': s['port'],
+             'description': s['description'], 'installed': s['installed'],
+             'running': s.get('running', False), 'url': s.get('url')}
+            for s in services
+        ],
+        'docker_df': docker_r.get('output', '') if docker_r.get('online') else '',
+        'ssh_host': SSH_HOST,
+        'server_ip': SERVER_IP,
+    }
+
+
 def get_integrations():
     """Live health check for Redis, SurrealDB, n8n."""
     results = {}
@@ -614,6 +679,19 @@ class Handler(http.server.BaseHTTPRequestHandler):
 
         elif p == '/api/integrations':
             self.send_json(get_integrations())
+
+        elif p == '/api/manifest':
+            data = get_manifest()
+            body = json.dumps(data, default=str, indent=2).encode()
+            self.send_response(200)
+            self.send_header('Content-Type', 'application/json')
+            self.send_header('Content-Length', str(len(body)))
+            self.send_header('Access-Control-Allow-Origin', '*')
+            if 'download' in self.path:
+                fname = f'server-manifest-{datetime.now().strftime("%Y%m%d-%H%M")}.json'
+                self.send_header('Content-Disposition', f'attachment; filename="{fname}"')
+            self.end_headers()
+            self.wfile.write(body)
 
         elif p.startswith('/proxy/'):
             # /proxy/3000/some/path?query=string

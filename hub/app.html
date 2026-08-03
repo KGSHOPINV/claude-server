@@ -790,6 +790,19 @@ async function apiFetch(endpoint, opts) {
 }
 function invalidateCache() { Object.keys(_cache).forEach(k => delete _cache[k]); }
 
+async function downloadManifest() {
+  const r = await fetch(API + 'manifest');
+  const data = await r.json();
+  const blob = new Blob([JSON.stringify(data, null, 2)], {type: 'application/json'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `server-manifest-${new Date().toISOString().slice(0,10)}.json`;
+  document.body.appendChild(a);
+  a.click();
+  setTimeout(() => { URL.revokeObjectURL(url); a.remove(); }, 1000);
+}
+
 // ── GLOBAL STATE ────────────────────────────────────────────────────────────
 const S = {
   status: null,
@@ -1491,6 +1504,13 @@ function mountPaneContent(wsId, paneId, viewType, viewConfig, body) {
             <input id="new-usr" class="vs-inp" placeholder="Username" style="width:110px">
             <input id="new-pw" class="vs-inp" type="password" placeholder="Password" style="width:110px">
             <button class="btn p" onclick="addUser()">Add User</button>
+          </div>
+        </div>
+        <div class="vs-section">
+          <div class="vs-hdr">System Snapshot</div>
+          <div class="vs-row" style="flex-direction:column;align-items:flex-start;gap:6px">
+            <div style="font-size:11px;color:var(--muted)">Download a full JSON snapshot of all services, containers, health, and server info.</div>
+            <button class="btn p" onclick="downloadManifest()">📦 Download System Snapshot</button>
           </div>
         </div>
         <div class="vs-section">
@@ -3067,6 +3087,9 @@ function buildCmdIndex() {
    {icon:'🔓',label:'unban my IP',cmd:'sudo fail2ban-client set sshd unbanip 192.168.1.192'},
    {icon:'🧹',label:'docker prune',cmd:'docker system prune -f'},
   ].forEach(c=>items.push({grp:'Shell', icon:c.icon, label:`$ ${c.label}`, hint:'ssh run', action:()=>runFromPalette(c.cmd), kw:[c.label,'shell','cmd']}));
+  // System actions
+  items.push({grp:'System', icon:'📦', label:'Download system snapshot', hint:'manifest JSON', action:()=>downloadManifest(), kw:['manifest','snapshot','download','export','pulse']});
+  items.push({grp:'System', icon:'🔄', label:'Hard refresh all data', hint:'clears cache', action:()=>hardRefresh(), kw:['refresh','reload','cache','hard']});
   // Docs
   S.docs.forEach(d=>items.push({grp:'Docs', icon:'📄', label:`Docs: ${d.title}`, hint:'guide', action:()=>openDocWs(d.file,d.title), kw:[d.title.toLowerCase(),'doc','guide']}));
   // Bookmarks
