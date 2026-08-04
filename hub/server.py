@@ -5,7 +5,9 @@ Run: python hub/server.py
 Then open: http://localhost:8765
 """
 
+import base64
 import hashlib
+import hmac
 import http.server
 import re
 import socketserver
@@ -15,6 +17,7 @@ import secrets
 import shutil
 import sqlite3
 import ssl
+import struct
 import subprocess
 import threading
 import time
@@ -643,6 +646,73 @@ def check_auth(handler):
     with _users_lock:
         return _sessions.get(token)
 
+# ── TOTP ──────────────────────────────────────────────────────────────────────
+
+def _totp_hotp(secret, counter):
+    try:
+        key = base64.b32decode(secret.upper().replace(' ', ''))
+        msg = struct.pack('>Q', counter)
+        h = hmac.new(key, msg, hashlib.sha1).digest()
+        offset = h[-1] & 0x0f
+        code = struct.unpack('>I', bytes(h[offset:offset+4]))[0] & 0x7fffffff
+        return str(code % 1_000_000).zfill(6)
+    except Exception:
+        return ''
+
+def totp_verify(code):
+    secret = config_get('totp_secret', '')
+    if not secret:
+        return False
+    t = int(time.time()) // 30
+    code = str(code).strip().zfill(6)
+    return any(_totp_hotp(secret, t + d) == code for d in (-1, 0, 1))
+
+def totp_new_secret():
+    secret = base64.b32encode(os.urandom(20)).decode()
+    config_set('totp_secret', secret)
+    return secret
+
+def totp_uri(secret, account='admin'):
+    import urllib.parse as _up
+    params = _up.urlencode({'secret': secret, 'issuer': 'ServerHub',
+                            'algorithm': 'SHA1', 'digits': '6', 'period': '30'})
+    return f'otpauth://totp/ServerHub%3A{account}?{params}'
+
+# ── Gate sessions ─────────────────────────────────────────────────────────────
+
+_gate_sessions = {}
+_gate_lock     = threading.Lock()
+
+def gate_create(level, user, duration_s=1800):
+    token   = secrets.token_hex(24)
+    expires = time.time() + duration_s
+    with _gate_lock:
+        now = time.time()
+        stale = [k for k, v in _gate_sessions.items() if v['expires'] < now]
+        for k in stale:
+            del _gate_sessions[k]
+        _gate_sessions[token] = {'level': level, 'user': user, 'expires': expires}
+    return token, expires
+
+def gate_check(headers, required_level=3):
+    """Return True if TOTP not configured OR valid gate token found at required_level+."""
+    if not config_get('totp_secret', ''):
+        return True
+    token = headers.get('X-Gate-Token', '')
+    if not token:
+        return False
+    with _gate_lock:
+        g = _gate_sessions.get(token)
+    if not g:
+        return False
+    if g['level'] < required_level:
+        return False
+    if time.time() > g['expires']:
+        with _gate_lock:
+            _gate_sessions.pop(token, None)
+        return False
+    return True
+
 # ── HTTP handler ───────────────────────────────────────────────────────────────
 
 class Handler(http.server.BaseHTTPRequestHandler):
@@ -790,6 +860,29 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 'has_key': bool(config_get('ai_api_key', os.environ.get('HUB_AI_KEY', ''))),
             })
 
+        elif p == '/api/totp/status':
+            secret = config_get('totp_secret', '')
+            with _gate_lock:
+                now = time.time()
+                gates = [{'level': v['level'], 'user': v['user'],
+                          'expires_in': int(v['expires'] - now)}
+                         for v in _gate_sessions.values() if v['expires'] > now]
+            self.send_json({'configured': bool(secret), 'gates': gates})
+
+        elif p == '/api/totp/setup':
+            secret = config_get('totp_secret', '')
+            if secret and 'force' not in self.path:
+                self.send_json({'configured': True})
+                return
+            new_secret = totp_new_secret()
+            sess = check_auth(self)
+            account = sess['user'] if sess else 'admin'
+            self.send_json({
+                'configured': False,
+                'secret': new_secret,
+                'uri': totp_uri(new_secret, account),
+            })
+
         elif p == '/api/manifest':
             data = get_manifest()
             body = json.dumps(data, default=str, indent=2).encode()
@@ -840,7 +933,11 @@ class Handler(http.server.BaseHTTPRequestHandler):
             if not cmd:
                 self.send_json({'error': 'No command provided'}, 400)
                 return
-            result = ssh_run(cmd, timeout=30)
+            if not gate_check(self.headers, required_level=3):
+                self.send_json({'error': 'gate_required', 'layer': 3,
+                                'message': 'Shell access requires TOTP verification'}, 403)
+                return
+            result = ssh_run(cmd, timeout=int(body.get('timeout', 30)))
             self.send_json(result)
 
         elif p == '/api/vault':
@@ -905,6 +1002,36 @@ class Handler(http.server.BaseHTTPRequestHandler):
             api_key  = body.get('api_key', '').strip()
             if provider: config_set('ai_provider', provider)
             if api_key:  config_set('ai_api_key', api_key)
+            self.send_json({'ok': True})
+
+        elif p == '/api/totp/verify':
+            code = str(body.get('code', '')).strip()
+            level = max(1, min(4, int(body.get('level', 3))))
+            duration = int(body.get('duration_s', 1800))
+            if not totp_verify(code):
+                self.send_json({'ok': False, 'error': 'Invalid or expired code'}, 401)
+                return
+            sess = check_auth(self)
+            user = sess['user'] if sess else 'api'
+            gate_token, expires = gate_create(level, user, duration)
+            journal_add('gate_unlock', f'Level {level} gate opened ({duration//60}m) by {user}', user)
+            self.send_json({
+                'ok': True,
+                'gate_token': gate_token,
+                'expires_at': datetime.fromtimestamp(expires).isoformat(),
+                'expires_in': int(expires - time.time()),
+                'level': level,
+            })
+
+        elif p == '/api/totp/disable':
+            code = str(body.get('code', '')).strip()
+            if not totp_verify(code):
+                self.send_json({'ok': False, 'error': 'Invalid code'}, 401)
+                return
+            config_set('totp_secret', '')
+            with _gate_lock:
+                _gate_sessions.clear()
+            journal_add('gate_unlock', 'TOTP disabled', '')
             self.send_json({'ok': True})
 
         elif p == '/api/service/install':

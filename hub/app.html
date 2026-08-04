@@ -590,6 +590,23 @@ body.desk-mode #desk-exit { display:flex; align-items:center; gap:6px; }
   </div>
 </div>
 
+<!-- GATE MODAL -->
+<div id="gate-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.75);z-index:800;align-items:center;justify-content:center" onclick="if(event.target===this)document.getElementById('gate-modal').style.display='none'">
+  <div style="background:var(--bg2);border:1px solid var(--border);border-radius:10px;padding:28px 24px;width:280px;text-align:center">
+    <div style="font-size:28px;margin-bottom:6px">🔐</div>
+    <div style="font-size:14px;font-weight:600;margin-bottom:4px;color:var(--text)">Gate Locked</div>
+    <div style="font-size:11px;color:var(--muted);margin-bottom:16px">Enter your 6-digit authenticator code to unlock shell access (30 min).</div>
+    <input id="gate-code-inp" class="vs-inp" placeholder="000000" maxlength="6" autocomplete="one-time-code" inputmode="numeric"
+      style="width:100%;text-align:center;font-family:var(--mono);font-size:22px;letter-spacing:6px;margin-bottom:8px;padding:8px"
+      onkeydown="if(event.key==='Enter')submitGateCode()">
+    <div id="gate-modal-err" style="font-size:11px;color:var(--red);min-height:16px;margin-bottom:8px"></div>
+    <div style="display:flex;gap:8px;justify-content:center">
+      <button class="btn p" id="gate-submit-btn" onclick="submitGateCode()">Unlock</button>
+      <button class="btn" onclick="document.getElementById('gate-modal').style.display='none'">Cancel</button>
+    </div>
+  </div>
+</div>
+
 <!-- COMMAND PALETTE -->
 <div id="cmdpal" onclick="if(event.target===this)closeCmdPal()">
   <div class="cmdpal-inner">
@@ -1560,6 +1577,11 @@ function mountPaneContent(wsId, paneId, viewType, viewConfig, body) {
             <button class="btn p" onclick="downloadManifest()">📦 Download System Snapshot</button>
           </div>
         </div>
+        <div class="vs-section" id="totp-sec">
+          <div class="vs-hdr">Security Gate (2FA)</div>
+          <div id="totp-status-msg" style="font-size:11px;color:var(--muted);margin-bottom:8px">Checking…</div>
+          <div id="totp-actions"></div>
+        </div>
         <div class="vs-section">
           <div class="vs-hdr">Danger Zone</div>
           <button class="btn" style="border-color:var(--red);color:var(--red)" onclick="doLogout()">Sign Out</button>
@@ -1567,6 +1589,7 @@ function mountPaneContent(wsId, paneId, viewType, viewConfig, body) {
       </div>`;
       loadUsersPanel();
       loadAISettings();
+      loadTOTPStatus();
       break;
 
     case 'storage':
@@ -1659,8 +1682,7 @@ async function runTerm(key) {
   tline(key,'tl-cmd','$ '+cmd);
   tline(key,'tl-info','Running…');
   try {
-    const r = await fetch(API+'/api/run',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({command:cmd})});
-    const d = await r.json();
+    const d = await apiRun(cmd);
     const el = document.getElementById(`tout-${key}`);
     if (el?.lastChild?.classList.contains('tl-info')) el.removeChild(el.lastChild);
     if (d.output) tline(key,'tl-out',d.output);
@@ -1681,8 +1703,7 @@ async function fetchLogs(key) {
   const out = document.getElementById(`lout-${key}`);
   out.textContent = `Fetching ${lines} lines from ${name}…`;
   try {
-    const r = await fetch(API+'/api/run',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({command:`docker logs --tail ${lines} ${name} 2>&1`})});
-    const d = await r.json();
+    const d = await apiRun(`docker logs --tail ${lines} ${name} 2>&1`);
     out.textContent = d.output || d.error || '(no output)';
     out.scrollTop = out.scrollHeight;
   } catch { out.textContent = 'Hub server not running.'; }
@@ -1891,8 +1912,7 @@ async function runStep(rbId, stepIdx) {
   const outEl = document.getElementById(`rbout-${rbId}-${stepIdx}`);
   if (outEl) { outEl.textContent = 'Running…'; outEl.classList.add('show'); }
   try {
-    const r = await fetch(API+'/api/run',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({command:s.cmd,timeout:60})});
-    const d = await r.json();
+    const d = await apiRun(s.cmd, 60);
     const out = [d.output, d.error].filter(Boolean).join('\n') || '(no output)';
     if (outEl) outEl.textContent = out;
     if (!RB_STATE[rbId]) RB_STATE[rbId] = {};
@@ -2116,7 +2136,7 @@ async function loadNet(key) {
   const cmds=[{id:`nufw-${key}`,cmd:'sudo ufw status numbered'},{id:`nf2b-${key}`,cmd:'sudo fail2ban-client status sshd'},{id:`npts-${key}`,cmd:'ss -tlnp | head -25'}];
   for(const c of cmds) {
     document.getElementById(c.id).textContent='Loading…';
-    try{const r=await fetch(API+'/api/run',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({command:c.cmd})});const d=await r.json();document.getElementById(c.id).textContent=d.output||d.error||'(empty)';}
+    try{const d=await apiRun(c.cmd);document.getElementById(c.id).textContent=d.output||d.error||'(empty)';}
     catch{document.getElementById(c.id).textContent='Hub server not running.';}
   }
 }
@@ -2139,8 +2159,7 @@ async function sendChat(key) {
   const prompt=`${ctx}\nUser: ${text}\nAnswer concisely as a server assistant. If you need to suggest commands, show them in backticks.`;
   const thinking=chatMsg(key,'ai','…');
   try {
-    const r=await fetch(API+'/api/run',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({command:`claude -p ${JSON.stringify(prompt)} --output-format text 2>/dev/null || echo "Claude CLI needs ANTHROPIC_API_KEY in ~/.bashrc on the server."`})});
-    const d=await r.json();
+    const d=await apiRun(`claude -p ${JSON.stringify(prompt)} --output-format text 2>/dev/null || echo "Claude CLI needs ANTHROPIC_API_KEY in ~/.bashrc on the server."`);
     thinking.querySelector('.msg-bub').textContent=d.output||d.error||'No response';
   } catch { thinking.querySelector('.msg-bub').textContent='Hub server not running.'; }
 }
@@ -2734,8 +2753,7 @@ async function runWTerm(id) {
   out.innerHTML += `<span style="color:var(--muted);font-style:italic">Running…\n</span>`;
   out.scrollTop = out.scrollHeight;
   try {
-    const r = await fetch(API+'/api/run',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({command:cmd})});
-    const d = await r.json();
+    const d = await apiRun(cmd);
     const lines = out.querySelectorAll('span');
     lines[lines.length-1].remove();
     if (d.output) out.innerHTML += `<span style="color:#c9d1d9">${d.output}\n</span>`;
@@ -2778,8 +2796,7 @@ async function tailLog(id) {
   const out = document.getElementById(`ltout-${id}`); if (!out) return;
   out.textContent = `Fetching ${lines} lines from ${name}…`;
   try {
-    const r = await fetch(API+'/api/run',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({command:`docker logs ${name} --tail ${lines} 2>&1`})});
-    const d = await r.json();
+    const d = await apiRun(`docker logs ${name} --tail ${lines} 2>&1`);
     out.textContent = d.output || d.error || '(no output)';
     out.scrollTop = out.scrollHeight;
   } catch { out.textContent = 'Hub server not running.'; }
@@ -2803,7 +2820,7 @@ function updateCtrToggleWidget(id) {
 async function toggleContainer(name, isRunning, wid) {
   const cmd = isRunning ? `docker stop ${name}` : `docker start ${name}`;
   try {
-    await fetch(API+'/api/run',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({command:cmd})});
+    await apiRun(cmd);
     setTimeout(async () => {
       await refresh(true);
       W.widgets.filter(w=>w.type==='ctrtoggle').forEach(w=>updateCtrToggleWidget(w.id));
@@ -2985,6 +3002,150 @@ function doLogout() {
   HUB_TOKEN=''; HUB_USER='';
   sessionStorage.removeItem('hub_token'); sessionStorage.removeItem('hub_user');
   showLogin();
+}
+
+// ── GATE TOKEN ────────────────────────────────────────────────────────────────
+
+function getGateToken() {
+  const t = localStorage.getItem('hub_gate_token');
+  const e = localStorage.getItem('hub_gate_expires');
+  if (!t || !e || new Date(e) <= new Date()) {
+    localStorage.removeItem('hub_gate_token');
+    localStorage.removeItem('hub_gate_expires');
+    return '';
+  }
+  return t;
+}
+
+function setGateToken(token, expires_at) {
+  localStorage.setItem('hub_gate_token', token);
+  localStorage.setItem('hub_gate_expires', expires_at);
+}
+
+async function apiRun(cmd, timeout=30) {
+  const gt = getGateToken();
+  const headers = {'Content-Type':'application/json'};
+  if (gt) headers['X-Gate-Token'] = gt;
+  let r;
+  try {
+    r = await fetch(API+'/api/run', {method:'POST', headers, body: JSON.stringify({command:cmd, timeout})});
+  } catch {
+    return {output:'', error:'Hub server not running', exitcode:-1, online:false};
+  }
+  if (r.status === 403) {
+    const err = await r.json().catch(()=>({}));
+    if (err.error === 'gate_required') {
+      return new Promise(resolve => showGateModal(() => apiRun(cmd, timeout).then(resolve)));
+    }
+    return {output:'', error:'Access denied', exitcode:-1, online:false};
+  }
+  return r.json().catch(()=>({output:'', error:'Invalid response', exitcode:-1, online:false}));
+}
+
+function showGateModal(onUnlock) {
+  const m = document.getElementById('gate-modal');
+  m.style.display = 'flex';
+  document.getElementById('gate-code-inp').value = '';
+  document.getElementById('gate-modal-err').textContent = '';
+  window._gateUnlockCb = onUnlock;
+  setTimeout(()=>document.getElementById('gate-code-inp').focus(), 80);
+}
+
+async function submitGateCode() {
+  const code = document.getElementById('gate-code-inp').value.trim();
+  const btn  = document.getElementById('gate-submit-btn');
+  btn.disabled = true; btn.textContent = '…';
+  try {
+    const r = await fetch(API+'/api/totp/verify', {method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({code, level:3, duration_s:1800})});
+    const d = await r.json();
+    if (d.ok) {
+      setGateToken(d.gate_token, d.expires_at);
+      document.getElementById('gate-modal').style.display = 'none';
+      showToast(`Gate unlocked — ${Math.floor(d.expires_in/60)}m window`);
+      if (window._gateUnlockCb) { const cb = window._gateUnlockCb; window._gateUnlockCb = null; cb(); }
+    } else {
+      document.getElementById('gate-modal-err').textContent = d.error || 'Invalid code';
+    }
+  } catch { document.getElementById('gate-modal-err').textContent = 'Network error'; }
+  btn.disabled = false; btn.textContent = 'Unlock';
+}
+
+// ── TOTP MANAGEMENT ──────────────────────────────────────────────────────────
+
+async function loadTOTPStatus() {
+  const msg = document.getElementById('totp-status-msg');
+  const act = document.getElementById('totp-actions');
+  if (!msg || !act) return;
+  try {
+    const r = await fetch(API+'/api/totp/status');
+    const d = await r.json();
+    const gate = d.gates && d.gates[0];
+    if (d.configured) {
+      msg.innerHTML = `<span style="color:var(--green)">2FA active</span>${gate ? ` — gate open for ${Math.floor(gate.expires_in/60)}m` : ' — no active gate'}`;
+      act.innerHTML = `<div style="display:flex;gap:6px;flex-wrap:wrap">
+        <button class="btn p" onclick="unlockGate()">Unlock Gate (30min)</button>
+        <button class="btn" style="border-color:var(--red);color:var(--red)" onclick="disableTOTP()">Disable 2FA</button>
+      </div>`;
+    } else {
+      msg.innerHTML = `<span style="color:var(--muted)">Not configured</span> — shell commands run ungated`;
+      act.innerHTML = `<button class="btn p" onclick="initTOTPSetup()">Enable 2FA Gate</button>`;
+    }
+  } catch { if (msg) msg.textContent = 'Could not reach hub server'; }
+}
+
+async function initTOTPSetup() {
+  const act = document.getElementById('totp-actions');
+  if (!act) return;
+  act.innerHTML = `<span style="font-size:11px;color:var(--muted)">Generating secret…</span>`;
+  const r = await fetch(API+'/api/totp/setup');
+  const d = await r.json();
+  if (d.configured) { showToast('2FA already active'); loadTOTPStatus(); return; }
+  const secret = d.secret || '';
+  const grouped = secret.match(/.{1,4}/g)?.join(' ') || secret;
+  act.innerHTML = `
+    <div style="background:var(--bg3);border:1px solid var(--border);border-radius:6px;padding:12px">
+      <div style="font-size:11px;color:var(--muted);margin-bottom:6px">1. Open your authenticator app (Google Authenticator, Authy, etc.)</div>
+      <div style="font-size:11px;color:var(--muted);margin-bottom:4px">2. Add account → Enter setup key manually:</div>
+      <div style="font-family:var(--mono);font-size:13px;background:var(--bg2);padding:8px 10px;border-radius:4px;letter-spacing:2px;margin-bottom:8px;word-break:break-all;color:var(--accent);cursor:pointer" onclick="navigator.clipboard?.writeText('${secret}');showToast('Secret copied')" title="Click to copy">${grouped}</div>
+      <div style="font-size:10px;color:var(--muted);margin-bottom:10px">Account: ServerHub — Issuer: ServerHub — 6 digits, 30s interval</div>
+      <div style="font-size:11px;color:var(--muted);margin-bottom:6px">3. Enter the 6-digit code to confirm setup:</div>
+      <div style="display:flex;gap:6px;align-items:center">
+        <input id="totp-confirm-inp" class="vs-inp" placeholder="000000" maxlength="6" inputmode="numeric" style="width:120px;font-family:var(--mono);letter-spacing:3px;text-align:center" onkeydown="if(event.key==='Enter')confirmTOTPSetup()">
+        <button class="btn p" onclick="confirmTOTPSetup()">Confirm</button>
+        <button class="btn" onclick="loadTOTPStatus()">Cancel</button>
+      </div>
+      <div id="totp-setup-err" style="font-size:11px;color:var(--red);margin-top:6px;min-height:14px"></div>
+    </div>`;
+  setTimeout(()=>document.getElementById('totp-confirm-inp')?.focus(), 100);
+}
+
+async function confirmTOTPSetup() {
+  const code = document.getElementById('totp-confirm-inp')?.value.trim();
+  const err  = document.getElementById('totp-setup-err');
+  if (!code) return;
+  const r = await fetch(API+'/api/totp/verify', {method:'POST', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({code, level:3, duration_s:1800})});
+  const d = await r.json();
+  if (d.ok) {
+    setGateToken(d.gate_token, d.expires_at);
+    showToast('2FA enabled! Gate unlocked for 30min');
+    loadTOTPStatus();
+  } else {
+    if (err) err.textContent = d.error || 'Invalid code — check your app and try again';
+  }
+}
+
+function unlockGate() { showGateModal(() => loadTOTPStatus()); }
+
+async function disableTOTP() {
+  const code = prompt('Enter your current authenticator code to disable 2FA:');
+  if (!code) return;
+  const r = await fetch(API+'/api/totp/disable', {method:'POST', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({code})});
+  const d = await r.json();
+  if (d.ok) { showToast('2FA disabled'); loadTOTPStatus(); }
+  else showToast('Failed: ' + (d.error || 'Invalid code'));
 }
 
 // ── SETTINGS ─────────────────────────────────────────────────────────────────
