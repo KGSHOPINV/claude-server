@@ -555,7 +555,41 @@ body.desk-mode #desk-exit { display:flex; align-items:center; gap:6px; }
   #foot { display:none; }
   #wsarea { padding-bottom:52px; }
 }
+/* ── GUIDE / CRIBS VIEW ─────────────────────────────────────────────── */
+.guide-wrap { padding:24px; overflow-y:auto; height:100%; }
+.guide-hero { text-align:center; padding:32px 0 28px; }
+.guide-hero-icon { font-size:52px; line-height:1; }
+.guide-hero-title { font-size:26px; font-weight:700; color:var(--text); margin:10px 0 4px; }
+.guide-hero-sub { font-size:12px; color:var(--muted); letter-spacing:.3px; }
+.guide-badges { display:flex; gap:8px; justify-content:center; flex-wrap:wrap; margin:14px 0 0; }
+.guide-badge { font-size:11px; padding:3px 10px; border-radius:12px; border:1px solid var(--border2); color:var(--muted); background:var(--panel2); font-family:var(--mono); }
+.guide-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(220px,1fr)); gap:12px; margin:20px 0; }
+.guide-card { background:var(--panel); border:1px solid var(--border); border-radius:8px; padding:16px; cursor:pointer; transition:border-color var(--t),background var(--t); }
+.guide-card:hover { border-color:var(--accent); background:var(--panel2); }
+.guide-card-hdr { display:flex; align-items:center; gap:10px; margin-bottom:8px; }
+.guide-card-icon { font-size:22px; line-height:1; }
+.guide-card-name { font-size:13px; font-weight:600; color:var(--text); }
+.guide-card-desc { font-size:11px; color:var(--muted); line-height:1.6; }
+.guide-card-tags { display:flex; gap:4px; flex-wrap:wrap; margin-top:8px; }
+.guide-tag { font-size:9px; padding:2px 6px; border-radius:8px; background:var(--acdim); color:var(--accent); font-weight:600; letter-spacing:.2px; text-transform:uppercase; }
+.guide-section-title { font-size:10px; font-weight:700; color:var(--muted); letter-spacing:.6px; text-transform:uppercase; margin:24px 0 10px; padding-bottom:6px; border-bottom:1px solid var(--border); }
+.guide-stack-row { display:flex; gap:8px; flex-wrap:wrap; margin-bottom:16px; }
+.guide-stack-item { background:var(--panel2); border:1px solid var(--border); border-radius:6px; padding:8px 12px; font-size:11px; display:flex; align-items:center; gap:6px; }
+.guide-stack-dot { width:7px; height:7px; border-radius:50%; background:var(--green); flex-shrink:0; }
+.guide-stack-dot.off { background:var(--muted2); }
+.guide-netlify { background:var(--panel); border:1px solid var(--border); border-radius:8px; padding:16px; display:flex; align-items:center; gap:14px; }
+.guide-netlify-icon { font-size:28px; }
+.guide-netlify-info { flex:1; }
+.guide-netlify-title { font-size:13px; font-weight:600; }
+.guide-netlify-url { font-size:11px; color:var(--accent); font-family:var(--mono); }
 </style>
+<link rel="manifest" href="/manifest.json">
+<meta name="theme-color" content="#58a6ff">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Server Hub">
+<meta name="viewport" content="width=device-width, initial-scale=1">
 </head>
 <body>
 
@@ -692,6 +726,10 @@ body.desk-mode #desk-exit { display:flex; align-items:center; gap:6px; }
     <div class="cat-sep"></div>
     <button class="cat-item" data-cat="favorites" onclick="setCategory('favorites')" title="Favorites">
       <span class="cat-icon">⭐</span><span class="cat-label">Favs</span>
+    </button>
+    <div class="cat-sep"></div>
+    <button class="cat-item" data-cat="guide" onclick="setCategory('guide')" title="Hub Guide">
+      <span class="cat-icon">🏠</span><span class="cat-label">Guide</span>
     </button>
   </nav>
 
@@ -1024,6 +1062,15 @@ const CATEGORIES = {
     sections: [
       {label:'', items:[
         {icon:'🔐', label:'Password Vault', action:()=>openView('vault')},
+      ]},
+    ]
+  },
+  guide: {
+    title: 'Guide',
+    sections: [
+      {label:'', items:[
+        {icon:'🏠', label:'What\'s Here',   action:()=>openView('guide')},
+        {icon:'📋', label:'Task Docket',    action:()=>openView('tasks')},
       ]},
     ]
   },
@@ -1641,6 +1688,12 @@ function mountPaneContent(wsId, paneId, viewType, viewConfig, body) {
       } else {
         body.innerHTML = `<div class="iframe-err"><h3>No URL</h3><p>Pick a service from the view menu above.</p></div>`;
       }
+      break;
+    case 'guide':
+      renderGuideView(body);
+      break;
+    case 'tasks':
+      renderTasksView(body);
       break;
     default:
       body.innerHTML = `<div style="display:flex;flex-direction:column;align-items:center;justify-content:center;height:100%;gap:14px;color:var(--muted)">
@@ -3371,6 +3424,168 @@ document.addEventListener('keydown', e => {
     if (e.key==='Enter')     { e.preventDefault(); execCpItem(_cpActive); }
   }
 });
+
+// ── GUIDE / CRIBS VIEW ────────────────────────────────────────────────────────
+const GUIDE_FEATURES = [
+  { icon:'⊞', name:'Dashboard',      desc:'Live server stats — CPU, RAM, uptime, all containers at a glance.', tags:['monitoring'], action:()=>openView('dashboard') },
+  { icon:'⌨', name:'Terminal',       desc:'Run shell commands on the server directly from the browser. TOTP-gated.', tags:['shell','security'], action:()=>openView('terminal') },
+  { icon:'📋', name:'Container Logs', desc:'Tail Docker container logs by name — no SSH needed.', tags:['docker'], action:()=>openView('logs') },
+  { icon:'🗺', name:'Infra Map',      desc:'Visual map of all services, ports, and health badges.', tags:['monitoring'], action:()=>openView('map') },
+  { icon:'⚙', name:'Services',       desc:'All running services with live up/down status — click any to open in a pane.', tags:['docker'], action:()=>setCategory('services') },
+  { icon:'▶', name:'Runbooks',       desc:'Step-by-step ops playbooks: backup, update, security audit, cleanup.', tags:['ops'], action:()=>openView('runbooks') },
+  { icon:'🔐', name:'Vault',          desc:'Client-side encrypted password vault. Master password never leaves the browser.', tags:['security'], action:()=>openView('vault') },
+  { icon:'🛡', name:'TOTP Gate',      desc:'2FA layer over all shell access. Set up in Settings → Security Gate.', tags:['security'], action:()=>openView('settings') },
+  { icon:'🌐', name:'Browser',        desc:'In-hub browser pane — open any service URL without leaving the tab.', tags:['tools'], action:()=>openView('browser') },
+  { icon:'📁', name:'Files',          desc:'Browse the server filesystem — list, inspect any path on the server.', tags:['tools'], action:()=>openView('files') },
+  { icon:'💾', name:'Storage',        desc:'Disk usage, Docker volumes, key directory sizes.', tags:['monitoring'], action:()=>openView('storage') },
+  { icon:'📓', name:'Journal',        desc:'Persistent activity log — every action timestamped.', tags:['ops'], action:()=>openView('journal') },
+  { icon:'📚', name:'Docs',           desc:'Markdown guides synced from ~/guides/ on the server.', tags:['docs'], action:()=>setCategory('docs') },
+  { icon:'🤖', name:'AI Chat',        desc:'Talk to Ollama models via Open WebUI — CPU-based, toggle on-demand.', tags:['ai'], action:()=>openView('chat') },
+  { icon:'⚑',  name:'Issues',         desc:'Tracked known issues — per-service bug log from issues/ folder.', tags:['ops'], action:()=>openView('issues') },
+  { icon:'⚙', name:'Settings',       desc:'Users, TOTP, AI config, theme, accent color.', tags:['admin'], action:()=>openView('settings') },
+];
+
+const GUIDE_STACK = [
+  { icon:'🐳', name:'Docker',        desc:'Container runtime — everything runs here' },
+  { icon:'🚦', name:'NPM',           desc:'Nginx Proxy Manager · port 81' },
+  { icon:'📦', name:'Portainer',     desc:'Container UI · port 9443' },
+  { icon:'🏠', name:'Homepage',      desc:'Dashboard · port 3000' },
+  { icon:'📡', name:'Uptime Kuma',   desc:'Uptime monitor · port 3001' },
+  { icon:'📊', name:'Netdata',       desc:'System graphs · port 19999' },
+  { icon:'📋', name:'Dozzle',        desc:'Log viewer · port 8090' },
+  { icon:'🔔', name:'ntfy',          desc:'Push alerts · port 2586' },
+  { icon:'⚙', name:'n8n',           desc:'Automation · port 5678' },
+  { icon:'🗄', name:'Redis',         desc:'Cache · port 6379' },
+  { icon:'🗄', name:'SurrealDB',     desc:'Multi-model DB · port 8001' },
+  { icon:'🔧', name:'Adminer',       desc:'DB browser · port 8082' },
+  { icon:'📧', name:'Mailpit',       desc:'Dev email catcher · port 8025' },
+  { icon:'📖', name:'Wiki.js',       desc:'Knowledge base · port 3002' },
+];
+
+function renderGuideView(body) {
+  const runningNames = (S.services||[]).filter(s=>s.running).map(s=>s.name);
+  const total = S.services ? S.services.filter(s=>s.installed!==false).length : 0;
+  const running = runningNames.length;
+
+  body.innerHTML = `<div class="guide-wrap">
+    <div class="guide-hero">
+      <div class="guide-hero-icon">🖥</div>
+      <div class="guide-hero-title">Server Hub</div>
+      <div class="guide-hero-sub">Home server control panel · 192.168.1.229 · Ubuntu 24.04 · 216 GB RAM</div>
+      <div class="guide-badges">
+        <span class="guide-badge">⚡ ${running}/${total} services up</span>
+        <span class="guide-badge">🐳 Docker stack</span>
+        <span class="guide-badge">🔐 TOTP gated</span>
+        <span class="guide-badge">📱 PWA-ready</span>
+        <span class="guide-badge">🤖 AI optional</span>
+      </div>
+    </div>
+
+    <div class="guide-section-title">Features — click any card to open it</div>
+    <div class="guide-grid">
+      ${GUIDE_FEATURES.map((f,i)=>`
+        <div class="guide-card" onclick="_guideAct[${i}]()" title="Open ${f.name}">
+          <div class="guide-card-hdr">
+            <span class="guide-card-icon">${f.icon}</span>
+            <span class="guide-card-name">${f.name}</span>
+          </div>
+          <div class="guide-card-desc">${f.desc}</div>
+          <div class="guide-card-tags">${f.tags.map(t=>`<span class="guide-tag">${t}</span>`).join('')}</div>
+        </div>`).join('')}
+    </div>
+
+    <div class="guide-section-title">Stack — what's running on the server</div>
+    <div class="guide-stack-row">
+      ${GUIDE_STACK.map(s=>`<div class="guide-stack-item">
+        <span class="guide-stack-dot ${runningNames.includes(s.name)?'':'off'}"></span>
+        <span style="font-size:14px">${s.icon}</span>
+        <div>
+          <div style="font-size:11px;font-weight:600;color:var(--text)">${s.name}</div>
+          <div style="font-size:10px;color:var(--muted)">${s.desc}</div>
+        </div>
+      </div>`).join('')}
+    </div>
+
+    <div class="guide-section-title">Links</div>
+    <div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:32px">
+      <div class="guide-netlify" style="flex:1;min-width:220px;cursor:pointer" onclick="openView('browser');document.querySelector('[id^=burl]')&&(document.querySelector('[id^=burl]').value='https://server-kit-docs.netlify.app',document.querySelector('[id^=burl]').dispatchEvent(new KeyboardEvent('keydown',{key:'Enter',bubbles:true})))">
+        <div class="guide-netlify-icon">🌐</div>
+        <div class="guide-netlify-info">
+          <div class="guide-netlify-title">Docs Site</div>
+          <div class="guide-netlify-url">server-kit-docs.netlify.app</div>
+          <div style="font-size:10px;color:var(--muted);margin-top:2px">Static docs + control panel</div>
+        </div>
+        <span style="color:var(--muted);font-size:12px">↗</span>
+      </div>
+      <div class="guide-netlify" style="flex:1;min-width:220px;cursor:pointer" onclick="openView('browser')">
+        <div class="guide-netlify-icon">🐙</div>
+        <div class="guide-netlify-info">
+          <div class="guide-netlify-title">GitHub Repo</div>
+          <div class="guide-netlify-url">github.com/KGSHOPINV/server-kit</div>
+          <div style="font-size:10px;color:var(--muted);margin-top:2px">Source + deployment kit</div>
+        </div>
+        <span style="color:var(--muted);font-size:12px">↗</span>
+      </div>
+      <div class="guide-netlify" style="flex:1;min-width:220px;cursor:pointer" onclick="openView('tasks')">
+        <div class="guide-netlify-icon">📋</div>
+        <div class="guide-netlify-info">
+          <div class="guide-netlify-title">Task Docket</div>
+          <div class="guide-netlify-url">Roadmap + pending work</div>
+          <div style="font-size:10px;color:var(--muted);margin-top:2px">What's done, what's next</div>
+        </div>
+        <span style="color:var(--muted);font-size:12px">↗</span>
+      </div>
+    </div>
+  </div>`;
+
+  // Register click actions after innerHTML is set
+  window._guideAct = GUIDE_FEATURES.map(f=>f.action);
+}
+
+// ── TASKS / DOCKET VIEW ────────────────────────────────────────────────────────
+const TASK_DOCKET = [
+  { status:'done',  label:'Nightly Maintenance Agent',   desc:'Python agent runs nightly — checks containers, disk, cert expiry, sends ntfy alert with full report.', tags:['automation','monitoring'] },
+  { status:'done',  label:'TOTP Gate System',             desc:'2FA over all /api/run shell calls. Gate modal auto-pops on 403. 30-min sessions. Works on desktop + mobile.', tags:['security'] },
+  { status:'done',  label:'Adminer, Mailpit, Wiki.js',    desc:'All three services deployed and running. Marked as installed in hub services list.', tags:['services'] },
+  { status:'done',  label:'Portainer Fix',                desc:'Fresh DB reset — admin setup completed. Watchtower pinned to 1.7.1 with DOCKER_API_VERSION=1.41.', tags:['infra'] },
+  { status:'done',  label:'Hub as systemd Service',       desc:'Hub runs as systemd user service — auto-restarts on crash, survives SSH disconnection.', tags:['infra'] },
+  { status:'done',  label:'PWA + Desktop Shortcut',       desc:'Manifest.json served — hub installable as a PWA on Chrome/Edge. Desktop .url shortcut + launcher.', tags:['ux'] },
+  { status:'next',  label:'Service Tokens',               desc:'Named long-lived tokens with role scope — separate AI/n8n identity from human TOTP sessions.', tags:['security','ai'] },
+  { status:'next',  label:'Update Hub Button',            desc:'One-click git pull + hub restart from the browser Settings view.', tags:['ux','ops'] },
+  { status:'next',  label:'n8n Health Alert → ntfy',      desc:'n8n workflow that pings ntfy when any monitored service goes down.', tags:['automation','monitoring'] },
+  { status:'next',  label:'Wire AI Key into Setup',       desc:'Install script prompts for API key, stores in hub_config — AI chat works out of the box.', tags:['ai'] },
+  { status:'idea',  label:'Supabase Install',             desc:'Full Postgres + auth + realtime stack. Large install — spin up when needed.', tags:['db'] },
+  { status:'idea',  label:'MinIO Install',                desc:'S3-compatible object storage — useful for backups and AI asset storage.', tags:['storage'] },
+  { status:'idea',  label:'Tailscale Deep Integration',   desc:'Show Tailscale node map, peer list, and MagicDNS status in the hub Infra Map.', tags:['network'] },
+  { status:'idea',  label:'Mobile APK (TWA)',             desc:'Wrap mobile.html as a Trusted Web Activity APK for Android — proper homescreen app.', tags:['mobile'] },
+];
+
+function renderTasksView(body) {
+  const ICONS = { done:'✅', next:'🔵', idea:'💡' };
+  const LABELS = { done:'Done', next:'Up Next', idea:'Ideas' };
+  const groups = ['done','next','idea'];
+  body.innerHTML = `<div class="guide-wrap">
+    <div class="guide-hero" style="padding:24px 0 20px">
+      <div class="guide-hero-icon">📋</div>
+      <div class="guide-hero-title">Task Docket</div>
+      <div class="guide-hero-sub">What's been built, what's coming, what's on the ideas list</div>
+    </div>
+    ${groups.map(g => {
+      const items = TASK_DOCKET.filter(t=>t.status===g);
+      return `<div class="guide-section-title">${ICONS[g]} ${LABELS[g]} — ${items.length} item${items.length===1?'':'s'}</div>
+        <div style="display:flex;flex-direction:column;gap:8px;margin-bottom:8px">
+          ${items.map(t=>`<div class="guide-netlify" style="cursor:default;opacity:${g==='done'?'0.75':'1'}">
+            <div style="font-size:20px">${ICONS[t.status]}</div>
+            <div style="flex:1">
+              <div style="font-size:12px;font-weight:600;color:var(--text)">${t.label}</div>
+              <div style="font-size:11px;color:var(--muted);margin-top:2px;line-height:1.5">${t.desc}</div>
+              <div class="guide-card-tags" style="margin-top:6px">${t.tags.map(tg=>`<span class="guide-tag">${tg}</span>`).join('')}</div>
+            </div>
+          </div>`).join('')}
+        </div>`;
+    }).join('')}
+  </div>`;
+}
 
 // ── MOBILE NAV ────────────────────────────────────────────────────────────────
 function mobNav(view) {

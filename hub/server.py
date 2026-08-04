@@ -764,6 +764,34 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 self.send_response(404)
                 self.end_headers()
 
+        elif p == '/manifest.json':
+            manifest = {
+                "name": "Server Hub",
+                "short_name": "Hub",
+                "description": "Home server control panel",
+                "start_url": "/",
+                "display": "standalone",
+                "background_color": "#0d1117",
+                "theme_color": "#58a6ff",
+                "icons": [
+                    {"src": "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect width='100' height='100' rx='18' fill='%230d1117'/%3E%3Ctext y='.9em' font-size='80' x='10'%3E%F0%9F%96%A5%3C/text%3E%3C/svg%3E", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable"}
+                ]
+            }
+            content = json.dumps(manifest).encode()
+            self.send_response(200)
+            self.send_header('Content-Type', 'application/manifest+json')
+            self.send_header('Content-Length', str(len(content)))
+            self.end_headers()
+            self.wfile.write(content)
+
+        elif p == '/sw.js':
+            sw = b"self.addEventListener('fetch', () => {});"
+            self.send_response(200)
+            self.send_header('Content-Type', 'application/javascript')
+            self.send_header('Content-Length', str(len(sw)))
+            self.end_headers()
+            self.wfile.write(sw)
+
         elif p == '/api/status':
             self.send_json(get_status(force=force))
 
