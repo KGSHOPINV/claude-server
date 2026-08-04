@@ -37,7 +37,7 @@ def ntfy(title, body, priority='default', tags='wrench'):
     try:
         req = urllib.request.Request(
             f'{NTFY_URL}/{NTFY_TOPIC}',
-            data=body.encode(),
+            data=body.encode('utf-8'),
             headers={
                 'Title': title,
                 'Priority': priority,
@@ -80,7 +80,8 @@ def main():
         ntfy('Hub Maintenance Failed', 'Could not reach hub API at maintenance time.', priority='high', tags='warning')
         return
 
-    status     = manifest.get('status') or {}
+    # manifest top-level keys: uptime, load, disk, containers, server, services
+    server     = manifest.get('server', {})
     containers = manifest.get('containers', {})
     disk       = manifest.get('disk', {})
     services   = manifest.get('services', [])
@@ -89,11 +90,14 @@ def main():
     disk_pct    = pct_int(disk.get('pct', '0'))
     disk_used   = disk.get('used', '?')
     disk_total  = disk.get('total', '?')
-    ram_used    = status.get('ram_used_mb', 0)
-    ram_total   = status.get('ram_total_mb', 1)
+    ram_total_gb= server.get('ram_total_gb', 0)
+    load        = manifest.get('load', '?')
+    uptime      = manifest.get('uptime', '?')
+    # estimate RAM pct from hub status cache via API
+    status_d    = api_get('/api/status')
+    ram_used    = status_d.get('ram_used_mb', 0)
+    ram_total   = status_d.get('ram_total_mb', 1)
     ram_pct     = round(ram_used / ram_total * 100) if ram_total else 0
-    load        = status.get('load', '?')
-    uptime      = status.get('uptime', '?')
     ctr_total   = containers.get('total', 0)
     ctr_running = containers.get('running', 0)
     ctr_stopped = containers.get('stopped', 0)
@@ -172,7 +176,7 @@ def main():
     })
 
     # 9. Build report
-    lines = [f'Server Hub — Nightly Report\n{ts} | Uptime: {uptime}', '']
+    lines = [f'Server Hub - Nightly Report\n{ts} | Uptime: {uptime}', '']
 
     if actions:
         lines.append('ACTIONS TAKEN')
@@ -197,7 +201,7 @@ def main():
     if warnings:
         priority = 'high' if any('CRITICAL' in w or 'dropped' in w for w in warnings) else 'default'
         tags = 'warning,wrench'
-        title = f'Server Alert — {len(warnings)} issue{"s" if len(warnings)>1 else ""}'
+        title = f'Server Alert - {len(warnings)} issue{"s" if len(warnings)>1 else ""}'
     elif actions:
         priority = 'default'
         tags = 'white_check_mark,wrench'
@@ -205,7 +209,7 @@ def main():
     else:
         priority = 'min'
         tags = 'white_check_mark'
-        title = 'Server Nightly — All Good'
+        title = 'Server Nightly - All Good'
 
     ntfy(title, report, priority=priority, tags=tags)
     print(f'\n  → ntfy sent: [{priority}] {title}')
