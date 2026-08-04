@@ -170,6 +170,23 @@
   <div id="gate-err"></div>
 </div>
 
+<!-- TOTP GATE MODAL -->
+<div id="mob-gate-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.8);z-index:900;align-items:center;justify-content:center;padding:20px">
+  <div style="background:#161b22;border:1px solid #30363d;border-radius:14px;padding:28px 20px;width:100%;max-width:320px;text-align:center">
+    <div style="font-size:32px;margin-bottom:8px">🔐</div>
+    <div style="font-size:16px;font-weight:700;margin-bottom:4px">Gate Locked</div>
+    <div style="font-size:12px;color:#7d8590;margin-bottom:18px">Enter your 6-digit authenticator code to unlock (30 min).</div>
+    <input id="mob-gate-code" type="text" inputmode="numeric" autocomplete="one-time-code" maxlength="6" placeholder="000000"
+      style="width:100%;background:#0d1117;border:1px solid #30363d;border-radius:8px;color:#e6edf3;font-size:26px;text-align:center;letter-spacing:8px;padding:12px;font-family:monospace;margin-bottom:8px"
+      onkeydown="if(event.key==='Enter')submitMobGate()">
+    <div id="mob-gate-err" style="font-size:12px;color:#f85149;min-height:16px;margin-bottom:12px"></div>
+    <div style="display:flex;gap:10px">
+      <button id="mob-gate-btn" onclick="submitMobGate()" style="flex:1;background:#238636;color:#fff;border:none;border-radius:8px;padding:12px;font-size:15px;font-weight:600;cursor:pointer">Unlock</button>
+      <button onclick="document.getElementById('mob-gate-modal').style.display='none'" style="flex:0 0 80px;background:#21262d;color:#e6edf3;border:1px solid #30363d;border-radius:8px;padding:12px;font-size:15px;cursor:pointer">Cancel</button>
+    </div>
+  </div>
+</div>
+
 <!-- APP -->
 <div id="app">
   <div id="topbar">
@@ -337,9 +354,63 @@ async function doLogin() {
 
 function doLogout() { sessionStorage.clear(); location.reload(); }
 
-function hdrs() { return {'Content-Type':'application/json','X-Hub-Token':TOKEN}; }
+function hdrs(extra={}) { return {'Content-Type':'application/json','X-Hub-Token':TOKEN,...extra}; }
 async function GET(p) { const r = await fetch(API+p, {headers:hdrs()}); return r.json(); }
 async function POST(p, b) { const r = await fetch(API+p, {method:'POST', headers:hdrs(), body:JSON.stringify(b)}); return r.json(); }
+
+// ── GATE TOKEN ────────────────────────────────────────────────────────────────
+
+function getMobGateToken() {
+  const t = localStorage.getItem('hub_gate_token');
+  const e = localStorage.getItem('hub_gate_expires');
+  if (!t || !e || new Date(e) <= new Date()) { localStorage.removeItem('hub_gate_token'); return ''; }
+  return t;
+}
+
+async function apiRun(cmd, timeout=30) {
+  const gt = getMobGateToken();
+  const r = await fetch(API+'/api/run', {
+    method:'POST', headers:hdrs(gt ? {'X-Gate-Token':gt} : {}),
+    body: JSON.stringify({command:cmd, timeout})
+  });
+  if (r.status === 403) {
+    const err = await r.json().catch(()=>({}));
+    if (err.error === 'gate_required') {
+      return new Promise(resolve => showMobGateModal(() => apiRun(cmd, timeout).then(resolve)));
+    }
+    return {output:'', error:'Access denied', exitcode:-1, online:false};
+  }
+  return r.json().catch(()=>({output:'', error:'Bad response', exitcode:-1}));
+}
+
+function showMobGateModal(onUnlock) {
+  const m = document.getElementById('mob-gate-modal');
+  m.style.display = 'flex';
+  document.getElementById('mob-gate-code').value = '';
+  document.getElementById('mob-gate-err').textContent = '';
+  window._mobGateCb = onUnlock;
+  setTimeout(()=>document.getElementById('mob-gate-code').focus(), 100);
+}
+
+async function submitMobGate() {
+  const code = document.getElementById('mob-gate-code').value.trim();
+  const btn  = document.getElementById('mob-gate-btn');
+  btn.disabled = true; btn.textContent = '…';
+  try {
+    const r = await fetch(API+'/api/totp/verify', {method:'POST', headers:hdrs(),
+      body: JSON.stringify({code, level:3, duration_s:1800})});
+    const d = await r.json();
+    if (d.ok) {
+      localStorage.setItem('hub_gate_token', d.gate_token);
+      localStorage.setItem('hub_gate_expires', d.expires_at);
+      document.getElementById('mob-gate-modal').style.display = 'none';
+      if (window._mobGateCb) { const cb=window._mobGateCb; window._mobGateCb=null; cb(); }
+    } else {
+      document.getElementById('mob-gate-err').textContent = d.error || 'Invalid code';
+    }
+  } catch { document.getElementById('mob-gate-err').textContent = 'Network error'; }
+  btn.disabled = false; btn.textContent = 'Unlock';
+}
 
 // ── NAV ───────────────────────────────────────────────────────────────────────
 function nav(page, btn) {
@@ -444,7 +515,7 @@ async function toggleC(name, isUp, idx) {
   const btn = document.getElementById('cb-'+idx); if(!btn) return;
   btn.textContent='…'; btn.disabled=true;
   try {
-    await POST('/api/run', {command: isUp ? `docker stop ${name}` : `docker start ${name}`});
+    await apiRun(isUp ? `docker stop ${name}` : `docker start ${name}`);
     setTimeout(loadContainers, 800);
   } catch { btn.textContent=isUp?'Stop':'Start'; btn.disabled=false; }
 }
@@ -515,7 +586,7 @@ async function runAction(idx) {
   const a = QUICK_ACTIONS[idx];
   openSheet(a.lbl);
   try {
-    const d = await POST('/api/run', {command: a.cmd});
+    const d = await apiRun(a.cmd);
     showSheetResult(d.output || d.error || '(no output)');
   } catch { showSheetResult('Error reaching hub server'); }
 }
@@ -551,7 +622,7 @@ async function termRun() {
   out.textContent += `$ ${cmd}\n`;
   inp.value='';
   try {
-    const d = await POST('/api/run', {command:cmd});
+    const d = await apiRun(cmd);
     out.textContent += (d.output||d.error||'(no output)')+'\n';
   } catch { out.textContent+='Error: could not reach hub\n'; }
   out.scrollTop=out.scrollHeight;
