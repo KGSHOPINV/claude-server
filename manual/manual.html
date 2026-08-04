@@ -1,0 +1,568 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Server Kit — Operations Manual</title>
+<style>
+/* ── SCREEN + PRINT RESET ── */
+*, *::before, *::after { box-sizing: border-box; }
+:root {
+  --ink:      #1a1a2e;
+  --accent:   #1d4ed8;
+  --muted:    #64748b;
+  --border:   #e2e8f0;
+  --bg-light: #f8fafc;
+  --bg-rule:  #eff6ff;
+  --green:    #16a34a;
+  --red:      #dc2626;
+  --yellow:   #ca8a04;
+  --page-w:   680px;
+}
+html { font-size: 13px; }
+body {
+  font-family: 'Georgia', 'Times New Roman', serif;
+  color: var(--ink);
+  background: #fff;
+  max-width: var(--page-w);
+  margin: 0 auto;
+  padding: 48px 40px;
+  line-height: 1.65;
+}
+h1, h2, h3, h4 { font-family: system-ui, -apple-system, 'Segoe UI', sans-serif; line-height: 1.2; }
+h1 { font-size: 2rem; font-weight: 800; color: var(--accent); }
+h2 { font-size: 1.15rem; font-weight: 700; color: var(--ink); margin: 2.2em 0 .6em; padding-bottom: .35em; border-bottom: 2px solid var(--accent); }
+h3 { font-size: 1rem; font-weight: 700; margin: 1.6em 0 .4em; color: var(--ink); }
+h4 { font-size: .9rem; font-weight: 600; margin: 1.2em 0 .3em; color: var(--muted); text-transform: uppercase; letter-spacing: .5px; }
+p { margin: .5em 0; }
+a { color: var(--accent); }
+ul, ol { padding-left: 1.4em; margin: .4em 0; }
+li { margin: .2em 0; }
+code, kbd {
+  font-family: 'Cascadia Code','Fira Code','Consolas',monospace;
+  font-size: .88em;
+  background: var(--bg-light);
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  padding: .1em .35em;
+}
+pre {
+  background: #0f172a;
+  color: #e2e8f0;
+  border-radius: 6px;
+  padding: 14px 16px;
+  overflow-x: auto;
+  font-family: 'Cascadia Code','Fira Code','Consolas',monospace;
+  font-size: .85em;
+  line-height: 1.5;
+  margin: .8em 0;
+}
+pre code { background: none; border: none; padding: 0; color: inherit; font-size: 1em; }
+
+/* ── TABLES ── */
+table { width: 100%; border-collapse: collapse; font-size: .9em; margin: .8em 0; }
+thead { background: var(--accent); color: #fff; }
+thead th { padding: 7px 10px; text-align: left; font-weight: 600; font-size: .85em; letter-spacing: .3px; }
+tbody tr:nth-child(even) { background: var(--bg-light); }
+tbody td { padding: 6px 10px; border-bottom: 1px solid var(--border); vertical-align: top; }
+tbody td code { background: none; border: none; font-size: .95em; padding: 0; }
+
+/* ── CALLOUT BOXES ── */
+.callout { border-left: 4px solid var(--accent); background: var(--bg-rule); border-radius: 4px; padding: 10px 14px; margin: 1em 0; font-size: .9em; }
+.callout.warn { border-color: var(--yellow); background: #fefce8; }
+.callout.danger { border-color: var(--red); background: #fef2f2; }
+.callout.ok { border-color: var(--green); background: #f0fdf4; }
+.callout-label { font-weight: 700; font-size: .8em; text-transform: uppercase; letter-spacing: .5px; margin-bottom: 4px; }
+
+/* ── STATUS DOTS ── */
+.dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 5px; vertical-align: middle; }
+.dot.up { background: var(--green); }
+.dot.off { background: var(--muted); }
+
+/* ── PAGE STRUCTURE ── */
+.cover { text-align: center; padding: 60px 0 48px; border-bottom: 2px solid var(--border); margin-bottom: 40px; }
+.cover-sub { font-size: .95rem; color: var(--muted); margin-top: 10px; }
+.cover-badges { display: flex; gap: 8px; justify-content: center; flex-wrap: wrap; margin-top: 20px; }
+.badge { font-family: system-ui, sans-serif; font-size: .75rem; padding: 3px 10px; border-radius: 12px; border: 1px solid var(--border); color: var(--muted); background: var(--bg-light); }
+.toc { column-count: 2; column-gap: 32px; margin: 1em 0; }
+.toc li { font-family: system-ui, sans-serif; font-size: .88rem; list-style: none; padding: .15em 0; border-bottom: 1px dotted var(--border); }
+.toc li span { float: right; color: var(--muted); font-size: .8em; }
+.section-break { page-break-before: always; }
+
+/* ── PRINT OVERRIDES ── */
+@media print {
+  body { padding: 0; max-width: 100%; font-size: 11px; }
+  pre { font-size: .78em; }
+  h2 { page-break-after: avoid; }
+  h3 { page-break-after: avoid; }
+  tr { page-break-inside: avoid; }
+  .cover { padding: 32px 0; }
+  .no-print { display: none; }
+  a { color: var(--ink); text-decoration: none; }
+  a[href]::after { content: " (" attr(href) ")"; font-size: .8em; color: var(--muted); }
+  a[href^="#"]::after { content: ""; }
+}
+@page { margin: 2cm 2.5cm; }
+@page :first { margin-top: 1cm; }
+</style>
+</head>
+<body>
+
+<!-- ═══════════════════════════════════════════════════ COVER ══ -->
+<div class="cover">
+  <div style="font-size:52px;margin-bottom:12px">🖥</div>
+  <h1>Server Kit</h1>
+  <h2 style="border:none;margin:.2em 0 .1em;font-size:1rem;color:var(--muted);font-weight:400">Operations Manual</h2>
+  <p class="cover-sub">Home server · 192.168.1.229 · Ubuntu 24.04 LTS · 216 GB RAM</p>
+  <div class="cover-badges">
+    <span class="badge">Docker stack</span>
+    <span class="badge">Nginx Proxy Manager</span>
+    <span class="badge">TOTP secured</span>
+    <span class="badge">Nightly maintenance</span>
+    <span class="badge">PWA hub</span>
+  </div>
+  <p style="font-family:system-ui,sans-serif;font-size:.75rem;color:var(--muted);margin-top:24px">
+    Last updated: <strong id="docdate"></strong> &nbsp;·&nbsp;
+    github.com/KGSHOPINV/server-kit &nbsp;·&nbsp;
+    server-kit-docs.netlify.app
+  </p>
+</div>
+<script>document.getElementById('docdate').textContent = new Date().toLocaleDateString('en-US',{year:'numeric',month:'long',day:'numeric'});</script>
+
+<!-- ═══════════════════════════════════════════════ TOC ══ -->
+<h2>Contents</h2>
+<ol class="toc">
+  <li>Server Overview <span>2</span></li>
+  <li>How It All Fits Together <span>2</span></li>
+  <li>Network &amp; Access <span>3</span></li>
+  <li>Services Reference <span>3</span></li>
+  <li>The Hub Control Panel <span>4</span></li>
+  <li>Netlify Docs Site <span>5</span></li>
+  <li>Security Setup <span>5</span></li>
+  <li>CLI Tools Reference <span>6</span></li>
+  <li>Docker Shortcuts <span>6</span></li>
+  <li>Maintenance &amp; Backups <span>7</span></li>
+  <li>Troubleshooting <span>7</span></li>
+  <li>Runbooks <span>8</span></li>
+  <li>Passwords &amp; Secrets <span>9</span></li>
+</ol>
+
+<!-- ═══════════════════════════════════════════ 1. OVERVIEW ══ -->
+<h2 class="section-break">1 · Server Overview</h2>
+
+<table>
+  <thead><tr><th>Key</th><th>Value</th></tr></thead>
+  <tbody>
+    <tr><td>Hostname</td><td><code>fks-services</code></td></tr>
+    <tr><td>OS</td><td>Ubuntu 24.04 LTS</td></tr>
+    <tr><td>RAM</td><td>216 GB</td></tr>
+    <tr><td>Storage</td><td>1 TB OS · 4 TB data</td></tr>
+    <tr><td>GPU</td><td>None — CPU-only (AI stack is slow, keep it OFF unless needed)</td></tr>
+    <tr><td>Local IP</td><td><code>192.168.1.229</code></td></tr>
+    <tr><td>Tailscale IP</td><td><code>100.75.1.105</code></td></tr>
+    <tr><td>Tailscale name</td><td><code>fks-services</code></td></tr>
+    <tr><td>SSH user</td><td><code>admin1</code></td></tr>
+    <tr><td>SSH command</td><td><code>ssh admin1@192.168.1.229</code></td></tr>
+  </tbody>
+</table>
+
+<div class="callout warn">
+  <div class="callout-label">⚠ AI Stack Warning</div>
+  No GPU installed. Running Ollama/Open WebUI uses 100% CPU and makes the server sluggish for everything else. Always stop the AI stack when done: <code>cd /srv/docker/ai && docker compose down</code>
+</div>
+
+<!-- ═══════════════════════════════════════════ 2. ARCHITECTURE ══ -->
+<h2>2 · How It All Fits Together</h2>
+
+<p>Everything runs as Docker containers managed by Portainer. Traffic from the internet (or local network) hits <strong>Nginx Proxy Manager (NPM)</strong> first, which routes requests to the correct container by domain or subdomain. Monitoring watches all containers; if something dies, <strong>Uptime Kuma</strong> sends an alert via <strong>ntfy</strong>.</p>
+
+<pre><code>Internet / LAN
+      │
+      ▼
+Nginx Proxy Manager (port 81 admin, 80/443 traffic)
+      │
+      ├── Homepage   (port 3000)  ← dashboard overview
+      ├── Portainer  (port 9443)  ← container management
+      ├── n8n        (port 5678)  ← automation workflows
+      ├── Supabase   (port 8000)  ← database platform
+      ├── MinIO      (port 9001)  ← object storage
+      └── [any other service]
+
+Monitoring stack runs alongside everything:
+  Uptime Kuma → watches all service URLs → alerts via ntfy
+  Netdata     → real-time CPU/RAM/disk graphs
+  Dozzle      → live container log viewer
+
+Hub (port 8765) → browser-based control panel
+  └─ Runs as systemd user service (hub.service)
+  └─ Handles: terminal, service status, vault, TOTP gate</code></pre>
+
+<h3>Tier Structure</h3>
+<table>
+  <thead><tr><th>Tier</th><th>Purpose</th><th>Services</th></tr></thead>
+  <tbody>
+    <tr><td>1 — Foundation</td><td>Everything depends on these</td><td>Docker, NPM, Portainer, Watchtower</td></tr>
+    <tr><td>2 — Monitoring</td><td>Eyes and ears</td><td>Homepage, Uptime Kuma, Netdata, Dozzle, Cockpit</td></tr>
+    <tr><td>3 — Tools</td><td>What you build with</td><td>n8n, Redis, SurrealDB, Supabase, MinIO, Adminer, Mailpit, Wiki.js, LanguageTool</td></tr>
+    <tr><td>4 — AI</td><td>CPU-heavy — keep OFF</td><td>Ollama, Open WebUI, OpenClaw</td></tr>
+  </tbody>
+</table>
+
+<!-- ═══════════════════════════════════════════ 3. NETWORK ══ -->
+<h2 class="section-break">3 · Network &amp; Access</h2>
+
+<h3>From Home Network (LAN)</h3>
+<p>All services accessible directly at <code>192.168.1.229:PORT</code>. SSH with <code>ssh admin1@192.168.1.229</code>.</p>
+
+<h3>From Anywhere (Remote)</h3>
+<p>Use Tailscale — <code>ssh admin1@100.75.1.105</code> or access services at <code>100.75.1.105:PORT</code>. Tailscale must be running on both devices.</p>
+
+<h3>Work PC SSH Key</h3>
+<pre><code>Key file: C:\Users\OEM-Nissan1\.ssh\id_ed25519_server
+No passphrase on this key.</code></pre>
+
+<h3>If Locked Out of SSH (Fail2Ban)</h3>
+<pre><code>sudo fail2ban-client set sshd unbanip 192.168.1.192</code></pre>
+<p>Work PC local IP: <code>192.168.1.192</code></p>
+
+<!-- ═══════════════════════════════════════════ 4. SERVICES ══ -->
+<h2>4 · Services Reference</h2>
+
+<table>
+  <thead><tr><th>Service</th><th>Port</th><th>URL (local)</th><th>What it does</th></tr></thead>
+  <tbody>
+    <tr><td><span class="dot up"></span>NPM</td><td>81</td><td><a href="http://192.168.1.229:81">:81</a></td><td>Nginx Proxy Manager — routes domains to containers</td></tr>
+    <tr><td><span class="dot up"></span>Portainer</td><td>9443</td><td><a href="https://192.168.1.229:9443">:9443 (https)</a></td><td>Visual Docker container manager</td></tr>
+    <tr><td><span class="dot up"></span>Watchtower</td><td>—</td><td>—</td><td>Auto-updates containers nightly at 4am. Pinned to 1.7.1</td></tr>
+    <tr><td><span class="dot up"></span>Homepage</td><td>3000</td><td><a href="http://192.168.1.229:3000">:3000</a></td><td>Server dashboard — all services + live status</td></tr>
+    <tr><td><span class="dot up"></span>Uptime Kuma</td><td>3001</td><td><a href="http://192.168.1.229:3001">:3001</a></td><td>Uptime monitoring + alerts via ntfy</td></tr>
+    <tr><td><span class="dot up"></span>Netdata</td><td>19999</td><td><a href="http://192.168.1.229:19999">:19999</a></td><td>Real-time CPU/RAM/disk/network graphs</td></tr>
+    <tr><td><span class="dot up"></span>Dozzle</td><td>8090</td><td><a href="http://192.168.1.229:8090">:8090</a></td><td>Live Docker container log viewer (no SSH needed)</td></tr>
+    <tr><td><span class="dot up"></span>Cockpit</td><td>9090</td><td><a href="https://192.168.1.229:9090">:9090 (https)</a></td><td>Linux admin panel — processes, storage, firewall</td></tr>
+    <tr><td><span class="dot up"></span>ntfy</td><td>2586</td><td><a href="http://192.168.1.229:2586">:2586</a></td><td>Push notification server — alerts to phone</td></tr>
+    <tr><td><span class="dot up"></span>n8n</td><td>5678</td><td><a href="http://192.168.1.229:5678">:5678</a></td><td>Workflow automation — connects services together</td></tr>
+    <tr><td><span class="dot up"></span>Redis</td><td>6379</td><td>CLI only</td><td>In-memory cache / key-value store</td></tr>
+    <tr><td><span class="dot up"></span>SurrealDB</td><td>8001</td><td><a href="http://192.168.1.229:8001">:8001</a></td><td>Multi-model database (graph + document + SQL)</td></tr>
+    <tr><td><span class="dot up"></span>Adminer</td><td>8082</td><td><a href="http://192.168.1.229:8082">:8082</a></td><td>Database browser — Postgres, MySQL, SQLite</td></tr>
+    <tr><td><span class="dot up"></span>Mailpit</td><td>8025 / 1025</td><td><a href="http://192.168.1.229:8025">:8025</a></td><td>Dev email catcher — intercepts SMTP on port 1025</td></tr>
+    <tr><td><span class="dot up"></span>Wiki.js</td><td>3002</td><td><a href="http://192.168.1.229:3002">:3002</a></td><td>Knowledge base / internal wiki</td></tr>
+    <tr><td><span class="dot off"></span>Supabase</td><td>8000</td><td><a href="http://192.168.1.229:8000">:8000</a></td><td>Postgres + auth + realtime (not yet installed)</td></tr>
+    <tr><td><span class="dot off"></span>MinIO</td><td>9000 / 9001</td><td><a href="http://192.168.1.229:9001">:9001</a></td><td>S3-compatible object storage (not yet installed)</td></tr>
+    <tr><td><span class="dot off"></span>Ollama</td><td>11434</td><td>CLI only</td><td>AI model engine — CPU-only, keep OFF</td></tr>
+    <tr><td><span class="dot off"></span>Open WebUI</td><td>3004</td><td><a href="http://192.168.1.229:3004">:3004</a></td><td>AI chat UI — keep OFF unless using</td></tr>
+    <tr><td><span class="dot up"></span>Hub</td><td>8765</td><td><a href="http://192.168.1.229:8765">:8765</a></td><td>Browser control panel (custom)</td></tr>
+  </tbody>
+</table>
+
+<p style="font-size:.82em;color:var(--muted)">
+  <span class="dot up"></span>Running &nbsp; <span class="dot off"></span>Stopped/not installed
+  &nbsp;·&nbsp; All Docker compose files live under <code>/srv/docker/SERVICE_NAME/</code>
+</p>
+
+<!-- ═══════════════════════════════════════════ 5. HUB ══ -->
+<h2 class="section-break">5 · The Hub Control Panel</h2>
+
+<p>The Hub is a custom browser-based control panel that runs on the server at port 8765. Open it at <a href="http://192.168.1.229:8765">http://192.168.1.229:8765</a>. It's also installable as a PWA (click the install icon in Chrome/Edge address bar).</p>
+
+<h3>Desktop Shortcuts</h3>
+<ul>
+  <li><code>Server Hub.url</code> on the Windows desktop — opens hub in default browser</li>
+  <li><code>Open Hub.bat</code> — same thing via batch script</li>
+</ul>
+
+<h3>Hub Features</h3>
+<table>
+  <thead><tr><th>Feature</th><th>How to reach</th><th>What it does</th></tr></thead>
+  <tbody>
+    <tr><td>Dashboard</td><td>Server → Dashboard</td><td>Live CPU, RAM, disk, all containers</td></tr>
+    <tr><td>Terminal</td><td>Server → Terminal</td><td>Run shell commands — TOTP gated</td></tr>
+    <tr><td>Container Logs</td><td>Server → Logs</td><td>Tail Docker logs by container name</td></tr>
+    <tr><td>Infra Map</td><td>Server → Infra Map</td><td>Visual service map with health badges</td></tr>
+    <tr><td>Services</td><td>Svcs category</td><td>All services with live up/down + click to open</td></tr>
+    <tr><td>Runbooks</td><td>Ops → Runbooks</td><td>Step-by-step playbooks for backup, update, security</td></tr>
+    <tr><td>Vault</td><td>Vault category</td><td>Client-side encrypted passwords — master key stays in browser</td></tr>
+    <tr><td>TOTP Gate</td><td>Settings → Security Gate</td><td>2FA for shell access — set up once, protects Terminal</td></tr>
+    <tr><td>Storage</td><td>Server → Storage</td><td>Disk usage, Docker volume sizes</td></tr>
+    <tr><td>Files</td><td>Server → Files</td><td>Browse server filesystem</td></tr>
+    <tr><td>AI Chat</td><td>Server → AI Chat</td><td>Ollama via API — only works if AI stack is ON</td></tr>
+    <tr><td>Guide</td><td>🏠 Guide category</td><td>Feature tour + task docket</td></tr>
+    <tr><td>Settings</td><td>Tools → Settings</td><td>Users, theme, TOTP, AI config</td></tr>
+  </tbody>
+</table>
+
+<h3>Hub Service Management</h3>
+<pre><code># Status
+systemctl --user status hub
+
+# Restart
+systemctl --user restart hub
+
+# Live logs
+journalctl --user -u hub -f
+
+# Files on server
+~/hub/server.py      # API server
+~/hub/app.html       # Desktop UI
+~/hub/mobile.html    # Mobile UI
+~/hub/maintenance.py # Nightly agent</code></pre>
+
+<h3>TOTP Gate Setup</h3>
+<ol>
+  <li>Open the hub → Settings → Security Gate</li>
+  <li>Click "Set up TOTP" — scan the QR code with Google Authenticator / Authy</li>
+  <li>Enter the 6-digit code to confirm setup</li>
+  <li>All Terminal and shell commands now require TOTP verification</li>
+  <li>Session lasts 30 minutes after unlock</li>
+</ol>
+
+<!-- ═══════════════════════════════════════════ 6. NETLIFY ══ -->
+<h2>6 · Netlify Docs Site</h2>
+
+<table>
+  <thead><tr><th>Property</th><th>Value</th></tr></thead>
+  <tbody>
+    <tr><td>URL</td><td><a href="https://server-kit-docs.netlify.app">server-kit-docs.netlify.app</a></td></tr>
+    <tr><td>Control panel URL</td><td><a href="https://server-kit-docs.netlify.app/panel">server-kit-docs.netlify.app/panel</a></td></tr>
+    <tr><td>Platform</td><td>Netlify (free tier) · Docusaurus v3</td></tr>
+    <tr><td>Source</td><td><code>github.com/KGSHOPINV/server-kit</code> → <code>docs-site/</code></td></tr>
+    <tr><td>Password gate</td><td>Netlify Edge Function + cookie auth</td></tr>
+  </tbody>
+</table>
+
+<h3>Setting the Docs Password</h3>
+<ol>
+  <li>Go to <a href="https://app.netlify.com">app.netlify.com</a> → your site → Site settings</li>
+  <li>Environment variables → Add variable</li>
+  <li>Key: <code>DOCS_PASSWORD</code> — Value: your chosen password</li>
+  <li>Trigger a new deploy (or push any commit to GitHub)</li>
+</ol>
+<p>Default password if env var is not set: <code>serverkit25</code></p>
+
+<h3>Updating the Docs</h3>
+<pre><code># SSH to server, then:
+cd ~/server-kit/docs-site
+# Edit files in docs/ directory
+git add . && git commit -m "Update docs" && git push
+# Netlify auto-deploys within ~60 seconds</code></pre>
+
+<!-- ═══════════════════════════════════════════ 7. SECURITY ══ -->
+<h2 class="section-break">7 · Security Setup</h2>
+
+<h3>Layers of Defense</h3>
+<table>
+  <thead><tr><th>Layer</th><th>Tool</th><th>What it blocks</th></tr></thead>
+  <tbody>
+    <tr><td>1 — Network</td><td>UFW firewall</td><td>All ports except 22 (SSH), 80, 443 + specific service ports</td></tr>
+    <tr><td>2 — SSH brute force</td><td>Fail2Ban</td><td>Bans IPs after too many failed SSH attempts</td></tr>
+    <tr><td>3 — SSH keys only</td><td>sshd_config</td><td>Password auth disabled — keys required</td></tr>
+    <tr><td>4 — Hub shell access</td><td>TOTP gate</td><td>Requires 6-digit authenticator code for any shell command</td></tr>
+    <tr><td>5 — Docs access</td><td>Netlify edge function</td><td>Password gate on all docs site pages</td></tr>
+    <tr><td>6 — Vault</td><td>Client-side AES-256</td><td>Master password never transmitted — local decryption only</td></tr>
+  </tbody>
+</table>
+
+<h3>Check Firewall Status</h3>
+<pre><code>sudo ufw status numbered</code></pre>
+
+<h3>Check Fail2Ban</h3>
+<pre><code>sudo fail2ban-client status sshd</code></pre>
+
+<h3>Unban Your Own IP (if locked out)</h3>
+<pre><code>sudo fail2ban-client set sshd unbanip 192.168.1.192</code></pre>
+
+<h3>Full Security Audit</h3>
+<pre><code>sudo sec</code></pre>
+
+<!-- ═══════════════════════════════════════════ 8. CLI TOOLS ══ -->
+<h2>8 · CLI Tools Reference</h2>
+<p>All tools live at <code>/usr/local/bin/</code> — available system-wide, no path prefix needed.</p>
+
+<table>
+  <thead><tr><th>Command</th><th>What it does</th></tr></thead>
+  <tbody>
+    <tr><td><code>server-menu</code></td><td>Interactive menu for everything — start here if unsure</td></tr>
+    <tr><td><code>health-check</code></td><td>Full service + port status report — run this first when something seems wrong</td></tr>
+    <tr><td><code>server-backup</code></td><td>Trigger a manual backup now</td></tr>
+    <tr><td><code>server-update</code></td><td>Update all containers + run system apt upgrade</td></tr>
+    <tr><td><code>sec</code></td><td>Full security status check — UFW, Fail2Ban, sessions, listening ports</td></tr>
+    <tr><td><code>ai-models</code></td><td>Manage Ollama AI models (list, pull, delete)</td></tr>
+    <tr><td><code>dkps</code></td><td>Docker ps — list all running containers with status</td></tr>
+    <tr><td><code>dklogs [name]</code></td><td>Stream logs for a container</td></tr>
+    <tr><td><code>dkrestart [name]</code></td><td>Restart a container</td></tr>
+    <tr><td><code>dkstop [name]</code></td><td>Stop a container</td></tr>
+    <tr><td><code>dkstart [name]</code></td><td>Start a container</td></tr>
+  </tbody>
+</table>
+
+<!-- ═══════════════════════════════════════════ 9. DOCKER ══ -->
+<h2 class="section-break">9 · Docker Shortcuts</h2>
+
+<h3>Managing a Service</h3>
+<pre><code># Start a service
+cd /srv/docker/SERVICE_NAME && docker compose up -d
+
+# Stop a service
+cd /srv/docker/SERVICE_NAME && docker compose down
+
+# View logs (stream)
+cd /srv/docker/SERVICE_NAME && docker compose logs -f
+
+# All services at once
+docker ps --format "table {{.Names}}\t{{.Status}}\t{{.Ports}}"</code></pre>
+
+<h3>Compose File Locations</h3>
+<pre><code>/srv/docker/
+  npm/          portainer/    watchtower/   homepage/
+  uptime-kuma/  netdata/      dozzle/       ntfy/
+  supabase/     surrealdb/    redis/        minio/
+  n8n/          adminer/      mailpit/      wikijs/
+  languagetool/ ai/           cockpit/</code></pre>
+
+<h3>Disk / Volume Usage</h3>
+<pre><code>docker system df             # overall Docker disk usage
+docker volume ls             # list all volumes
+docker system prune -f       # remove stopped containers + dangling images</code></pre>
+
+<!-- ═══════════════════════════════════════════ 10. MAINTENANCE ══ -->
+<h2>10 · Maintenance &amp; Backups</h2>
+
+<h3>Nightly Maintenance Agent</h3>
+<p>A Python script (<code>~/hub/maintenance.py</code>) runs every night via systemd timer. It checks:</p>
+<ul>
+  <li>All container statuses — alerts if any are stopped</li>
+  <li>Disk usage — alerts if any partition is over 85%</li>
+  <li>TLS certificate expiry — alerts if &lt;14 days remaining</li>
+  <li>System uptime and RAM</li>
+</ul>
+<p>Alerts go to ntfy. Check timer status: <code>systemctl --user status hub-maintenance.timer</code></p>
+
+<h3>Watchtower — Auto Updates</h3>
+<p>Watchtower runs every night at 4am and pulls new container image versions. Settings:</p>
+<pre><code>Image: containrrr/watchtower:1.7.1   # pinned — do not use :latest
+WATCHTOWER_CLEANUP=true              # removes old images after update
+WATCHTOWER_SCHEDULE=0 0 4 * * *     # 4am daily
+DOCKER_API_VERSION=1.41             # required for Docker 29.x</code></pre>
+
+<h3>Manual Backup</h3>
+<pre><code>server-backup
+# or
+sudo server-backup
+tail -50 /var/log/server-backup.log   # check result</code></pre>
+
+<h3>Verify Everything After Changes</h3>
+<pre><code>bash ~/server-kit/verify-install.sh</code></pre>
+
+<!-- ═══════════════════════════════════════════ 11. TROUBLESHOOTING ══ -->
+<h2 class="section-break">11 · Troubleshooting</h2>
+
+<h3>Common Issues</h3>
+<table>
+  <thead><tr><th>Symptom</th><th>First check</th><th>Fix</th></tr></thead>
+  <tbody>
+    <tr><td>Service not loading in browser</td><td><code>docker ps</code> — is it running?</td><td><code>dkrestart SERVICE</code> or <code>cd /srv/docker/X && docker compose up -d</code></td></tr>
+    <tr><td>Hub not responding at :8765</td><td><code>systemctl --user status hub</code></td><td><code>systemctl --user restart hub</code> · check <code>journalctl --user -u hub -f</code></td></tr>
+    <tr><td>SSH locked out</td><td>Are you on 192.168.1.192?</td><td><code>sudo fail2ban-client set sshd unbanip 192.168.1.192</code></td></tr>
+    <tr><td>Portainer "init timeout"</td><td>Check portainer.db exists but no admin</td><td>Delete portainer.db from volume, restart, set password within 5 min</td></tr>
+    <tr><td>Watchtower crash loop</td><td>Docker API version mismatch</td><td>Pin to 1.7.1 + <code>DOCKER_API_VERSION=1.41</code> in compose env</td></tr>
+    <tr><td>Hub can't run commands</td><td>Is <code>HUB_LOCAL=1</code> set?</td><td>Set <code>HUB_LOCAL=1</code> in systemd unit Environment= line</td></tr>
+    <tr><td>TOTP gate always locked</td><td>Check <code>~/db/server.db</code> exists</td><td><code>mkdir -p ~/db && cp ~/hub/db/server.db ~/db/</code></td></tr>
+    <tr><td>Netlify gate stuck</td><td>Wrong password → err=1 loop</td><td>Clear browser cookies for server-kit-docs.netlify.app and try again</td></tr>
+    <tr><td>Out of disk space</td><td><code>df -h /</code></td><td><code>docker system prune -f</code> · check <code>/srv/backups</code> size</td></tr>
+    <tr><td>High CPU</td><td><code>top</code> or Netdata at :19999</td><td>Check if AI stack is on — <code>docker ps | grep ollama</code></td></tr>
+  </tbody>
+</table>
+
+<h3>First Response Checklist</h3>
+<ol>
+  <li>Run <code>health-check</code> — gives a full status in one shot</li>
+  <li>Check <code>docker ps</code> — are all expected containers up?</li>
+  <li>Check <code>journalctl --user -u hub -f</code> — hub errors</li>
+  <li>Check <code>df -h /</code> — disk not full?</li>
+  <li>Check <code>free -h</code> — memory not exhausted?</li>
+  <li>Reboot as last resort: <code>sudo reboot</code></li>
+</ol>
+
+<h3>Hub DB Path</h3>
+<p>Hub resolves its SQLite DB to <code>~/db/server.db</code>. If the <code>~/db/</code> directory is missing, all config reads/writes silently fail. Fix:</p>
+<pre><code>mkdir -p ~/db && cp ~/hub/db/server.db ~/db/server.db</code></pre>
+
+<!-- ═══════════════════════════════════════════ 12. RUNBOOKS ══ -->
+<h2>12 · Runbooks</h2>
+<p>Full interactive runbooks are in the Hub under Ops → Runbooks. Quick reference below.</p>
+
+<h3>Update Everything</h3>
+<pre><code># Pull new container images
+cd /srv/docker && for d in */; do (cd "$d" && docker compose pull 2>&1 | tail -3); done
+
+# Restart with new images
+cd /srv/docker && for d in */; do (cd "$d" && docker compose up -d 2>&1 | tail -2); done
+
+# System packages
+sudo apt update && sudo apt upgrade -y --no-install-recommends</code></pre>
+
+<h3>Full Shutdown (Safe)</h3>
+<pre><code>cd /srv/docker/n8n && docker compose down
+cd /srv/docker/supabase && docker compose down
+cd /srv/docker/netdata && docker compose down
+cd /srv/docker/homepage && docker compose down
+cd /srv/docker/portainer && docker compose down
+cd /srv/docker/npm && docker compose down
+docker ps   # verify all stopped</code></pre>
+
+<h3>Full Security Audit</h3>
+<pre><code>sudo ufw status numbered
+sudo fail2ban-client status sshd
+who && last | head -10
+ss -tlnp
+sudo sec</code></pre>
+
+<h3>Docker Cleanup</h3>
+<pre><code>docker system df                  # space before
+docker container prune -f
+docker image prune -f
+docker volume prune -f
+docker system df                  # space after</code></pre>
+
+<!-- ═══════════════════════════════════════════ 13. SECRETS ══ -->
+<h2 class="section-break">13 · Passwords &amp; Secrets</h2>
+
+<div class="callout danger">
+  <div class="callout-label">🔐 Security Notice</div>
+  This section intentionally does not contain actual passwords. Use the Hub Vault (client-side encrypted) for storing credentials. The vault master password never leaves the browser. <strong>Never commit credentials to GitHub.</strong>
+</div>
+
+<h3>Where Secrets Live</h3>
+<table>
+  <thead><tr><th>Secret</th><th>Location</th><th>Notes</th></tr></thead>
+  <tbody>
+    <tr><td>Service passwords</td><td>Hub Vault (encrypted)</td><td>Open hub → Vault category</td></tr>
+    <tr><td>SSH private key</td><td><code>C:\Users\OEM-Nissan1\.ssh\id_ed25519_server</code></td><td>No passphrase</td></tr>
+    <tr><td>Server env vars</td><td><code>~/hub/notes/secrets.env</code></td><td>Gitignored — not in GitHub</td></tr>
+    <tr><td>Hub config DB</td><td><code>~/db/server.db</code></td><td>Gitignored — stores TOTP secret, hub_config</td></tr>
+    <tr><td>Netlify docs password</td><td>Netlify dashboard → Environment → DOCS_PASSWORD</td><td>Set in Netlify UI, not in code</td></tr>
+  </tbody>
+</table>
+
+<h3>Gitignored Files (Never Committed)</h3>
+<pre><code>notes/secrets.env    # server credentials and API keys
+db/server.db         # SQLite database with TOTP secrets</code></pre>
+
+<h3>TOTP Setup</h3>
+<p>Hub supports 2FA for shell access via TOTP (RFC 6238 — compatible with Google Authenticator, Authy, 1Password). Set up via Hub → Settings → Security Gate. Secret is stored in <code>~/db/server.db</code> (gitignored).</p>
+
+<!-- ═══════════════════════════════════════════ FOOTER ══ -->
+<hr style="margin:40px 0 20px;border:none;border-top:1px solid var(--border)">
+<p style="font-size:.8rem;color:var(--muted);text-align:center">
+  Server Kit Operations Manual &nbsp;·&nbsp;
+  github.com/KGSHOPINV/server-kit &nbsp;·&nbsp;
+  server-kit-docs.netlify.app &nbsp;·&nbsp;
+  Print: File → Print → Save as PDF
+</p>
+
+<div class="no-print" style="margin-top:32px;padding:16px;background:var(--bg-light);border-radius:8px;border:1px solid var(--border);font-family:system-ui,sans-serif;font-size:12px">
+  <strong>To print:</strong> File → Print (or Ctrl+P) → Save as PDF. Set margins to default or moderate. This page is formatted for A4/Letter at 100% scale.
+  Works best in Chrome or Edge. Disable headers/footers in print settings for a cleaner output.
+</div>
+
+</body>
+</html>
