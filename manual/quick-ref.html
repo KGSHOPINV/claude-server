@@ -1,0 +1,267 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Server Quick Reference</title>
+<style>
+/* ─── Print card — fits on one A4/Letter sheet ─── */
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+  font-family: 'Courier New', Courier, monospace;
+  font-size: 8.5pt;
+  background: #fff;
+  color: #111;
+  padding: 14mm 14mm 10mm;
+}
+
+h1 {
+  font-size: 14pt;
+  font-weight: 900;
+  letter-spacing: .5px;
+  border-bottom: 2.5px solid #111;
+  padding-bottom: 4px;
+  margin-bottom: 10px;
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+}
+h1 span { font-size: 8pt; font-weight: 400; color: #555; }
+
+.grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+
+.grid-3 {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: 10px;
+}
+
+section {
+  border: 1.5px solid #111;
+  border-radius: 4px;
+  padding: 7px 9px 7px;
+}
+
+section.span2 { grid-column: span 2; }
+section.span3 { grid-column: span 3; }
+
+h2 {
+  font-size: 7.5pt;
+  font-weight: 900;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  border-bottom: 1px solid #ccc;
+  margin-bottom: 6px;
+  padding-bottom: 3px;
+  color: #222;
+}
+
+table { width: 100%; border-collapse: collapse; }
+td, th {
+  padding: 2px 4px;
+  text-align: left;
+  vertical-align: top;
+  font-size: 7.8pt;
+  line-height: 1.4;
+}
+th {
+  font-size: 7pt;
+  text-transform: uppercase;
+  letter-spacing: .5px;
+  color: #666;
+  border-bottom: 1px solid #ddd;
+}
+tr:nth-child(even) td { background: #f7f7f7; }
+
+.dot { display: inline-block; width: 7px; height: 7px; border-radius: 50%; margin-right: 3px; vertical-align: middle; }
+.dot-g { background: #16a34a; }
+.dot-y { background: #ca8a04; }
+.dot-r { background: #dc2626; }
+
+code {
+  font-family: 'Courier New', monospace;
+  font-size: 7.6pt;
+  background: #f0f0f0;
+  padding: 0 3px;
+  border-radius: 2px;
+}
+
+.cmd-row { display: flex; gap: 8px; margin-bottom: 3px; align-items: baseline; }
+.cmd-name { font-weight: 700; font-size: 8pt; color: #111; min-width: 88px; flex-shrink: 0; }
+.cmd-desc { color: #444; font-size: 7.5pt; }
+
+.kv { margin-bottom: 3px; display: flex; gap: 6px; }
+.kv-k { color: #555; font-size: 7.5pt; min-width: 80px; flex-shrink: 0; }
+.kv-v { font-weight: 700; font-size: 7.8pt; }
+
+.footer {
+  margin-top: 8px;
+  font-size: 7pt;
+  color: #888;
+  text-align: right;
+  border-top: 1px solid #ddd;
+  padding-top: 5px;
+}
+
+@page {
+  size: A4 portrait;
+  margin: 0;
+}
+@media print {
+  body { padding: 10mm 11mm 8mm; }
+  html, body { width: 210mm; }
+}
+</style>
+</head>
+<body>
+
+<h1>Server Quick Reference <span>fks-services · Ubuntu 24.04 · 216 GB RAM · 1TB+4TB · Printed <span id="dt"></span></span></h1>
+
+<div class="grid-3">
+
+<!-- ACCESS -->
+<section>
+  <h2>🔑 Access</h2>
+  <div class="kv"><span class="kv-k">LAN IP</span><span class="kv-v">192.168.1.229</span></div>
+  <div class="kv"><span class="kv-k">Tailscale IP</span><span class="kv-v">100.75.1.105</span></div>
+  <div class="kv"><span class="kv-k">Tailscale name</span><span class="kv-v">fks-services</span></div>
+  <div class="kv"><span class="kv-k">SSH user</span><span class="kv-v">admin1</span></div>
+  <div class="kv"><span class="kv-k">SSH key</span><span class="kv-v">id_ed25519_server (no passphrase)</span></div>
+  <div class="kv"><span class="kv-k">Work PC IP</span><span class="kv-v">192.168.1.192</span></div>
+  <hr style="margin:5px 0;border-color:#eee">
+  <div class="cmd-row"><span class="cmd-name">Local SSH</span><code>ssh admin1@192.168.1.229</code></div>
+  <div class="cmd-row"><span class="cmd-name">Remote SSH</span><code>ssh admin1@100.75.1.105</code></div>
+</section>
+
+<!-- TIER 1 FOUNDATION -->
+<section>
+  <h2>🏗 Foundation</h2>
+  <table>
+    <tr><th>Service</th><th>Port</th><th>URL</th></tr>
+    <tr><td><span class="dot dot-g"></span>Hub</td><td>8765</td><td>:8765</td></tr>
+    <tr><td><span class="dot dot-g"></span>NPM</td><td>81</td><td>:81</td></tr>
+    <tr><td><span class="dot dot-g"></span>Portainer</td><td>9443</td><td>:9443 (https)</td></tr>
+    <tr><td><span class="dot dot-g"></span>Watchtower</td><td>—</td><td>auto-updater</td></tr>
+    <tr><td><span class="dot dot-g"></span>Cockpit</td><td>9090</td><td>:9090 (https)</td></tr>
+  </table>
+</section>
+
+<!-- TIER 2 MONITORING -->
+<section>
+  <h2>👁 Monitoring</h2>
+  <table>
+    <tr><th>Service</th><th>Port</th></tr>
+    <tr><td><span class="dot dot-g"></span>Homepage</td><td>3000</td></tr>
+    <tr><td><span class="dot dot-g"></span>Uptime Kuma</td><td>3001</td></tr>
+    <tr><td><span class="dot dot-g"></span>Netdata</td><td>19999</td></tr>
+    <tr><td><span class="dot dot-g"></span>Dozzle</td><td>8090</td></tr>
+  </table>
+</section>
+
+</div>
+
+<div style="height:8px"></div>
+
+<div class="grid">
+
+<!-- SERVICES TABLE - spans full width -->
+<section class="span2">
+  <h2>⚙ All Services — full port map</h2>
+  <table>
+    <tr><th>Service</th><th>Port(s)</th><th>URL (LAN)</th><th>What it does</th></tr>
+    <tr><td><span class="dot dot-g"></span>Hub control panel</td><td>8765</td><td>http://192.168.1.229:8765</td><td>Main control room — vault, logs, services, TOTP</td></tr>
+    <tr><td><span class="dot dot-g"></span>Nginx Proxy Manager</td><td>81</td><td>http://192.168.1.229:81</td><td>Domain → container routing, SSL</td></tr>
+    <tr><td><span class="dot dot-g"></span>Portainer</td><td>9443</td><td>https://192.168.1.229:9443</td><td>Visual Docker manager</td></tr>
+    <tr><td><span class="dot dot-g"></span>Homepage</td><td>3000</td><td>http://192.168.1.229:3000</td><td>Dashboard — shows all services + status</td></tr>
+    <tr><td><span class="dot dot-g"></span>Uptime Kuma</td><td>3001</td><td>http://192.168.1.229:3001</td><td>Uptime monitoring + alerts</td></tr>
+    <tr><td><span class="dot dot-g"></span>Netdata</td><td>19999</td><td>http://192.168.1.229:19999</td><td>Real-time CPU/RAM/disk graphs</td></tr>
+    <tr><td><span class="dot dot-g"></span>Dozzle</td><td>8090</td><td>http://192.168.1.229:8090</td><td>Live container log viewer</td></tr>
+    <tr><td><span class="dot dot-g"></span>Cockpit</td><td>9090</td><td>https://192.168.1.229:9090</td><td>Linux admin panel in browser</td></tr>
+    <tr><td><span class="dot dot-g"></span>n8n</td><td>5678</td><td>http://192.168.1.229:5678</td><td>Workflow automation</td></tr>
+    <tr><td><span class="dot dot-g"></span>Adminer</td><td>8082</td><td>http://192.168.1.229:8082</td><td>Database browser (Postgres)</td></tr>
+    <tr><td><span class="dot dot-g"></span>Mailpit</td><td>8025</td><td>http://192.168.1.229:8025</td><td>Dev email catcher (SMTP: 1025)</td></tr>
+    <tr><td><span class="dot dot-g"></span>Wiki.js</td><td>3002</td><td>http://192.168.1.229:3002</td><td>Knowledge base / internal docs</td></tr>
+    <tr><td><span class="dot dot-g"></span>PostgreSQL</td><td>5432</td><td>—</td><td>SQL database (internal)</td></tr>
+    <tr><td><span class="dot dot-g"></span>Redis</td><td>6379</td><td>—</td><td>Cache / key-value (internal)</td></tr>
+    <tr><td><span class="dot dot-g"></span>LanguageTool</td><td>8081</td><td>http://192.168.1.229:8081</td><td>Grammar checker API</td></tr>
+    <tr><td><span class="dot dot-g"></span>SurrealDB</td><td>8001</td><td>http://192.168.1.229:8001</td><td>Multi-model database</td></tr>
+    <tr><td><span class="dot dot-g"></span>MinIO</td><td>9000/9001</td><td>http://192.168.1.229:9001</td><td>S3-compatible object storage</td></tr>
+    <tr><td><span class="dot dot-y"></span>Ollama / Open WebUI</td><td>11434/3004</td><td>http://192.168.1.229:3004</td><td>AI — keep OFF unless using (CPU-only!)</td></tr>
+  </table>
+</section>
+
+</div>
+
+<div style="height:8px"></div>
+
+<div class="grid-3">
+
+<!-- CLI TOOLS -->
+<section>
+  <h2>🛠 CLI Tools</h2>
+  <div class="cmd-row"><span class="cmd-name">server-menu</span><span class="cmd-desc">Interactive menu</span></div>
+  <div class="cmd-row"><span class="cmd-name">health-check</span><span class="cmd-desc">Full service status</span></div>
+  <div class="cmd-row"><span class="cmd-name">server-backup</span><span class="cmd-desc">Run backup now</span></div>
+  <div class="cmd-row"><span class="cmd-name">server-update</span><span class="cmd-desc">Update containers + system</span></div>
+  <div class="cmd-row"><span class="cmd-name">sec</span><span class="cmd-desc">Security check</span></div>
+  <div class="cmd-row"><span class="cmd-name">ai-models</span><span class="cmd-desc">Manage Ollama models</span></div>
+  <div class="cmd-row"><span class="cmd-name">dkps</span><span class="cmd-desc">docker ps (running)</span></div>
+  <div class="cmd-row"><span class="cmd-name">dklogs [name]</span><span class="cmd-desc">Container logs</span></div>
+  <div class="cmd-row"><span class="cmd-name">dkrestart [n]</span><span class="cmd-desc">Restart container</span></div>
+  <div class="cmd-row"><span class="cmd-name">dkstop [name]</span><span class="cmd-desc">Stop container</span></div>
+  <div class="cmd-row"><span class="cmd-name">dkstart [name]</span><span class="cmd-desc">Start container</span></div>
+</section>
+
+<!-- DOCKER SHORTCUTS -->
+<section>
+  <h2>🐳 Docker</h2>
+  <div style="font-size:7.5pt;color:#444;margin-bottom:5px">All compose files under <code>/srv/docker/</code></div>
+  <div class="cmd-row"><span class="cmd-name">Start</span><span class="cmd-desc"><code>cd /srv/docker/NAME && docker compose up -d</code></span></div>
+  <div class="cmd-row"><span class="cmd-name">Stop</span><span class="cmd-desc"><code>docker compose down</code></span></div>
+  <div class="cmd-row"><span class="cmd-name">Logs</span><span class="cmd-desc"><code>docker compose logs -f</code></span></div>
+  <div class="cmd-row"><span class="cmd-name">All containers</span><span class="cmd-desc"><code>docker ps --format "table {{.Names}}\t{{.Status}}"</code></span></div>
+  <hr style="margin:5px 0;border-color:#eee">
+  <div style="font-size:7pt;color:#555;font-weight:700;margin-bottom:3px">HUB SERVICE</div>
+  <div class="cmd-row"><span class="cmd-name">Status</span><span class="cmd-desc"><code>systemctl --user status hub</code></span></div>
+  <div class="cmd-row"><span class="cmd-name">Restart</span><span class="cmd-desc"><code>systemctl --user restart hub</code></span></div>
+  <div class="cmd-row"><span class="cmd-name">Logs</span><span class="cmd-desc"><code>journalctl --user -u hub -f</code></span></div>
+</section>
+
+<!-- RUNBOOKS -->
+<section>
+  <h2>🚨 Quick Runbooks</h2>
+  <div style="font-size:7.5pt;font-weight:700;margin-bottom:2px">Locked out of SSH (Fail2Ban)</div>
+  <div style="font-size:7.4pt;color:#444;margin-bottom:5px"><code>sudo fail2ban-client set sshd unbanip 192.168.1.192</code></div>
+
+  <div style="font-size:7.5pt;font-weight:700;margin-bottom:2px">Container won't start</div>
+  <div style="font-size:7.4pt;color:#444;margin-bottom:5px"><code>dklogs NAME</code> → check logs → <code>dkrestart NAME</code></div>
+
+  <div style="font-size:7.5pt;font-weight:700;margin-bottom:2px">Disk almost full</div>
+  <div style="font-size:7.4pt;color:#444;margin-bottom:5px"><code>df -h</code> then <code>docker system prune -f</code></div>
+
+  <div style="font-size:7.5pt;font-weight:700;margin-bottom:2px">Hub won't load</div>
+  <div style="font-size:7.4pt;color:#444;margin-bottom:5px"><code>systemctl --user restart hub</code> — hub auto-restarts via systemd</div>
+
+  <div style="font-size:7.5pt;font-weight:700;margin-bottom:2px">Portainer broken</div>
+  <div style="font-size:7.4pt;color:#444;margin-bottom:5px"><code>cd /srv/docker/portainer && docker compose down && docker compose up -d</code></div>
+
+  <div style="font-size:7.5pt;font-weight:700;margin-bottom:2px">Full health report</div>
+  <div style="font-size:7.4pt;color:#444"><code>ssh admin1@192.168.1.229 "health-check"</code></div>
+</section>
+
+</div>
+
+<div class="footer">
+  Server Kit · github.com/KGSHOPINV/server-kit · Docs: server-kit-docs.netlify.app · Hub: http://192.168.1.229:8765
+  &nbsp;|&nbsp; CONFIDENTIAL — store securely
+</div>
+
+<script>
+document.getElementById('dt').textContent = new Date().toLocaleDateString('en-GB', {day:'numeric',month:'short',year:'numeric'});
+</script>
+</body>
+</html>

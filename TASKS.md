@@ -16,6 +16,9 @@
 | Hub as systemd service | `hub.service` — auto-restarts, survives SSH disconnect |
 | PWA + desktop shortcut | `manifest.json` served — Chrome/Edge installable. `.url` + `.bat` on desktop |
 | Guide / Cribs page | `🏠 Guide` category in hub — feature cards, stack view, task docket, links |
+| Vault UX overhaul | Full modal UI — category pills, search, copy buttons, password generator, no more `prompt()` |
+| Update Hub button | `⬆ Pull Latest & Restart` in Settings → runs git pull + service restart |
+| Quick-ref print card | `manual/quick-ref.html` — one-page A4 with all IPs, ports, URLs, CLI tools, runbooks |
 
 ---
 
@@ -24,9 +27,9 @@
 | Task | Notes |
 |------|-------|
 | **Service tokens** | Named long-lived tokens with role scope — separate AI/n8n identity from human TOTP sessions |
-| **Update Hub button** | One-click `git pull` + hub restart from Settings view |
 | **n8n health alert → ntfy** | n8n workflow that pings ntfy when any monitored service goes down |
 | **Wire AI key into setup** | Install script prompts for API key, stores in `hub_config` — AI chat works out of the box |
+| **Vaultwarden** | Self-hosted Bitwarden on port 8083 — browser extension + mobile app password manager |
 
 ---
 

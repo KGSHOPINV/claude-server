@@ -427,6 +427,38 @@ body.desk-mode #desk-exit { display:flex; align-items:center; gap:6px; }
 #vlock { max-width:320px; margin:30px auto; }
 #vlock h2 { font-size:18px; font-weight:700; margin-bottom:5px; }
 #vlock p { color:var(--muted); font-size:11px; margin-bottom:14px; }
+/* ── VAULT v2 ────────────────────────────────────────── */
+.vault-search-bar { display:flex; gap:6px; margin-bottom:8px; }
+.vault-cats { display:flex; gap:4px; flex-wrap:wrap; margin-bottom:10px; }
+.vault-cat-btn { padding:3px 10px; border-radius:10px; border:1px solid var(--border); background:none; color:var(--muted); font-size:10px; cursor:pointer; transition:all var(--t); }
+.vault-cat-btn.active { border-color:var(--accent); color:var(--accent); background:var(--acdim); }
+.ve2 { background:var(--panel); border:1px solid var(--border); border-radius:8px; padding:11px 13px; margin-bottom:7px; transition:border-color var(--t); }
+.ve2:hover { border-color:var(--border2); }
+.ve2-hdr { display:flex; align-items:center; gap:7px; margin-bottom:8px; }
+.ve2-icon { font-size:16px; width:28px; height:28px; border-radius:6px; background:var(--panel2); display:flex; align-items:center; justify-content:center; flex-shrink:0; }
+.ve2-title { font-weight:600; font-size:13px; flex:1; }
+.ve2-cat { font-size:9px; padding:2px 7px; border-radius:8px; background:var(--acdim); color:var(--accent); font-weight:600; letter-spacing:.2px; flex-shrink:0; }
+.ve2-row { display:flex; align-items:center; gap:7px; margin-bottom:5px; }
+.ve2-label { font-size:9px; color:var(--muted2); width:54px; text-transform:uppercase; letter-spacing:.4px; flex-shrink:0; }
+.ve2-val { font-size:11px; color:var(--text); font-family:var(--mono); flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.ve2-val.masked { color:var(--muted2); letter-spacing:2px; }
+.ve2-copybtn { background:none; border:1px solid var(--border); border-radius:4px; color:var(--muted); cursor:pointer; font-size:10px; padding:2px 7px; transition:all var(--t); }
+.ve2-copybtn:hover { border-color:var(--accent); color:var(--accent); }
+.ve2-foot { display:flex; align-items:center; gap:6px; margin-top:7px; padding-top:7px; border-top:1px solid var(--border); }
+.ve2-url { font-size:10px; color:var(--accent); flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; cursor:pointer; }
+.ve2-url:hover { text-decoration:underline; }
+/* vault modal */
+#vault-modal { display:none; position:fixed; inset:0; background:rgba(0,0,0,.78); z-index:900; align-items:center; justify-content:center; }
+#vault-modal.show { display:flex; }
+.vm-box { background:var(--panel); border:1px solid var(--border); border-radius:10px; padding:22px; width:360px; max-width:96vw; max-height:90vh; overflow-y:auto; }
+.vm-title { font-size:15px; font-weight:700; margin-bottom:16px; display:flex; align-items:center; gap:8px; }
+.vm-field { margin-bottom:11px; }
+.vm-field label { display:block; font-size:10px; color:var(--muted); text-transform:uppercase; letter-spacing:.4px; margin-bottom:4px; }
+.vm-field input, .vm-field select { width:100%; background:var(--bg); border:1px solid var(--border); border-radius:var(--r); color:var(--text); font-size:13px; padding:8px 10px; outline:none; font-family:var(--ui); transition:border-color var(--t); }
+.vm-field input:focus, .vm-field select:focus { border-color:var(--accent); }
+.vm-pw-row { display:flex; gap:5px; }
+.vm-pw-row input { flex:1; }
+.vm-footer { display:flex; gap:7px; justify-content:flex-end; margin-top:16px; padding-top:12px; border-top:1px solid var(--border); }
 .vi { width:100%; background:var(--panel); border:1px solid var(--border2); border-radius:var(--r); color:var(--text); font-size:12px; padding:7px 10px; margin-bottom:8px; }
 .vi:focus { outline:none; border-color:var(--accent); }
 #vbody { display:none; }
@@ -637,6 +669,39 @@ body.desk-mode #desk-exit { display:flex; align-items:center; gap:6px; }
     <div style="display:flex;gap:8px;justify-content:center">
       <button class="btn p" id="gate-submit-btn" onclick="submitGateCode()">Unlock</button>
       <button class="btn" onclick="document.getElementById('gate-modal').style.display='none'">Cancel</button>
+    </div>
+  </div>
+</div>
+
+<!-- VAULT ENTRY MODAL -->
+<div id="vault-modal" onclick="if(event.target===this)closeVaultModal()">
+  <div class="vm-box">
+    <div class="vm-title">🔐 <span id="vm-title-txt">New Entry</span></div>
+    <div class="vm-field"><label>Title *</label><input id="vm-ttl" placeholder="e.g. Portainer Admin" autocomplete="off"></div>
+    <div class="vm-field"><label>Username / Email</label><input id="vm-usr" placeholder="admin" autocomplete="off"></div>
+    <div class="vm-field"><label>Password</label>
+      <div class="vm-pw-row">
+        <input id="vm-pw" type="password" placeholder="password" autocomplete="new-password">
+        <button class="btn" title="Show/hide" onclick="var e=document.getElementById('vm-pw');e.type=e.type==='password'?'text':'password'" style="padding:0 9px;font-size:13px">👁</button>
+        <button class="btn" title="Generate strong password" onclick="vaultGenPw()" style="padding:0 9px;font-size:13px">⚡</button>
+      </div>
+    </div>
+    <div class="vm-field"><label>URL</label><input id="vm-url" placeholder="https://192.168.1.229:9443" autocomplete="off"></div>
+    <div class="vm-field"><label>Notes</label><input id="vm-notes" placeholder="Optional notes" autocomplete="off"></div>
+    <div class="vm-field"><label>Category</label>
+      <select id="vm-cat">
+        <option value="Server">🖥 Server</option>
+        <option value="Network">🌐 Network</option>
+        <option value="Work">💼 Work</option>
+        <option value="Personal">👤 Personal</option>
+        <option value="Banking">🏦 Banking</option>
+        <option value="Other">🔐 Other</option>
+      </select>
+    </div>
+    <input type="hidden" id="vm-idx" value="-1">
+    <div class="vm-footer">
+      <button class="btn" onclick="closeVaultModal()">Cancel</button>
+      <button class="btn p" onclick="vaultSaveEntry()">Save Entry</button>
     </div>
   </div>
 </div>
@@ -1630,6 +1695,12 @@ function mountPaneContent(wsId, paneId, viewType, viewConfig, body) {
           <div id="totp-actions"></div>
         </div>
         <div class="vs-section">
+          <div class="vs-hdr">Hub Update</div>
+          <div style="font-size:11px;color:var(--muted);margin-bottom:9px">Pull the latest code from GitHub and restart the hub service. The page will reload automatically.</div>
+          <button class="btn p" id="hub-update-btn" onclick="runHubUpdate()">⬆ Pull Latest & Restart</button>
+          <pre id="hub-update-out" style="display:none;margin-top:8px;font-size:10px;max-height:140px;overflow-y:auto;background:var(--bg);padding:9px;border-radius:var(--r);border:1px solid var(--border);color:var(--green);white-space:pre-wrap;word-break:break-all"></pre>
+        </div>
+        <div class="vs-section">
           <div class="vs-hdr">Danger Zone</div>
           <button class="btn" style="border-color:var(--red);color:var(--red)" onclick="doLogout()">Sign Out</button>
         </div>
@@ -2110,64 +2181,230 @@ function renderDash(elId) {
 }
 
 // ── VAULT ─────────────────────────────────────────────────────────────────────
+const V_ICONS = {Server:'🖥',Network:'🌐',Work:'💼',Personal:'👤',Banking:'🏦',Other:'🔐'};
+
 function vaultHTML() {
   if (S.vaultData) return vaultBodyHTML();
-  return `<div id="vlock"><h2>🔐 Password Vault</h2>
-    <p>AES-256-GCM encrypted. Master password never leaves the browser.</p>
-    <input class="vi" id="vmp" type="password" placeholder="Master password…" autocomplete="new-password">
-    <div style="display:flex;gap:7px"><button class="btn p" style="flex:1" onclick="vaultUnlock()">Unlock</button><button class="btn" onclick="vaultSetup()">New Vault</button></div>
-    <div id="verr" style="color:var(--red);font-size:11px;margin-top:6px"></div></div>`;
-}
-function vaultBodyHTML() {
-  if (!S.vaultData) return '';
-  const entries = S.vaultData.entries||[];
-  return `<div id="vbody" style="display:block">
-    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
-      <h2 style="font-size:16px;font-weight:700">Vault</h2>
-      <div style="display:flex;gap:6px"><button class="btn" onclick="vaultLock()">🔒 Lock</button><button class="btn p" onclick="vaultAdd()">+ Entry</button></div>
+  return `<div id="vlock">
+    <div style="font-size:36px;margin-bottom:10px">🔐</div>
+    <h2>Password Vault</h2>
+    <p>AES-256-GCM · 200k PBKDF2 · master password never leaves this browser.</p>
+    <input class="vi" id="vmp" type="password" placeholder="Master password…" autocomplete="current-password" onkeydown="if(event.key==='Enter')vaultUnlock()">
+    <div style="display:flex;gap:7px">
+      <button class="btn p" style="flex:1" onclick="vaultUnlock()">Unlock</button>
+      <button class="btn" onclick="vaultSetup()">New Vault</button>
     </div>
-    <div id="ventries">${entries.map((e,i)=>`
-      <div class="ve"><div class="ve-info">
-        <div class="ve-title">${e.title||'—'}</div>
-        <div class="ve-user">${e.username||''}</div>
-        <div class="ve-pw" id="vepw-${i}">••••••••</div>
-        ${e.url?`<a href="${e.url}" target="_blank" style="font-size:10px;color:var(--accent)">${e.url}</a>`:''}
-      </div><div class="ve-acts">
-        <button class="btn" style="font-size:10px;padding:2px 6px" onclick="toggleVPw(${i})">👁</button>
-        <button class="btn" style="font-size:10px;padding:2px 6px" onclick="navigator.clipboard.writeText('${(e.password||'').replace(/'/g,"\\'")}')">Copy</button>
-        <button class="btn d" style="font-size:10px;padding:2px 6px" onclick="delVE(${i})">✕</button>
-      </div></div>`).join('')}</div>
+    <div id="verr" style="color:var(--red);font-size:11px;margin-top:8px"></div>
   </div>`;
 }
-function initVault(key) { /* vault uses global S.vaultData, nothing extra needed */ }
+
+function vaultBodyHTML() {
+  if (!S.vaultData) return '';
+  const entries = S.vaultData.entries || [];
+  const q   = (S._vaultQ   || '').toLowerCase();
+  const cat = S._vaultCat  || 'All';
+  const cats = ['All', ...new Set(entries.map(e => e.category || 'Other'))];
+  const shown = entries.map((e,i) => ({...e,_i:i})).filter(e => {
+    if (cat !== 'All' && (e.category||'Other') !== cat) return false;
+    if (q && !`${e.title}${e.username}${e.url}${e.notes}`.toLowerCase().includes(q)) return false;
+    return true;
+  });
+  return `
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
+      <div style="font-size:13px;font-weight:700">🔐 Vault <span style="font-size:10px;color:var(--muted);font-weight:400">${entries.length} entr${entries.length===1?'y':'ies'}</span></div>
+      <div style="display:flex;gap:6px">
+        <button class="btn" onclick="vaultLock()">🔒 Lock</button>
+        <button class="btn p" onclick="vaultAdd()">＋ New</button>
+      </div>
+    </div>
+    <div class="vault-search-bar">
+      <input class="vs-inp" style="flex:1" id="vault-search" placeholder="🔍  Search titles, usernames, URLs…"
+        value="${q}" oninput="S._vaultQ=this.value;refreshVaultList()">
+    </div>
+    <div class="vault-cats">
+      ${cats.map(c=>`<button class="vault-cat-btn${c===cat?' active':''}"
+        onclick="S._vaultCat='${c}';refreshVaultList()">${V_ICONS[c]||'🏷'} ${c}</button>`).join('')}
+    </div>
+    <div id="ventries">
+      ${shown.length ? shown.map(e=>vaultEntryHTML(e,e._i)).join('')
+        : `<div style="text-align:center;color:var(--muted);padding:28px 0;font-size:12px">
+            ${entries.length ? '🔍 No entries match' : '🗂 No entries yet — click ＋ New to add one'}
+           </div>`}
+    </div>`;
+}
+
+function vaultEntryHTML(e, i) {
+  const icon = V_ICONS[e.category||'Other'] || '🔐';
+  return `<div class="ve2">
+    <div class="ve2-hdr">
+      <div class="ve2-icon">${icon}</div>
+      <div class="ve2-title">${escH(e.title||'—')}</div>
+      ${e.category?`<span class="ve2-cat">${e.category}</span>`:''}
+      <button class="btn" style="font-size:10px;padding:2px 7px" onclick="vaultEdit(${i})" title="Edit">✏</button>
+      <button class="btn d" style="font-size:10px;padding:2px 7px" onclick="delVE(${i})" title="Delete">✕</button>
+    </div>
+    ${e.username?`<div class="ve2-row">
+      <span class="ve2-label">User</span>
+      <span class="ve2-val">${escH(e.username)}</span>
+      <button class="ve2-copybtn" onclick="vCopy(${i},'username','User')">Copy</button>
+    </div>`:''}
+    <div class="ve2-row">
+      <span class="ve2-label">Password</span>
+      <span class="ve2-val masked" id="vepw-${i}">••••••••</span>
+      <button class="ve2-copybtn" onclick="toggleVPw(${i})" id="vpwtgl-${i}">👁</button>
+      <button class="ve2-copybtn" onclick="vCopy(${i},'password','Password')">Copy</button>
+    </div>
+    ${e.notes?`<div class="ve2-row"><span class="ve2-label">Notes</span><span class="ve2-val" style="color:var(--muted);font-family:var(--ui)">${escH(e.notes)}</span></div>`:''}
+    ${e.url?`<div class="ve2-foot"><span class="ve2-url" onclick="window.open(${JSON.stringify(e.url)},'_blank')">🔗 ${escH(e.url)}</span></div>`:''}
+  </div>`;
+}
+
+function escH(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+
+function refreshVaultList() {
+  document.querySelectorAll('.view-vault').forEach(el => {
+    const ve = el.querySelector('#ventries'); if (!ve) return;
+    const q   = (S._vaultQ||'').toLowerCase();
+    const cat = S._vaultCat||'All';
+    const entries = S.vaultData?.entries||[];
+    const shown = entries.map((e,i)=>({...e,_i:i})).filter(e=>{
+      if (cat!=='All'&&(e.category||'Other')!==cat) return false;
+      if (q&&!`${e.title}${e.username}${e.url}${e.notes}`.toLowerCase().includes(q)) return false;
+      return true;
+    });
+    ve.innerHTML = shown.length ? shown.map(e=>vaultEntryHTML(e,e._i)).join('')
+      : `<div style="text-align:center;color:var(--muted);padding:28px 0;font-size:12px">${entries.length?'🔍 No entries match':'🗂 No entries yet'}</div>`;
+  });
+}
+
+function initVault() {}
+
 async function vaultUnlock() {
-  const mp=document.getElementById('vmp')?.value; if(!mp) return;
-  const err=document.getElementById('verr'); err.textContent='';
+  const mp = document.getElementById('vmp')?.value; if (!mp) return;
+  const err = document.getElementById('verr'); err.textContent = '';
   try {
-    const r=await fetch(API+'/api/vault'); const d=await r.json();
-    if(!d.blob){err.textContent='No vault found. Click "New Vault".';return;}
-    S.vaultData=await vDec(d.blob,mp); S.vaultMP=mp;
-    document.querySelectorAll('.view-vault').forEach(el=>{el.innerHTML=vaultBodyHTML();});
-  } catch { if(err) err.textContent='Wrong password or vault corrupted.'; }
+    const r = await fetch(API+'/api/vault'); const d = await r.json();
+    if (!d.blob) { err.textContent = 'No vault found — click "New Vault".'; return; }
+    S.vaultData = await vDec(d.blob, mp); S.vaultMP = mp;
+    document.querySelectorAll('.view-vault').forEach(el => el.innerHTML = vaultBodyHTML());
+  } catch { err.textContent = 'Wrong password or corrupted vault.'; }
 }
+
 async function vaultSetup() {
-  const mp=document.getElementById('vmp')?.value;
-  if(!mp||mp.length<6){const err=document.getElementById('verr');if(err)err.textContent='Password must be 6+ characters.';return;}
-  S.vaultData={entries:[]}; S.vaultMP=mp; await saveVault();
-  document.querySelectorAll('.view-vault').forEach(el=>{el.innerHTML=vaultBodyHTML();});
+  const mp = document.getElementById('vmp')?.value;
+  const err = document.getElementById('verr');
+  if (!mp || mp.length < 6) { err.textContent='Password must be 6+ characters.'; return; }
+  S.vaultData = {entries:[]}; S.vaultMP = mp; await saveVault();
+  document.querySelectorAll('.view-vault').forEach(el => el.innerHTML = vaultBodyHTML());
 }
-function vaultLock() { S.vaultData=null; S.vaultMP=null; document.querySelectorAll('.view-vault').forEach(el=>{el.innerHTML=vaultHTML();}); }
+
+function vaultLock() {
+  S.vaultData = null; S.vaultMP = null; S._vaultQ = ''; S._vaultCat = 'All';
+  document.querySelectorAll('.view-vault').forEach(el => el.innerHTML = vaultHTML());
+}
+
 async function saveVault() {
-  const blob=await vEnc(S.vaultData,S.vaultMP);
+  const blob = await vEnc(S.vaultData, S.vaultMP);
   try { await fetch(API+'/api/vault',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({blob})}); }
-  catch { localStorage.setItem('vault_backup',blob); }
+  catch { localStorage.setItem('vault_backup', blob); }
 }
-function toggleVPw(i) { const el=document.getElementById('vepw-'+i); const s=el.classList.toggle('show'); el.textContent=s?(S.vaultData.entries[i].password||'—'):'••••••••'; }
-async function delVE(i) { if(!confirm('Delete?'))return; S.vaultData.entries.splice(i,1); await saveVault(); document.querySelectorAll('.view-vault').forEach(el=>{el.innerHTML=vaultBodyHTML();}); }
-function vaultAdd() { const t=prompt('Title:');if(!t)return;const u=prompt('Username:')||'';const p=prompt('Password:')||'';const url=prompt('URL (optional):')||'';S.vaultData.entries.push({title:t,username:u,password:p,url});saveVault();document.querySelectorAll('.view-vault').forEach(el=>{el.innerHTML=vaultBodyHTML();}); }
+
+function toggleVPw(i) {
+  const el = document.getElementById('vepw-'+i); if (!el) return;
+  if (el.classList.contains('masked')) {
+    el.textContent = S.vaultData.entries[i]?.password || '—';
+    el.classList.remove('masked');
+  } else {
+    el.textContent = '••••••••';
+    el.classList.add('masked');
+  }
+}
+
+function vCopy(i, field, label) {
+  const val = S.vaultData?.entries[i]?.[field] || '';
+  navigator.clipboard.writeText(val).then(() => showToast(label + ' copied ✓'));
+}
+
+async function delVE(i) {
+  if (!confirm(`Delete "${S.vaultData.entries[i]?.title}"?`)) return;
+  S.vaultData.entries.splice(i,1); await saveVault();
+  document.querySelectorAll('.view-vault').forEach(el => el.innerHTML = vaultBodyHTML());
+}
+
+function vaultAdd() { openVaultModal(-1); }
+
+function vaultEdit(i) {
+  const e = S.vaultData?.entries[i]; if (!e) return;
+  document.getElementById('vm-title-txt').textContent = 'Edit Entry';
+  document.getElementById('vm-ttl').value   = e.title    || '';
+  document.getElementById('vm-usr').value   = e.username || '';
+  document.getElementById('vm-pw').value    = e.password || '';
+  document.getElementById('vm-url').value   = e.url      || '';
+  document.getElementById('vm-notes').value = e.notes    || '';
+  document.getElementById('vm-cat').value   = e.category || 'Other';
+  document.getElementById('vm-idx').value   = i;
+  document.getElementById('vault-modal').classList.add('show');
+}
+
+function openVaultModal(idx) {
+  document.getElementById('vm-title-txt').textContent = 'New Entry';
+  ['vm-ttl','vm-usr','vm-pw','vm-url','vm-notes'].forEach(id => { const el=document.getElementById(id); if(el) el.value=''; });
+  document.getElementById('vm-cat').value = 'Server';
+  document.getElementById('vm-idx').value = idx ?? -1;
+  document.getElementById('vault-modal').classList.add('show');
+  setTimeout(() => document.getElementById('vm-ttl')?.focus(), 60);
+}
+
+function closeVaultModal() { document.getElementById('vault-modal').classList.remove('show'); }
+
+async function vaultSaveEntry() {
+  const entry = {
+    title:    document.getElementById('vm-ttl').value.trim(),
+    username: document.getElementById('vm-usr').value.trim(),
+    password: document.getElementById('vm-pw').value,
+    url:      document.getElementById('vm-url').value.trim(),
+    notes:    document.getElementById('vm-notes').value.trim(),
+    category: document.getElementById('vm-cat').value,
+  };
+  if (!entry.title) { document.getElementById('vm-ttl').focus(); return; }
+  if (!S.vaultData) S.vaultData = {entries:[]};
+  const idx = parseInt(document.getElementById('vm-idx').value);
+  if (idx >= 0) S.vaultData.entries[idx] = entry;
+  else S.vaultData.entries.push(entry);
+  await saveVault(); closeVaultModal();
+  document.querySelectorAll('.view-vault').forEach(el => el.innerHTML = vaultBodyHTML());
+}
+
+function vaultGenPw() {
+  const chars = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!@#$%^&*-_';
+  const pw = Array.from(crypto.getRandomValues(new Uint8Array(20)))
+    .map(b => chars[b % chars.length]).join('');
+  const el = document.getElementById('vm-pw');
+  if (el) { el.value = pw; el.type = 'text'; }
+  showToast('Strong password generated ⚡');
+}
+
 async function vEnc(data,pw){const salt=crypto.getRandomValues(new Uint8Array(16)),iv=crypto.getRandomValues(new Uint8Array(12));const k=await vKey(pw,salt);const ct=await crypto.subtle.encrypt({name:'AES-GCM',iv},k,new TextEncoder().encode(JSON.stringify(data)));const o=new Uint8Array(28+ct.byteLength);o.set(salt,0);o.set(iv,16);o.set(new Uint8Array(ct),28);return btoa(String.fromCharCode(...o));}
 async function vDec(blob,pw){const r=Uint8Array.from(atob(blob),c=>c.charCodeAt(0));const k=await vKey(pw,r.slice(0,16));const d=await crypto.subtle.decrypt({name:'AES-GCM',iv:r.slice(16,28)},k,r.slice(28));return JSON.parse(new TextDecoder().decode(d));}
 async function vKey(pw,salt){const m=await crypto.subtle.importKey('raw',new TextEncoder().encode(pw),'PBKDF2',false,['deriveKey']);return crypto.subtle.deriveKey({name:'PBKDF2',salt,iterations:200000,hash:'SHA-256'},m,{name:'AES-GCM',length:256},false,['encrypt','decrypt']);}
+
+// ── HUB UPDATE ────────────────────────────────────────────────────────────────
+async function runHubUpdate() {
+  const btn = document.getElementById('hub-update-btn');
+  const out = document.getElementById('hub-update-out');
+  btn.disabled = true; btn.textContent = '⏳ Pulling…';
+  out.style.display = 'block'; out.textContent = '→ Pulling from GitHub…\n';
+  const pull = await apiRun('cd ~/hub && git pull origin master 2>&1', 60);
+  out.textContent += (pull.output || pull.error || '(no output)') + '\n';
+  out.textContent += '→ Copying files…\n';
+  await apiRun('cp ~/hub/hub/server.py ~/hub/server.py && cp ~/hub/hub/app.html ~/hub/app.html && cp ~/hub/hub/mobile.html ~/hub/mobile.html 2>&1', 10);
+  out.textContent += '→ Restarting hub service…\n';
+  try { await apiRun('systemctl --user restart hub', 5); } catch {}
+  out.textContent += '✓ Done — reloading in 3s…';
+  btn.textContent = '⬆ Pull Latest & Restart';
+  btn.disabled = false;
+  setTimeout(() => window.location.reload(), 3000);
+}
 
 // ── ISSUES ────────────────────────────────────────────────────────────────────
 async function renderIssues(elId) {
