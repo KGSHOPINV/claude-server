@@ -19,6 +19,9 @@
 | Vault UX overhaul | Full modal UI — category pills, search, copy buttons, password generator, no more `prompt()` |
 | Update Hub button | `⬆ Pull Latest & Restart` in Settings → runs git pull + service restart |
 | Quick-ref print card | `manual/quick-ref.html` — one-page A4 with all IPs, ports, URLs, CLI tools, runbooks |
+| Hub Survey view | 🔍 Survey in nav — one-click full health report: containers, disk, RAM, load, maintenance |
+| Alert system → ntfy | `hub-alert.timer` every 15 min — state-change alerts only (down + recovery). `hub-daily.timer` 7am morning brief |
+| n8n Disk Alert workflow | Imported + activated — checks disk via Netdata every 2h, ntfy alert at 72%/85% |
 
 ---
 
@@ -27,7 +30,7 @@
 | Task | Notes |
 |------|-------|
 | **Service tokens** | Named long-lived tokens with role scope — separate AI/n8n identity from human TOTP sessions |
-| **n8n health alert → ntfy** | n8n workflow that pings ntfy when any monitored service goes down |
+| **Uptime Kuma → ntfy** | Add ntfy notification channel in Uptime Kuma UI (Settings → Notifications → ntfy) |
 | **Wire AI key into setup** | Install script prompts for API key, stores in `hub_config` — AI chat works out of the box |
 | **Vaultwarden** | Self-hosted Bitwarden on port 8083 — browser extension + mobile app password manager |
 

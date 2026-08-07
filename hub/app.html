@@ -614,6 +614,45 @@ body.desk-mode #desk-exit { display:flex; align-items:center; gap:6px; }
 .guide-netlify-info { flex:1; }
 .guide-netlify-title { font-size:13px; font-weight:600; }
 .guide-netlify-url { font-size:11px; color:var(--accent); font-family:var(--mono); }
+
+/* ── SURVEY VIEW ────────────────────────────────────────────────── */
+.view-survey { padding:12px 14px; overflow-y:auto; height:100%; }
+.sv-hdr { display:flex; align-items:center; justify-content:space-between; margin-bottom:14px; padding-bottom:10px; border-bottom:1px solid var(--border); }
+.sv-hdr-title { font-weight:700; font-size:13px; display:flex; align-items:center; gap:7px; }
+.sv-empty { color:var(--muted); font-size:11px; padding:40px 0; text-align:center; }
+.sv-loading { color:var(--muted); font-size:11px; padding:20px 0; display:flex; align-items:center; gap:8px; }
+.sv-status-bar { display:flex; align-items:center; padding:9px 13px; border-radius:7px; margin-bottom:14px; font-size:12px; font-weight:600; gap:7px; }
+.sv-status-bar.good { background:var(--gdim); color:var(--green); border:1px solid rgba(63,185,80,.2); }
+.sv-status-bar.warn { background:var(--ydim); color:var(--yellow); border:1px solid rgba(210,153,34,.2); }
+.sv-status-bar.crit { background:var(--rdim); color:var(--red); border:1px solid rgba(248,81,73,.2); }
+.sv-row3 { display:grid; grid-template-columns:1fr 1fr 1fr; gap:8px; margin-bottom:14px; }
+.sv-stat { background:var(--panel); border:1px solid var(--border); border-radius:7px; padding:11px 13px; }
+.sv-stat-label { font-size:9px; text-transform:uppercase; letter-spacing:.5px; color:var(--muted); margin-bottom:5px; }
+.sv-stat-val { font-size:18px; font-weight:700; font-family:var(--mono); margin-bottom:7px; }
+.sv-stat-val.ok { color:var(--green); }
+.sv-stat-val.warn { color:var(--yellow); }
+.sv-stat-val.crit { color:var(--red); }
+.sv-stat-sub { font-size:9px; color:var(--muted); margin-top:4px; }
+.sv-bar { height:4px; background:var(--border2); border-radius:2px; overflow:hidden; margin-bottom:3px; }
+.sv-bar-fill { height:100%; border-radius:2px; transition:width .6s ease; }
+.sv-bar-fill.green { background:var(--green); }
+.sv-bar-fill.yellow { background:var(--yellow); }
+.sv-bar-fill.red { background:var(--red); }
+.sv-sec-label { font-size:9px; text-transform:uppercase; letter-spacing:.5px; color:var(--muted); margin:14px 0 7px; }
+.sv-ctr-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(152px,1fr)); gap:4px; margin-bottom:12px; }
+.sv-ctr { display:flex; align-items:center; gap:7px; padding:5px 9px; border-radius:5px; border:1px solid var(--border); background:var(--panel); font-size:11px; transition:border-color var(--t); }
+.sv-ctr:hover { border-color:var(--border2); }
+.sv-ctr.up .sv-cdot { background:var(--green); box-shadow:0 0 5px var(--green); }
+.sv-ctr.down { border-color:var(--red); }
+.sv-ctr.down .sv-cdot { background:var(--red); }
+.sv-cdot { width:6px; height:6px; border-radius:50%; flex-shrink:0; }
+.sv-cname { flex:1; font-weight:600; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.sv-cage { font-size:9px; color:var(--muted); flex-shrink:0; }
+.sv-maint { font-size:10px; font-family:var(--mono); color:var(--muted); background:var(--panel); border:1px solid var(--border); border-radius:5px; padding:8px 11px; line-height:1.6; }
+.sv-alerts { margin-top:12px; }
+.sv-alert { display:flex; align-items:flex-start; gap:8px; padding:7px 10px; border-radius:5px; margin-bottom:5px; font-size:11px; }
+.sv-alert.warn { background:var(--ydim); border:1px solid rgba(210,153,34,.2); color:var(--yellow); }
+.sv-alert.crit { background:var(--rdim); border:1px solid rgba(248,81,73,.2); color:var(--red); }
 </style>
 <link rel="manifest" href="/manifest.json">
 <meta name="theme-color" content="#58a6ff">
@@ -1071,6 +1110,7 @@ const CATEGORIES = {
     title: 'Server',
     sections: [
       { label:'Views', items:[
+        {icon:'🔍', label:'Survey',       action:()=>openView('survey')},
         {icon:'⊞', label:'Dashboard',   action:()=>openView('dashboard')},
         {icon:'🗺', label:'Infra Map',   action:()=>openView('map')},
         {icon:'⚑', label:'Issues',      action:()=>openView('issues')},
@@ -1632,6 +1672,20 @@ function mountPaneContent(wsId, paneId, viewType, viewConfig, body) {
       </div>`;
       if (viewConfig.url) loadBrowser(key);
       break;
+    case 'survey':
+      body.innerHTML = `<div class="view-survey">
+        <div class="sv-hdr">
+          <div class="sv-hdr-title">🔍 Server Survey</div>
+          <div style="display:flex;gap:8px;align-items:center">
+            <span id="sv-ts-${key}" style="font-size:10px;color:var(--muted)"></span>
+            <button class="btn p" id="sv-btn-${key}" onclick="runSurvey('${key}')">Run Survey</button>
+          </div>
+        </div>
+        <div id="sv-body-${key}"><div class="sv-empty">Click <strong>Run Survey</strong> to check everything at once</div></div>
+      </div>`;
+      setTimeout(() => runSurvey(key), 200);
+      break;
+
     case 'settings':
       body.innerHTML = `<div class="view-settings">
         <div class="vs-section">
@@ -2404,6 +2458,122 @@ async function runHubUpdate() {
   btn.textContent = '⬆ Pull Latest & Restart';
   btn.disabled = false;
   setTimeout(() => window.location.reload(), 3000);
+}
+
+// ── SURVEY ────────────────────────────────────────────────────────────────────
+async function runSurvey(key) {
+  const btn = document.getElementById(`sv-btn-${key}`);
+  const body = document.getElementById(`sv-body-${key}`);
+  const ts   = document.getElementById(`sv-ts-${key}`);
+  if (!btn || !body) return;
+  btn.disabled = true; btn.textContent = '…';
+  body.innerHTML = '<div class="sv-loading">⏳ Running checks…</div>';
+
+  const [ctrs, disk, mem, load, maint, hub] = await Promise.all([
+    apiRun("docker ps --format '{{.Names}}|{{.Status}}|{{.RunningFor}}'", 15),
+    apiRun("df -h / | tail -1", 5),
+    apiRun("free -h | grep ^Mem", 5),
+    apiRun("uptime", 5),
+    apiRun("journalctl --user -u hub-maintenance.service --since '72 hours ago' --no-pager -q 2>/dev/null | grep -i 'finished\\|completed\\|error\\|start' | tail -3 || echo 'No recent run found'", 10),
+    apiRun("systemctl --user status hub --no-pager | head -3", 5),
+  ]);
+
+  btn.disabled = false; btn.textContent = '↻ Refresh';
+  ts.textContent = 'Last checked ' + new Date().toLocaleTimeString();
+
+  // Parse containers
+  const containers = (ctrs.output||'').trim().split('\n').filter(Boolean).map(line => {
+    const parts = line.split('|');
+    const name   = parts[0]||'?';
+    const status = parts[1]||'';
+    const ago    = parts[2]||'';
+    const up     = status.toLowerCase().startsWith('up');
+    const healthy = status.toLowerCase().includes('healthy');
+    return { name, status, ago, up, healthy };
+  });
+  const nUp   = containers.filter(c => c.up).length;
+  const nDown = containers.filter(c => !c.up).length;
+
+  // Parse disk  /dev/xxx  SIZE  USED  AVAIL  PCT%  /
+  const dp = (disk.output||'').trim().split(/\s+/);
+  const diskSize = dp[1]||'?'; const diskUsed = dp[2]||'?';
+  const diskPct  = parseInt(dp[4])||0;
+
+  // Parse memory
+  const mp = (mem.output||'').trim().split(/\s+/);
+  const memTotal = mp[1]||'?'; const memUsed = mp[2]||'?'; const memFree = mp[3]||'?'; const memAvail = mp[6]||memFree;
+  const memUsedGB = parseFloat(memUsed)||0; const memTotalGB = parseFloat(memTotal)||1;
+  const memPct = Math.round((memUsedGB / memTotalGB) * 100);
+
+  // Parse load
+  const lm = (load.output||'').match(/load average:\s*([\d.]+)/);
+  const loadVal  = lm ? parseFloat(lm[1]) : 0;
+  const loadPct  = Math.round((loadVal / 24) * 100); // 24 cores
+
+  // Alerts
+  const alerts = [];
+  if (nDown > 0)      alerts.push({ level:'crit', msg: `${nDown} container${nDown>1?'s':''} not running: ${containers.filter(c=>!c.up).map(c=>c.name).join(', ')}` });
+  if (diskPct >= 85)  alerts.push({ level:'crit', msg: `Disk at ${diskPct}% — clean up soon (docker system prune -f)` });
+  if (diskPct >= 70 && diskPct < 85) alerts.push({ level:'warn', msg: `Disk at ${diskPct}% — getting full (${diskUsed} of ${diskSize})` });
+  if (loadPct >= 80)  alerts.push({ level:'warn', msg: `High CPU load: ${loadVal.toFixed(2)} avg (${loadPct}% of 24 cores)` });
+
+  const overall = nDown > 0 || diskPct >= 85 ? 'crit' : alerts.length > 0 ? 'warn' : 'good';
+  const statusIcon  = {good:'✅', warn:'⚠️', crit:'🔴'}[overall];
+  const statusLabel = {good:'All systems healthy', warn:'Minor issues', crit:'Action needed'}[overall];
+
+  const diskColor  = diskPct >= 85 ? 'red' : diskPct >= 70 ? 'yellow' : 'green';
+  const diskClass  = diskPct >= 85 ? 'crit' : diskPct >= 70 ? 'warn' : 'ok';
+  const loadColor  = loadPct >= 80 ? 'yellow' : 'green';
+  const loadClass  = loadPct >= 80 ? 'warn' : 'ok';
+
+  body.innerHTML = `
+    <div class="sv-status-bar ${overall}">
+      <span>${statusIcon} ${statusLabel}</span>
+      <span style="margin-left:auto;font-size:10px;font-weight:400">${containers.length} containers · checked ${new Date().toLocaleTimeString()}</span>
+    </div>
+
+    <div class="sv-row3">
+      <div class="sv-stat">
+        <div class="sv-stat-label">💿 Disk</div>
+        <div class="sv-stat-val ${diskClass}">${diskPct}%</div>
+        <div class="sv-bar"><div class="sv-bar-fill ${diskColor}" style="width:${diskPct}%"></div></div>
+        <div class="sv-stat-sub">${diskUsed} used · ${diskSize} total</div>
+      </div>
+      <div class="sv-stat">
+        <div class="sv-stat-label">🧠 Memory</div>
+        <div class="sv-stat-val ok">${memUsed}</div>
+        <div class="sv-bar"><div class="sv-bar-fill green" style="width:${Math.min(memPct,100)}%"></div></div>
+        <div class="sv-stat-sub">${memAvail} free · ${memTotal} total</div>
+      </div>
+      <div class="sv-stat">
+        <div class="sv-stat-label">⚡ CPU Load <span style="font-weight:400;font-size:8px">(24 cores)</span></div>
+        <div class="sv-stat-val ${loadClass}">${loadVal.toFixed(2)}</div>
+        <div class="sv-bar"><div class="sv-bar-fill ${loadColor}" style="width:${Math.min(loadPct,100)}%"></div></div>
+        <div class="sv-stat-sub">${loadPct}% capacity · 15-min avg</div>
+      </div>
+    </div>
+
+    ${alerts.length ? `
+    <div class="sv-alerts">
+      ${alerts.map(a => `<div class="sv-alert ${a.level}">⚠ ${escH(a.msg)}</div>`).join('')}
+    </div>` : ''}
+
+    <div class="sv-sec-label">Containers — ${nUp}/${containers.length} up</div>
+    <div class="sv-ctr-grid">
+      ${containers.length ? containers.map(c => `
+        <div class="sv-ctr ${c.up?'up':'down'}" title="${escH(c.status)}">
+          <span class="sv-cdot"></span>
+          <span class="sv-cname">${escH(c.name)}</span>
+          <span class="sv-cage">${escH(c.ago.replace(' ago',''))}</span>
+        </div>`).join('') : '<div style="color:var(--muted);font-size:11px">No containers found</div>'}
+    </div>
+
+    <div class="sv-sec-label">Hub Service</div>
+    <div class="sv-maint">${escH((hub.output||'hub not responding').trim())}</div>
+
+    <div class="sv-sec-label">Maintenance (last 72h)</div>
+    <div class="sv-maint">${escH((maint.output||'No recent maintenance run found').trim())}</div>
+  `;
 }
 
 // ── ISSUES ────────────────────────────────────────────────────────────────────
