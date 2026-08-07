@@ -615,6 +615,22 @@ body.desk-mode #desk-exit { display:flex; align-items:center; gap:6px; }
 .guide-netlify-title { font-size:13px; font-weight:600; }
 .guide-netlify-url { font-size:11px; color:var(--accent); font-family:var(--mono); }
 
+/* ── SETTINGS v2 ────────────────────────────────────────────────── */
+.view-settings-v2 { display:flex; height:100%; overflow:hidden; }
+.cfg-nav { width:136px; border-right:1px solid var(--border); padding:8px 0 8px; flex-shrink:0; overflow-y:auto; }
+.cfg-nav-item { display:flex; align-items:center; gap:8px; padding:7px 10px; font-size:12px; cursor:pointer; color:var(--muted); border-radius:var(--r); margin:1px 5px; transition:all var(--t); white-space:nowrap; }
+.cfg-nav-item:hover { background:var(--panel2); color:var(--text); }
+.cfg-nav-item.active { background:var(--acdim); color:var(--accent); font-weight:600; }
+.cfg-nav-sep { height:1px; background:var(--border); margin:5px 10px; }
+.cfg-body { flex:1; overflow-y:auto; padding:14px 18px; }
+.cfg-heading { font-size:14px; font-weight:700; margin-bottom:14px; color:var(--text); }
+.cfg-tabs { display:flex; gap:0; margin-bottom:16px; border-bottom:1px solid var(--border); }
+.cfg-tab { padding:6px 14px; font-size:11px; cursor:pointer; color:var(--muted); border-bottom:2px solid transparent; margin-bottom:-1px; transition:all var(--t); }
+.cfg-tab:hover { color:var(--text); }
+.cfg-tab.active { color:var(--accent); border-bottom-color:var(--accent); font-weight:600; }
+.cfg-tab-pane { }
+.cfg-tab-pane.hidden { display:none; }
+
 /* ── SURVEY VIEW ────────────────────────────────────────────────── */
 .view-survey { padding:12px 14px; overflow-y:auto; height:100%; }
 .sv-hdr { display:flex; align-items:center; justify-content:space-between; margin-bottom:14px; padding-bottom:10px; border-bottom:1px solid var(--border); }
@@ -1306,11 +1322,31 @@ function createWorkspace({ title, icon='⊞', pinned=false, viewType='dashboard'
 }
 
 function openView(viewType, config={}) {
-  // Reuse existing workspace with this view, or create new
-  const existing = S.workspaces.find(ws => ws.panes.some(p=>p.viewType===viewType && !ws.panes.some(p=>p.viewType==='iframe')));
+  const titles = { dashboard:'Dashboard', terminal:'Terminal', logs:'Logs', docs:'Docs', map:'Infra Map', vault:'Vault', issues:'Issues', network:'Network', chat:'AI Chat', settings:'Settings', storage:'Storage', files:'Files', journal:'Journal', survey:'Survey', guide:'Guide', tasks:'Task Docket', runbooks:'Runbooks', browser:'Browser' };
+  const icons  = { dashboard:'⊞', terminal:'⌨', logs:'📋', docs:'📚', map:'🗺', vault:'🔐', issues:'⚑', network:'🌐', chat:'🤖', settings:'⚙', storage:'💾', files:'📁', journal:'📓', survey:'🔍', guide:'🏠', tasks:'📋', runbooks:'▶', browser:'🌐' };
+
+  // Already open somewhere? → switch to that tab (dedup)
+  const existing = S.workspaces.find(ws => ws.panes.some(p => p.viewType === viewType));
   if (existing) { activateWorkspace(existing.id); return; }
-  const titles = { dashboard:'Dashboard', terminal:'Terminal', logs:'Logs', docs:'Docs', map:'Infra Map', vault:'Vault', issues:'Issues', network:'Network', chat:'AI Chat', settings:'Settings', storage:'Storage', files:'Files', journal:'Journal' };
-  const icons  = { dashboard:'⊞', terminal:'⌨', logs:'📋', docs:'📚', map:'🗺', vault:'🔐', issues:'⚑', network:'🌐', chat:'🤖', settings:'⚙', storage:'💾', files:'📁', journal:'📓' };
+
+  // Active workspace exists and isn't pinned? → load in current tab (Chrome behaviour)
+  const activeWs = S.workspaces.find(w => w.id === S.activeWs);
+  if (activeWs && !activeWs.pinned) {
+    const pane = activeWs.panes[0];
+    if (pane) {
+      pane.viewType   = viewType;
+      pane.viewConfig = config;
+      activeWs.title  = titles[viewType] || viewType;
+      activeWs.icon   = icons[viewType]  || '⊞';
+      // Update the ws-bar tab label
+      const tabLabel = document.querySelector(`.ws-tab[data-ws="${activeWs.id}"] .ws-tab-label`);
+      if (tabLabel) tabLabel.textContent = (icons[viewType]||'') + ' ' + (titles[viewType]||viewType);
+      reRenderWorkspace(activeWs.id);
+      return;
+    }
+  }
+
+  // No tab open yet → create the first one
   createWorkspace({ title: titles[viewType]||viewType, icon: icons[viewType]||'⊞', viewType, viewConfig: config });
 }
 
@@ -1687,81 +1723,20 @@ function mountPaneContent(wsId, paneId, viewType, viewConfig, body) {
       break;
 
     case 'settings':
-      body.innerHTML = `<div class="view-settings">
-        <div class="vs-section">
-          <div class="vs-hdr">Appearance</div>
-          <div class="vs-row"><label>Theme</label>
-            <select id="cfg-theme" onchange="applyTheme(this.value)">
-              <option value="dark">Dark</option><option value="light">Light</option>
-            </select>
-          </div>
-          <div class="vs-row"><label>Accent color</label>
-            <div style="display:flex;gap:6px">
-              ${['#39d0c4','#58a6ff','#d29922','#f85149','#3fb950','#a371f7'].map(c=>`<div class="accent-swatch" style="background:${c}" onclick="setAccent('${c}')" title="${c}"></div>`).join('')}
-            </div>
-          </div>
+      body.innerHTML = `<div class="view-settings-v2">
+        <div class="cfg-nav">
+          <div class="cfg-nav-item active" data-cfg="appearance" onclick="setCfgSection('appearance')">🎨 Appearance</div>
+          <div class="cfg-nav-item" data-cfg="connection" onclick="setCfgSection('connection')">🔌 Connection</div>
+          <div class="cfg-nav-sep"></div>
+          <div class="cfg-nav-item" data-cfg="users" onclick="setCfgSection('users')">👤 Users</div>
+          <div class="cfg-nav-item" data-cfg="ai" onclick="setCfgSection('ai')">🤖 AI</div>
+          <div class="cfg-nav-sep"></div>
+          <div class="cfg-nav-item" data-cfg="security" onclick="setCfgSection('security')">🔐 Security</div>
+          <div class="cfg-nav-item" data-cfg="system" onclick="setCfgSection('system')">⚙ System</div>
         </div>
-        <div class="vs-section">
-          <div class="vs-hdr">Connection</div>
-          <div class="vs-row"><label>Local IP</label><input id="cfg-local-ip" class="vs-inp" value="${SRV}" placeholder="192.168.1.229"></div>
-          <div class="vs-row"><label>Tailscale IP</label><input id="cfg-ts-ip" class="vs-inp" placeholder="100.75.1.105"></div>
-          <div class="vs-row"><label>SSH User</label><input id="cfg-ssh-user" class="vs-inp" value="admin1" placeholder="admin1"></div>
-          <div class="vs-row"><label>Server Port</label><input id="cfg-port" class="vs-inp" value="8765" placeholder="8765"></div>
-          <button class="btn p" style="margin-top:4px" onclick="saveSettings()">Save Connection</button>
-        </div>
-        <div class="vs-section">
-          <div class="vs-hdr">Users</div>
-          <div id="users-list" style="margin-bottom:8px"></div>
-          <div style="display:flex;gap:6px">
-            <input id="new-usr" class="vs-inp" placeholder="Username" style="width:110px">
-            <input id="new-pw" class="vs-inp" type="password" placeholder="Password" style="width:110px">
-            <button class="btn p" onclick="addUser()">Add User</button>
-          </div>
-        </div>
-        <div class="vs-section">
-          <div class="vs-hdr">AI Assistant</div>
-          <div class="vs-row"><label>Provider</label>
-            <select id="ai-provider" class="vs-inp" style="width:130px">
-              <option value="claude">Claude (Anthropic)</option>
-              <option value="openai">OpenAI (GPT-4o)</option>
-              <option value="gemini">Gemini (Google)</option>
-            </select>
-          </div>
-          <div class="vs-row"><label>API Key</label>
-            <input id="ai-key" class="vs-inp" type="password" placeholder="sk-ant-... / sk-... / AIza..." style="flex:1">
-          </div>
-          <div style="display:flex;gap:6px;margin-top:4px">
-            <button class="btn p" onclick="saveAIConfig()">Save AI Key</button>
-            <button class="btn" onclick="testAIChat()">Test</button>
-          </div>
-          <div id="ai-test-result" style="font-size:11px;color:var(--muted);margin-top:6px"></div>
-        </div>
-        <div class="vs-section">
-          <div class="vs-hdr">System Snapshot</div>
-          <div class="vs-row" style="flex-direction:column;align-items:flex-start;gap:6px">
-            <div style="font-size:11px;color:var(--muted)">Download a full JSON snapshot of all services, containers, health, and server info.</div>
-            <button class="btn p" onclick="downloadManifest()">📦 Download System Snapshot</button>
-          </div>
-        </div>
-        <div class="vs-section" id="totp-sec">
-          <div class="vs-hdr">Security Gate (2FA)</div>
-          <div id="totp-status-msg" style="font-size:11px;color:var(--muted);margin-bottom:8px">Checking…</div>
-          <div id="totp-actions"></div>
-        </div>
-        <div class="vs-section">
-          <div class="vs-hdr">Hub Update</div>
-          <div style="font-size:11px;color:var(--muted);margin-bottom:9px">Pull the latest code from GitHub and restart the hub service. The page will reload automatically.</div>
-          <button class="btn p" id="hub-update-btn" onclick="runHubUpdate()">⬆ Pull Latest & Restart</button>
-          <pre id="hub-update-out" style="display:none;margin-top:8px;font-size:10px;max-height:140px;overflow-y:auto;background:var(--bg);padding:9px;border-radius:var(--r);border:1px solid var(--border);color:var(--green);white-space:pre-wrap;word-break:break-all"></pre>
-        </div>
-        <div class="vs-section">
-          <div class="vs-hdr">Danger Zone</div>
-          <button class="btn" style="border-color:var(--red);color:var(--red)" onclick="doLogout()">Sign Out</button>
-        </div>
+        <div class="cfg-body" id="cfg-body"></div>
       </div>`;
-      loadUsersPanel();
-      loadAISettings();
-      loadTOTPStatus();
+      setCfgSection('appearance');
       break;
 
     case 'storage':
@@ -2443,6 +2418,127 @@ async function vDec(blob,pw){const r=Uint8Array.from(atob(blob),c=>c.charCodeAt(
 async function vKey(pw,salt){const m=await crypto.subtle.importKey('raw',new TextEncoder().encode(pw),'PBKDF2',false,['deriveKey']);return crypto.subtle.deriveKey({name:'PBKDF2',salt,iterations:200000,hash:'SHA-256'},m,{name:'AES-GCM',length:256},false,['encrypt','decrypt']);}
 
 // ── HUB UPDATE ────────────────────────────────────────────────────────────────
+// ── SETTINGS v2 ───────────────────────────────────────────────────────────────
+function setCfgSection(section) {
+  document.querySelectorAll('.cfg-nav-item').forEach(el => el.classList.toggle('active', el.dataset.cfg === section));
+  const body = document.getElementById('cfg-body');
+  if (!body) return;
+
+  if (section === 'appearance') {
+    body.innerHTML = `
+      <div class="cfg-heading">Appearance</div>
+      <div class="vs-section">
+        <div class="vs-row"><label>Theme</label>
+          <select id="cfg-theme" onchange="applyTheme(this.value)">
+            <option value="dark">Dark</option><option value="light">Light</option>
+          </select>
+        </div>
+        <div class="vs-row"><label>Accent color</label>
+          <div style="display:flex;gap:7px;flex-wrap:wrap">
+            ${['#39d0c4','#58a6ff','#d29922','#f85149','#3fb950','#a371f7'].map(c=>`<div class="accent-swatch" style="background:${c}" onclick="setAccent('${c}')" title="${c}"></div>`).join('')}
+          </div>
+        </div>
+      </div>`;
+
+  } else if (section === 'connection') {
+    body.innerHTML = `
+      <div class="cfg-heading">Connection</div>
+      <div class="vs-section">
+        <div class="vs-row"><label>Local IP</label><input id="cfg-local-ip" class="vs-inp" value="${SRV}" placeholder="192.168.1.229"></div>
+        <div class="vs-row"><label>Tailscale IP</label><input id="cfg-ts-ip" class="vs-inp" placeholder="100.75.1.105"></div>
+        <div class="vs-row"><label>SSH User</label><input id="cfg-ssh-user" class="vs-inp" value="admin1" placeholder="admin1"></div>
+        <div class="vs-row"><label>Hub Port</label><input id="cfg-port" class="vs-inp" value="8765" placeholder="8765"></div>
+        <button class="btn p" style="margin-top:6px" onclick="saveSettings()">Save Connection</button>
+      </div>`;
+
+  } else if (section === 'users') {
+    body.innerHTML = `
+      <div class="cfg-heading">Users</div>
+      <div class="vs-section">
+        <div id="users-list" style="margin-bottom:10px"></div>
+        <div style="display:flex;gap:6px;flex-wrap:wrap">
+          <input id="new-usr" class="vs-inp" placeholder="Username" style="width:120px">
+          <input id="new-pw"  class="vs-inp" type="password" placeholder="Password" style="width:120px">
+          <button class="btn p" onclick="addUser()">Add User</button>
+        </div>
+      </div>`;
+    loadUsersPanel();
+
+  } else if (section === 'ai') {
+    body.innerHTML = `
+      <div class="cfg-heading">AI Assistant</div>
+      <div class="vs-section">
+        <div class="vs-row"><label>Provider</label>
+          <select id="ai-provider" class="vs-inp" style="width:160px">
+            <option value="claude">Claude (Anthropic)</option>
+            <option value="openai">OpenAI (GPT-4o)</option>
+            <option value="gemini">Gemini (Google)</option>
+          </select>
+        </div>
+        <div class="vs-row"><label>API Key</label>
+          <input id="ai-key" class="vs-inp" type="password" placeholder="sk-ant-… / sk-… / AIza…" style="flex:1">
+        </div>
+        <div style="display:flex;gap:6px;margin-top:6px">
+          <button class="btn p" onclick="saveAIConfig()">Save AI Key</button>
+          <button class="btn" onclick="testAIChat()">Test</button>
+        </div>
+        <div id="ai-test-result" style="font-size:11px;color:var(--muted);margin-top:7px"></div>
+      </div>`;
+    loadAISettings();
+
+  } else if (section === 'security') {
+    body.innerHTML = `
+      <div class="cfg-heading">Security</div>
+      <div class="cfg-tabs">
+        <div class="cfg-tab active" onclick="setCfgTab(this,'totp')">2FA Gate</div>
+        <div class="cfg-tab" onclick="setCfgTab(this,'update')">Hub Update</div>
+      </div>
+      <div id="cfg-tab-totp" class="cfg-tab-pane">
+        <div class="vs-section" id="totp-sec">
+          <div id="totp-status-msg" style="font-size:11px;color:var(--muted);margin-bottom:8px">Checking…</div>
+          <div id="totp-actions"></div>
+        </div>
+      </div>
+      <div id="cfg-tab-update" class="cfg-tab-pane hidden">
+        <div class="vs-section">
+          <div style="font-size:11px;color:var(--muted);margin-bottom:10px">Pull latest code from GitHub and restart the hub. Page reloads automatically.</div>
+          <button class="btn p" id="hub-update-btn" onclick="runHubUpdate()">⬆ Pull Latest & Restart</button>
+          <pre id="hub-update-out" style="display:none;margin-top:8px;font-size:10px;max-height:140px;overflow-y:auto;background:var(--bg);padding:9px;border-radius:var(--r);border:1px solid var(--border);color:var(--green);white-space:pre-wrap;word-break:break-all"></pre>
+        </div>
+      </div>`;
+    loadTOTPStatus();
+
+  } else if (section === 'system') {
+    body.innerHTML = `
+      <div class="cfg-heading">System</div>
+      <div class="cfg-tabs">
+        <div class="cfg-tab active" onclick="setCfgTab(this,'snapshot')">Snapshot</div>
+        <div class="cfg-tab" onclick="setCfgTab(this,'danger')">Danger Zone</div>
+      </div>
+      <div id="cfg-tab-snapshot" class="cfg-tab-pane">
+        <div class="vs-section">
+          <div style="font-size:11px;color:var(--muted);margin-bottom:10px">Download a full JSON snapshot of services, containers, health, and server info.</div>
+          <button class="btn p" onclick="downloadManifest()">📦 Download System Snapshot</button>
+        </div>
+      </div>
+      <div id="cfg-tab-danger" class="cfg-tab-pane hidden">
+        <div class="vs-section">
+          <div style="font-size:11px;color:var(--muted);margin-bottom:10px">Sign out of the hub. You will need to log in again.</div>
+          <button class="btn" style="border-color:var(--red);color:var(--red)" onclick="doLogout()">Sign Out</button>
+        </div>
+      </div>`;
+  }
+}
+
+function setCfgTab(tabEl, tabId) {
+  tabEl.parentElement.querySelectorAll('.cfg-tab').forEach(t => t.classList.remove('active'));
+  tabEl.classList.add('active');
+  const body = document.getElementById('cfg-body');
+  if (body) body.querySelectorAll('.cfg-tab-pane').forEach(el => el.classList.add('hidden'));
+  const target = document.getElementById('cfg-tab-' + tabId);
+  if (target) target.classList.remove('hidden');
+}
+
 async function runHubUpdate() {
   const btn = document.getElementById('hub-update-btn');
   const out = document.getElementById('hub-update-out');
@@ -2471,7 +2567,7 @@ async function runSurvey(key) {
 
   const [ctrs, disk, mem, load, maint, hub] = await Promise.all([
     apiRun("docker ps --format '{{.Names}}|{{.Status}}|{{.RunningFor}}'", 15),
-    apiRun("df -h / | tail -1", 5),
+    apiRun("df -h -x tmpfs -x devtmpfs -x overlay -x squashfs 2>/dev/null | grep -vE '(loop|udev|boot/efi|/sys/|/proc/|security|pstore|bpf|efivars)' | tail -n +2", 5),
     apiRun("free -h | grep ^Mem", 5),
     apiRun("uptime", 5),
     apiRun("journalctl --user -u hub-maintenance.service --since '72 hours ago' --no-pager -q 2>/dev/null | grep -i 'finished\\|completed\\|error\\|start' | tail -3 || echo 'No recent run found'", 10),
@@ -2494,10 +2590,13 @@ async function runSurvey(key) {
   const nUp   = containers.filter(c => c.up).length;
   const nDown = containers.filter(c => !c.up).length;
 
-  // Parse disk  /dev/xxx  SIZE  USED  AVAIL  PCT%  /
-  const dp = (disk.output||'').trim().split(/\s+/);
-  const diskSize = dp[1]||'?'; const diskUsed = dp[2]||'?';
-  const diskPct  = parseInt(dp[4])||0;
+  // Parse all real disk filesystems (one per line)
+  const diskLines = (disk.output||'').trim().split('\n').filter(Boolean).map(line => {
+    const p = line.trim().split(/\s+/);
+    return { dev:p[0]||'?', size:p[1]||'?', used:p[2]||'?', avail:p[3]||'?', pct:parseInt(p[4])||0, mount:p[5]||'?' };
+  });
+  const maxDiskPct = diskLines.length ? Math.max(...diskLines.map(d=>d.pct)) : 0;
+  const diskPct    = maxDiskPct; // used for alerts threshold
 
   // Parse memory
   const mp = (mem.output||'').trim().split(/\s+/);
@@ -2513,8 +2612,8 @@ async function runSurvey(key) {
   // Alerts
   const alerts = [];
   if (nDown > 0)      alerts.push({ level:'crit', msg: `${nDown} container${nDown>1?'s':''} not running: ${containers.filter(c=>!c.up).map(c=>c.name).join(', ')}` });
-  if (diskPct >= 85)  alerts.push({ level:'crit', msg: `Disk at ${diskPct}% — clean up soon (docker system prune -f)` });
-  if (diskPct >= 70 && diskPct < 85) alerts.push({ level:'warn', msg: `Disk at ${diskPct}% — getting full (${diskUsed} of ${diskSize})` });
+  diskLines.filter(d=>d.pct>=85).forEach(d => alerts.push({ level:'crit', msg: `${d.mount} at ${d.pct}% (${d.used}/${d.size}) — run: docker system prune -f` }));
+  diskLines.filter(d=>d.pct>=70&&d.pct<85).forEach(d => alerts.push({ level:'warn', msg: `${d.mount} at ${d.pct}% (${d.used}/${d.size}) — getting full` }));
   if (loadPct >= 80)  alerts.push({ level:'warn', msg: `High CPU load: ${loadVal.toFixed(2)} avg (${loadPct}% of 24 cores)` });
 
   const overall = nDown > 0 || diskPct >= 85 ? 'crit' : alerts.length > 0 ? 'warn' : 'good';
@@ -2534,11 +2633,19 @@ async function runSurvey(key) {
 
     <div class="sv-row3">
       <div class="sv-stat">
-        <div class="sv-stat-label">💿 Disk</div>
-        <div class="sv-stat-val ${diskClass}">${diskPct}%</div>
-        <div class="sv-bar"><div class="sv-bar-fill ${diskColor}" style="width:${diskPct}%"></div></div>
-        <div class="sv-stat-sub">${diskUsed} used · ${diskSize} total</div>
-      </div>
+        <div class="sv-stat-label">💿 Storage</div>
+        ${diskLines.length ? diskLines.map(d => {
+          const c = d.pct>=85?'red':d.pct>=70?'yellow':'green';
+          const v = d.pct>=85?'crit':d.pct>=70?'warn':'ok';
+          return `<div style="margin-bottom:7px">
+            <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:3px">
+              <span style="font-size:9px;font-family:var(--mono);color:var(--muted)">${escH(d.mount)}</span>
+              <span class="sv-stat-val ${v}" style="font-size:13px;margin:0">${d.pct}%</span>
+            </div>
+            <div class="sv-bar"><div class="sv-bar-fill ${c}" style="width:${d.pct}%"></div></div>
+            <div class="sv-stat-sub" style="margin-top:2px">${escH(d.used)} used · ${escH(d.size)} total</div>
+          </div>`;
+        }).join('') : '<div class="sv-stat-sub">No disk info</div>'}</div>
       <div class="sv-stat">
         <div class="sv-stat-label">🧠 Memory</div>
         <div class="sv-stat-val ok">${memUsed}</div>
@@ -2916,11 +3023,7 @@ function updateContextPanel() {
       ['l1','l2h','l2v','l4'].map((l,i) => {
         const icons = ['▣ Single','⊢ Side-by-side','⊤ Stacked','⊞ 2×2'];
         return `<div class="w-type-item" onclick="setWsLayout('${ws?.id}','${l}')">${icons[i]}</div>`;
-      }).join('') +
-      divider() + secHead('Open in pane') +
-      Object.entries(VIEW_DEFS).filter(([k])=>k!=='blank').map(([k,v]) =>
-        `<div class="w-type-item" style="font-size:11px" onclick="openView('${k}')">${v.icon} ${v.title}</div>`
-      ).join('');
+      }).join('');
   }
 
   if (titleEl) titleEl.textContent = title;
