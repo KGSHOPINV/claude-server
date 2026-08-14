@@ -768,6 +768,101 @@ def gate_check(headers, required_level=3):
         return False
     return True
 
+# ── Tunnel management ─────────────────────────────────────────────────────────
+_tunnel_url    = ''
+_tunnel_lock_t = threading.Lock()
+_tunnel_thread = None
+
+def _tunnel_watcher():
+    """Background thread: poll cloudflared logs to extract the public URL."""
+    global _tunnel_url
+    while True:
+        try:
+            r = subprocess.run(
+                ['docker', 'logs', '--tail', '80', 'cloudflared'],
+                capture_output=True, text=True, timeout=6
+            )
+            m = re.search(r'https://[a-z0-9\-]+\.trycloudflare\.com', r.stdout + r.stderr)
+            with _tunnel_lock_t:
+                _tunnel_url = m.group(0) if m else _tunnel_url
+        except Exception:
+            pass
+        time.sleep(4)
+
+def tunnel_status():
+    try:
+        r = subprocess.run(
+            ['docker', 'inspect', '--format', '{{.State.Status}}', 'cloudflared'],
+            capture_output=True, text=True, timeout=5
+        )
+        running = r.stdout.strip() == 'running'
+    except Exception:
+        running = False
+    with _tunnel_lock_t:
+        url = _tunnel_url if running else ''
+    return {'running': running, 'url': url}
+
+def tunnel_start():
+    global _tunnel_url, _tunnel_thread
+    try:
+        subprocess.run(['docker', 'rm', '-f', 'cloudflared'], capture_output=True, timeout=8)
+        r = subprocess.run(
+            ['docker', 'run', '-d', '--name', 'cloudflared', '--network', 'host',
+             'cloudflare/cloudflared:latest', 'tunnel', '--url', f'http://localhost:{PORT}'],
+            capture_output=True, text=True, timeout=30
+        )
+        if r.returncode == 0:
+            with _tunnel_lock_t:
+                _tunnel_url = ''
+            if _tunnel_thread is None or not _tunnel_thread.is_alive():
+                _tunnel_thread = threading.Thread(target=_tunnel_watcher, daemon=True)
+                _tunnel_thread.start()
+            return True
+        return False
+    except Exception:
+        return False
+
+def tunnel_stop():
+    global _tunnel_url
+    try:
+        subprocess.run(['docker', 'stop', 'cloudflared'], capture_output=True, timeout=15)
+        subprocess.run(['docker', 'rm', 'cloudflared'], capture_output=True, timeout=10)
+        with _tunnel_lock_t:
+            _tunnel_url = ''
+        return True
+    except Exception:
+        return False
+
+def get_access_info():
+    """Return all accessible URLs for this hub."""
+    local_ip = SERVER_IP
+    try:
+        r = subprocess.run(
+            "ip route get 1 2>/dev/null | awk '{print $7}' | head -1",
+            shell=True, capture_output=True, text=True, timeout=5
+        )
+        ip = r.stdout.strip()
+        if ip:
+            local_ip = ip
+    except Exception:
+        pass
+    ts_ip = None
+    try:
+        r = subprocess.run(['tailscale', 'ip', '-4'], capture_output=True, text=True, timeout=5)
+        ts = r.stdout.strip()
+        if ts and ts != 'none':
+            ts_ip = ts
+    except Exception:
+        pass
+    return {
+        'local_ip':       local_ip,
+        'local_url':      f'http://{local_ip}:{PORT}',
+        'tailscale_ip':   ts_ip,
+        'tailscale_url':  f'http://{ts_ip}:{PORT}' if ts_ip else None,
+        'port':           PORT,
+        'tunnel':         tunnel_status(),
+    }
+
 # ── HTTP handler ───────────────────────────────────────────────────────────────
 
 class Handler(http.server.BaseHTTPRequestHandler):
@@ -939,6 +1034,9 @@ class Handler(http.server.BaseHTTPRequestHandler):
 
         elif p == '/api/integrations':
             self.send_json(get_integrations())
+
+        elif p == '/api/access':
+            self.send_json(get_access_info())
 
         elif p == '/api/ai/config':
             self.send_json({
@@ -1150,6 +1248,14 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 return
             result = ssh_run(INSTALLABLE[name], timeout=60)
             self.send_json({'ok': result.get('exitcode',1)==0, 'output': result.get('output',''), 'error': result.get('error','')})
+
+        elif p == '/api/tunnel/start':
+            ok = tunnel_start()
+            self.send_json({'ok': ok})
+
+        elif p == '/api/tunnel/stop':
+            ok = tunnel_stop()
+            self.send_json({'ok': ok})
 
         elif p == '/api/users':
             action = body.get('action','')

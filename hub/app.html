@@ -1245,6 +1245,15 @@ const CATEGORIES = {
       ]},
     ]
   },
+  // ── REMOTE — public access & tunnels ──────────────────────────────────────
+  remote: {
+    title: 'Remote',
+    sections: [
+      { label:'Access', items:[
+        {icon:'🌍', label:'Remote Access', action:()=>openView('remote')},
+      ]},
+    ]
+  },
 };
 
 function setCategory(cat) {
@@ -1842,6 +1851,9 @@ function mountPaneContent(wsId, paneId, viewType, viewConfig, body) {
       break;
     case 'guide':
       renderGuideView(body);
+      break;
+    case 'remote':
+      renderRemoteView(body);
       break;
     case 'tasks':
       renderTasksView(body);
@@ -4452,6 +4464,92 @@ const TASK_DOCKET = [
   { status:'idea',  label:'Tailscale Deep Integration',   desc:'Show Tailscale node map, peer list, and MagicDNS status in the hub Infra Map.', tags:['network'] },
   { status:'idea',  label:'Mobile APK (TWA)',             desc:'Wrap mobile.html as a Trusted Web Activity APK for Android — proper homescreen app.', tags:['mobile'] },
 ];
+
+// ── Remote Access view ────────────────────────────────────────────────────────
+async function renderRemoteView(body) {
+  body.innerHTML = `<div style="padding:24px;max-width:680px;margin:0 auto">
+    <h2 style="font-size:16px;font-weight:600;margin-bottom:20px;color:var(--text)">🌍 Remote Access</h2>
+    <div id="remote-body" style="display:flex;flex-direction:column;gap:14px">
+      <div style="color:var(--muted);font-size:12px">Loading…</div>
+    </div>
+  </div>`;
+  await loadRemoteAccess();
+}
+
+async function loadRemoteAccess() {
+  const el = document.getElementById('remote-body');
+  if (!el) return;
+  let d;
+  try { d = await fetch('/api/access').then(r=>r.json()); }
+  catch(e) { el.innerHTML = `<div style="color:var(--red)">Could not reach server</div>`; return; }
+
+  const row = (icon, label, url, extra='') => url ? `
+    <div style="background:var(--panel);border:1px solid var(--border);border-radius:8px;padding:14px 16px;display:flex;align-items:center;gap:12px">
+      <span style="font-size:20px">${icon}</span>
+      <div style="flex:1;min-width:0">
+        <div style="font-size:11px;color:var(--muted);margin-bottom:2px">${label}</div>
+        <div style="font-size:13px;font-weight:500;color:var(--text);word-break:break-all">${url}</div>
+        ${extra}
+      </div>
+      <button class="btn" onclick="remCopy('${url}')" title="Copy" style="font-size:11px;padding:4px 10px">Copy</button>
+      <a href="${url}" target="_blank" class="btn" style="font-size:11px;padding:4px 10px;text-decoration:none">Open ↗</a>
+    </div>` : '';
+
+  const ts = d.tunnel;
+  const tunnelRow = ts.running
+    ? row('🔗','Public (Cloudflare Tunnel)', ts.url || '…getting URL…',
+        ts.url ? '' : '<div style="font-size:10px;color:var(--muted);margin-top:3px">URL appears in ~15s after starting</div>')
+    + `<div style="margin-top:-8px;padding:0 16px"><button class="btn d" onclick="remoteTunnelStop()" style="font-size:11px">⏹ Stop Tunnel</button></div>`
+    : `<div style="background:var(--panel);border:1px solid var(--border);border-radius:8px;padding:14px 16px;display:flex;align-items:center;gap:12px">
+        <span style="font-size:20px">🔗</span>
+        <div style="flex:1">
+          <div style="font-size:11px;color:var(--muted);margin-bottom:4px">Public (Cloudflare Tunnel)</div>
+          <div style="font-size:12px;color:var(--muted)">Not running — start to get a shareable https:// URL (free, no account needed)</div>
+        </div>
+        <button class="btn" onclick="remoteTunnelStart()" style="font-size:11px;padding:4px 12px">▶ Start</button>
+      </div>`;
+
+  el.innerHTML = `
+    ${row('🏠', 'Local Network', d.local_url)}
+    ${d.tailscale_url ? row('🔐', 'Tailscale (VPN)', d.tailscale_url) : `
+      <div style="background:var(--panel);border:1px solid var(--border);border-radius:8px;padding:14px 16px;display:flex;align-items:center;gap:12px">
+        <span style="font-size:20px">🔐</span>
+        <div style="flex:1"><div style="font-size:11px;color:var(--muted);margin-bottom:2px">Tailscale (VPN)</div>
+        <div style="font-size:12px;color:var(--muted)">Not detected — install Tailscale on this server and your devices</div></div>
+      </div>`}
+    ${tunnelRow}
+    <div style="background:var(--panel2);border:1px solid var(--border);border-radius:8px;padding:14px 16px;margin-top:4px">
+      <div style="font-size:11px;color:var(--muted);margin-bottom:8px;font-weight:600;text-transform:uppercase;letter-spacing:.05em">Quick Share</div>
+      <div style="font-size:12px;color:var(--muted);line-height:1.7">
+        Give <strong style="color:var(--text)">${d.local_url}</strong> to anyone on the same network.<br>
+        ${d.tailscale_url ? `Give <strong style="color:var(--text)">${d.tailscale_url}</strong> to anyone on your Tailscale.<br>` : ''}
+        Start the tunnel above for a public https link you can paste anywhere.
+      </div>
+    </div>
+  `;
+}
+
+async function remoteTunnelStart() {
+  showToast('Starting tunnel… (~20s)');
+  const r = await fetch('/api/tunnel/start', {method:'POST', headers:{'Content-Type':'application/json'}, body:'{}'}).then(x=>x.json());
+  if (r.ok) {
+    showToast('Tunnel starting — URL will appear shortly');
+    setTimeout(loadRemoteAccess, 6000);
+    setTimeout(loadRemoteAccess, 15000);
+    setTimeout(loadRemoteAccess, 25000);
+  } else { showToast('Tunnel failed to start'); }
+}
+
+async function remoteTunnelStop() {
+  showToast('Stopping tunnel…');
+  await fetch('/api/tunnel/stop', {method:'POST', headers:{'Content-Type':'application/json'}, body:'{}'});
+  showToast('Tunnel stopped');
+  loadRemoteAccess();
+}
+
+function remCopy(url) {
+  navigator.clipboard.writeText(url).then(() => showToast('URL copied ✓'));
+}
 
 function renderTasksView(body) {
   const ICONS = { done:'✅', next:'🔵', idea:'💡' };
