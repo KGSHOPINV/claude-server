@@ -85,7 +85,9 @@ body { font-family:var(--ui); background:var(--bg); color:var(--text); height:10
 .cat-item:hover { background:var(--panel2); color:var(--text); }
 .cat-item.active { background:var(--acdim); color:var(--accent); }
 .cat-item.active::after { content:''; position:absolute; left:0; top:50%; transform:translateY(-50%); width:3px; height:26px; background:var(--accent); border-radius:0 3px 3px 0; }
-.cat-icon { font-size:18px; line-height:1; }
+.cat-icon { font-size:14px; line-height:1; width:28px; height:28px; display:flex; align-items:center; justify-content:center; background:var(--panel2); border:1px solid var(--border); border-radius:7px; transition:background var(--t),border-color var(--t); }
+.cat-item:hover .cat-icon { border-color:var(--border2); }
+.cat-item.active .cat-icon { background:var(--acdim); border-color:var(--accent); }
 .cat-label { font-size:8px; font-weight:600; letter-spacing:.3px; text-transform:uppercase; }
 .cat-sep { width:28px; height:1px; background:var(--border); margin:3px 0; flex-shrink:0; }
 
@@ -109,7 +111,7 @@ body { font-family:var(--ui); background:var(--bg); color:var(--text); height:10
 .sec-item { display:flex; align-items:center; gap:8px; padding:6px 8px; border-radius:var(--r); cursor:pointer; font-size:12px; color:var(--muted); transition:background var(--t),color var(--t); }
 .sec-item:hover { background:var(--panel2); color:var(--text); }
 .sec-item.active { background:var(--panel2); color:var(--accent); }
-.sec-item-icon { font-size:13px; flex-shrink:0; width:18px; text-align:center; }
+.sec-item-icon { font-size:11px; flex-shrink:0; width:20px; height:20px; display:flex; align-items:center; justify-content:center; background:var(--panel2); border:1px solid var(--border); border-radius:5px; }
 .sec-item-badge { margin-left:auto; font-size:9px; font-weight:600; padding:1px 5px; border-radius:8px; }
 .badge-up  { background:var(--gdim); color:var(--green); }
 .badge-off { background:var(--panel); color:var(--muted); }
@@ -669,6 +671,39 @@ body.desk-mode #desk-exit { display:flex; align-items:center; gap:6px; }
 .sv-alert { display:flex; align-items:flex-start; gap:8px; padding:7px 10px; border-radius:5px; margin-bottom:5px; font-size:11px; }
 .sv-alert.warn { background:var(--ydim); border:1px solid rgba(210,153,34,.2); color:var(--yellow); }
 .sv-alert.crit { background:var(--rdim); border:1px solid rgba(248,81,73,.2); color:var(--red); }
+
+/* ── HOME DASHBOARD ────────────────────────────────── */
+.view-dash { padding:12px 14px; overflow-y:auto; height:100%; }
+.hd-header { display:flex; align-items:center; gap:8px; padding:8px 12px; border-radius:7px; margin-bottom:10px; font-size:11px; background:var(--panel); border:1px solid var(--border); }
+.hd-header.hd-online .hd-odot { background:var(--green); box-shadow:0 0 6px var(--green); }
+.hd-header.hd-offline .hd-odot { background:var(--red); }
+.hd-odot { width:7px; height:7px; border-radius:50%; flex-shrink:0; }
+.hd-sep { color:var(--border); }
+.hd-ts { margin-left:auto; font-size:9px; color:var(--muted); font-family:var(--mono); }
+.hd-stats { display:grid; grid-template-columns:repeat(3,1fr); gap:8px; margin-bottom:10px; }
+.hd-stat { background:var(--panel); border:1px solid var(--border); border-radius:7px; padding:10px 13px; }
+.hd-stat-lbl { font-size:9px; text-transform:uppercase; letter-spacing:.5px; color:var(--muted); margin-bottom:4px; }
+.hd-stat-val { font-size:20px; font-weight:700; font-family:var(--mono); line-height:1; margin-bottom:6px; }
+.hd-val-good { color:var(--green); }
+.hd-val-warn { color:var(--yellow); }
+.hd-val-crit { color:var(--red); }
+.hd-stat-sub { font-size:9px; color:var(--muted); margin-top:4px; }
+.hd-quick { display:flex; gap:5px; flex-wrap:wrap; margin-bottom:12px; }
+.hd-qbtn { padding:5px 12px; background:var(--panel); border:1px solid var(--border); border-radius:15px; color:var(--text); font-size:11px; cursor:pointer; transition:all var(--t); font-family:var(--ui); }
+.hd-qbtn:hover { border-color:var(--accent); color:var(--accent); }
+.hd-grp-lbl { font-size:9px; text-transform:uppercase; letter-spacing:.6px; color:var(--muted); margin:10px 0 5px 1px; }
+.hd-svc-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(140px,1fr)); gap:4px; margin-bottom:2px; }
+.hd-svc { display:flex; align-items:center; gap:8px; padding:7px 9px; border-radius:6px; border:1px solid var(--border); background:var(--panel); transition:all var(--t); min-width:0; }
+.hd-svc.clickable { cursor:pointer; }
+.hd-svc.clickable:hover { border-color:var(--accent); }
+.hd-svc.svc-up .hd-sdot { background:var(--green); box-shadow:0 0 4px var(--green); }
+.hd-svc.svc-dn .hd-sdot { background:var(--red); }
+.hd-svc.svc-na .hd-sdot { background:var(--muted); opacity:.5; }
+.hd-sdot { width:6px; height:6px; border-radius:50%; flex-shrink:0; }
+.hd-svc-info { min-width:0; }
+.hd-svc-name { font-size:11px; font-weight:600; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.hd-svc-port { font-size:9px; color:var(--muted); font-family:var(--mono); }
+.hd-err-banner { background:var(--rdim); color:var(--red); border:1px solid rgba(248,81,73,.2); border-radius:7px; padding:10px 14px; font-size:12px; margin-bottom:10px; }
 </style>
 <link rel="manifest" href="/manifest.json">
 <meta name="theme-color" content="#58a6ff">
@@ -1093,6 +1128,7 @@ async function fetchServices() {
   } catch {}
   S.services = svcs;
   refreshCategoryNav();
+  refreshDashboards();
 }
 
 async function fetchContainers() {
@@ -1122,76 +1158,75 @@ async function fetchIssues() {
 
 // ── CATEGORY NAV ─────────────────────────────────────────────────────────────
 const CATEGORIES = {
+  // ── SERVER — what's happening right now ───────────────────────────────────
   server: {
     title: 'Server',
     sections: [
-      { label:'Views', items:[
-        {icon:'🔍', label:'Survey',       action:()=>openView('survey')},
-        {icon:'⊞', label:'Dashboard',   action:()=>openView('dashboard')},
-        {icon:'🗺', label:'Infra Map',   action:()=>openView('map')},
-        {icon:'⚑', label:'Issues',      action:()=>openView('issues')},
-        {icon:'🌐', label:'Browser',     action:()=>openView('browser')},
-        {icon:'💾', label:'Storage',     action:()=>openView('storage')},
-        {icon:'📁', label:'Files',       action:()=>openView('files')},
-        {icon:'📓', label:'Journal',     action:()=>openView('journal')},
+      { label:'Health', items:[
+        {icon:'⊞',  label:'Dashboard',  action:()=>openView('dashboard')},
+        {icon:'🔍', label:'Survey',     action:()=>openView('survey')},
       ]},
-      {label:'Ops', items:[
-        {icon:'▶',  label:'Runbooks',    action:()=>openView('runbooks')},
-        {icon:'⌨', label:'Terminal',    action:()=>openView('terminal')},
-        {icon:'📋', label:'Logs',        action:()=>openView('logs')},
-        {icon:'🌐', label:'Network',     action:()=>openView('network')},
+      { label:'Access', items:[
+        {icon:'⌨', label:'Terminal',   action:()=>openView('terminal')},
+        {icon:'📋', label:'Logs',       action:()=>openView('logs')},
+        {icon:'🌐', label:'Network',    action:()=>openView('network')},
       ]},
-      {label:'AI', items:[
-        {icon:'🤖', label:'AI Chat',     action:()=>openView('chat')},
+      { label:'Data', items:[
+        {icon:'💾', label:'Storage',   action:()=>openView('storage')},
+        {icon:'📁', label:'Files',     action:()=>openView('files')},
       ]},
     ]
   },
+  // ── SERVICES — jump to any running service ────────────────────────────────
   services: { title: 'Services', sections: [] }, // built dynamically
-  docs:     { title: 'Docs',     sections: [] }, // built from files
+  // ── OPS — fix things and track things ────────────────────────────────────
   ops: {
     title: 'Ops',
     sections: [
-      {label:'Automation', items:[
-        {icon:'▶',  label:'Runbooks',        action:()=>openView('runbooks')},
+      { label:'Response', items:[
+        {icon:'▶',  label:'Runbooks',  action:()=>openView('runbooks')},
       ]},
-      {label:'Debugging', items:[
-        {icon:'⌨', label:'Terminal',         action:()=>openView('terminal')},
-        {icon:'📋', label:'Container Logs',   action:()=>openView('logs')},
-        {icon:'🌐', label:'Network',          action:()=>openView('network')},
+      { label:'Track', items:[
+        {icon:'⚑',  label:'Issues',   action:()=>openView('issues')},
+        {icon:'📓', label:'Journal',  action:()=>openView('journal')},
       ]},
     ]
   },
+  // ── TOOLS — quick-launch anything from one place ──────────────────────────
   tools: {
     title: 'Tools',
     sections: [
-      {label:'Dev', items:[
-        {icon:'⌨', label:'Terminal',     action:()=>openView('terminal')},
-        {icon:'📋', label:'Container Logs', action:()=>openView('logs')},
-        {icon:'🌐', label:'Network',      action:()=>openView('network')},
-        {icon:'🌐', label:'Browser',      action:()=>openView('browser')},
+      { label:'Quick Launch', items:[
+        {icon:'⌨', label:'Terminal',  action:()=>openView('terminal')},
+        {icon:'🔍', label:'Survey',   action:()=>openView('survey')},
+        {icon:'📋', label:'Logs',     action:()=>openView('logs')},
+        {icon:'🗺', label:'Infra Map',action:()=>openView('map')},
+        {icon:'🤖', label:'AI Chat',  action:()=>openView('chat')},
       ]},
-      {label:'Admin', items:[
-        {icon:'🔐', label:'Vault',        action:()=>openView('vault')},
-        {icon:'🤖', label:'AI Chat',      action:()=>openView('chat')},
-        {icon:'▶',  label:'Runbooks',     action:()=>openView('runbooks')},
-        {icon:'⚙', label:'Settings',     action:()=>openView('settings')},
+      { label:'Admin', items:[
+        {icon:'🔐', label:'Vault',    action:()=>openView('vault')},
+        {icon:'⚙', label:'Settings', action:()=>openView('settings')},
       ]},
     ]
   },
+  // ── VAULT — credentials ───────────────────────────────────────────────────
   vault: {
     title: 'Vault',
     sections: [
-      {label:'', items:[
+      { label:'', items:[
         {icon:'🔐', label:'Password Vault', action:()=>openView('vault')},
       ]},
     ]
   },
+  // ── DOCS — markdown guides ────────────────────────────────────────────────
+  docs: { title: 'Docs', sections: [] }, // built from files
+  // ── GUIDE — hub reference ─────────────────────────────────────────────────
   guide: {
     title: 'Guide',
     sections: [
-      {label:'', items:[
-        {icon:'🏠', label:'What\'s Here',   action:()=>openView('guide')},
-        {icon:'📋', label:'Task Docket',    action:()=>openView('tasks')},
+      { label:'', items:[
+        {icon:'🏠', label:"What's Here",  action:()=>openView('guide')},
+        {icon:'📋', label:'Task Docket',  action:()=>openView('tasks')},
       ]},
     ]
   },
@@ -1728,10 +1763,11 @@ function mountPaneContent(wsId, paneId, viewType, viewConfig, body) {
           <div class="cfg-nav-item active" data-cfg="appearance" onclick="setCfgSection('appearance')">🎨 Appearance</div>
           <div class="cfg-nav-item" data-cfg="connection" onclick="setCfgSection('connection')">🔌 Connection</div>
           <div class="cfg-nav-sep"></div>
-          <div class="cfg-nav-item" data-cfg="users" onclick="setCfgSection('users')">👤 Users</div>
-          <div class="cfg-nav-item" data-cfg="ai" onclick="setCfgSection('ai')">🤖 AI</div>
-          <div class="cfg-nav-sep"></div>
           <div class="cfg-nav-item" data-cfg="security" onclick="setCfgSection('security')">🔐 Security</div>
+          <div class="cfg-nav-item" data-cfg="users" onclick="setCfgSection('users')">👤 Users</div>
+          <div class="cfg-nav-sep"></div>
+          <div class="cfg-nav-item" data-cfg="integrations" onclick="setCfgSection('integrations')">🔗 Integrations</div>
+          <div class="cfg-nav-sep"></div>
           <div class="cfg-nav-item" data-cfg="system" onclick="setCfgSection('system')">⚙ System</div>
         </div>
         <div class="cfg-body" id="cfg-body"></div>
@@ -2189,24 +2225,109 @@ async function drawMapPane(key) {
 
 // ── DASHBOARD ─────────────────────────────────────────────────────────────────
 function renderDash(elId) {
+  const el = document.getElementById(elId);
+  if (!el) return;
+
+  const st   = S.status || {};
   const svcs = S.services;
-  if (!svcs.length) { document.getElementById(elId).innerHTML='<div style="color:var(--muted);padding:20px">Loading services…</div>'; return; }
-  const groups={};
-  svcs.forEach(s=>{const g=s.group||'Other';if(!groups[g])groups[g]=[];groups[g].push(s);});
-  const ORDER=['Infrastructure','Monitoring','Notifications','Tools','AI','Custom','Other'];
-  const sorted=Object.keys(groups).sort((a,b)=>{const ai=ORDER.indexOf(a),bi=ORDER.indexOf(b);return(ai<0?99:ai)-(bi<0?99:bi);});
-  document.getElementById(elId).innerHTML = sorted.map(g=>`
-    <div class="grp-label">${g}</div>
-    <div class="svc-grid">${groups[g].map(s=>{
-      const inst=s.installed!==false;
-      const url=`${s.https?'https':'http'}://${SRV}:${s.port}`;
-      const badge=!inst?`<span class="badge off">N/A</span>`:s.running?`<span class="badge up">up</span>`:s.noui?`<span class="badge off">no UI</span>`:`<span class="badge">?</span>`;
-      return `<div class="svc-card ${inst?'':'dim'}" onclick="${inst&&!s.noui?`openIframeWs('${s.name}',${s.port},'${url}')`:''}" title="${s.desc||''}">
-        <div class="sc-name">${s.name}</div><div class="sc-desc">${s.desc||''}</div>
-        <div class="sc-port">:${s.port}</div><div class="sc-status">${badge}</div>
-      </div>`;
-    }).join('')}</div>`
-  ).join('');
+
+  // ── stats ──
+  const diskPct    = parseInt(st.disk_pct) || 0;
+  const diskUsed   = st.disk_used  || '—';
+  const diskTotal  = st.disk_total || '—';
+  const ramMB      = st.ram_used_mb  || 0;
+  const ramTotMB   = st.ram_total_mb || 1;
+  const ramPct     = Math.round((ramMB / ramTotMB) * 100);
+  const ramGB      = ramMB ? (ramMB / 1024).toFixed(1) : null;
+  const ramTotGB   = Math.round(ramTotMB / 1024);
+  const loadVal    = parseFloat(st.load) || 0;
+  const loadPct    = Math.min(Math.round((loadVal / 24) * 100), 100);
+  const online     = !!st.online;
+  const uptime     = st.uptime     || '—';
+  const containers = st.containers !== undefined ? st.containers : '—';
+  const fetched    = st.fetched_at || '';
+
+  function valClass(pct, warn, crit) {
+    return pct >= crit ? 'hd-val-crit' : pct >= warn ? 'hd-val-warn' : 'hd-val-good';
+  }
+
+  // ── service groups ──
+  const groups = {};
+  svcs.forEach(sv => { const g = sv.group || 'Other'; if (!groups[g]) groups[g] = []; groups[g].push(sv); });
+  const ORDER = ['Infrastructure','Monitoring','Notifications','Tools','AI','Custom','Other'];
+  const sortedGroups = Object.keys(groups).sort((a, b) => {
+    return (ORDER.indexOf(a) < 0 ? 99 : ORDER.indexOf(a)) - (ORDER.indexOf(b) < 0 ? 99 : ORDER.indexOf(b));
+  });
+
+  el.innerHTML = `
+    <div class="hd-header ${online ? 'hd-online' : 'hd-offline'}">
+      <div class="hd-odot"></div>
+      <strong>${online ? 'Online' : 'Offline'}</strong>
+      ${online ? `<span class="hd-sep">·</span><span>up ${uptime}</span><span class="hd-sep">·</span><span>🐳 ${containers} containers</span>` : ''}
+      <span class="hd-ts">${fetched}</span>
+    </div>
+
+    ${!online ? '<div class="hd-err-banner">⚠ Server not responding — check SSH connection or run: systemctl --user restart hub</div>' : ''}
+
+    <div class="hd-stats">
+      <div class="hd-stat">
+        <div class="hd-stat-lbl">💿 Disk</div>
+        <div class="hd-stat-val ${valClass(diskPct, 70, 85)}">${diskPct ? diskPct + '%' : '—'}</div>
+        ${diskPct ? `<div class="sv-bar"><div class="sv-bar-fill ${diskPct>=85?'red':diskPct>=70?'yellow':'green'}" style="width:${diskPct}%"></div></div>` : ''}
+        <div class="hd-stat-sub">${diskUsed} used · ${diskTotal} total</div>
+      </div>
+      <div class="hd-stat">
+        <div class="hd-stat-lbl">🧠 RAM</div>
+        <div class="hd-stat-val ${valClass(ramPct, 70, 90)}">${ramGB ? ramGB + 'GB' : '—'}</div>
+        ${ramGB ? `<div class="sv-bar"><div class="sv-bar-fill ${ramPct>=90?'red':ramPct>=70?'yellow':'green'}" style="width:${Math.min(ramPct,100)}%"></div></div>` : ''}
+        <div class="hd-stat-sub">${ramGB ? ramPct + '% of ' + ramTotGB + 'GB' : '—'}</div>
+      </div>
+      <div class="hd-stat">
+        <div class="hd-stat-lbl">⚡ Load</div>
+        <div class="hd-stat-val ${valClass(loadPct, 60, 80)}">${loadVal ? loadVal.toFixed(1) : '—'}</div>
+        ${loadVal ? `<div class="sv-bar"><div class="sv-bar-fill ${loadPct>=80?'red':loadPct>=60?'yellow':'green'}" style="width:${loadPct}%"></div></div>` : ''}
+        <div class="hd-stat-sub">24 cores${loadPct ? ' · ' + loadPct + '%' : ''}</div>
+      </div>
+    </div>
+
+    <div class="hd-quick">
+      ${[
+        {l:'🔍 Survey',   a:"openView('survey')"},
+        {l:'⌨ Terminal', a:"openView('terminal')"},
+        {l:'🔐 Vault',   a:"openView('vault')"},
+        {l:'📋 Logs',    a:"openView('logs')"},
+        {l:'▶ Runbooks', a:"openView('runbooks')"},
+        {l:'⚙ Settings',a:"openView('settings')"},
+      ].map(b => `<button class="hd-qbtn" onclick="${b.a}">${b.l}</button>`).join('')}
+    </div>
+
+    ${svcs.length === 0
+      ? '<div style="color:var(--muted);font-size:11px;padding:4px 0 12px">Loading services…</div>'
+      : sortedGroups.map(g => `
+          <div class="hd-grp-lbl">${g}</div>
+          <div class="hd-svc-grid">
+            ${groups[g].filter(sv => sv.installed !== false).map(sv => {
+              const hasUI  = !sv.noui;
+              const dotCls = sv.running === true ? 'svc-up' : sv.running === false ? 'svc-dn' : 'svc-na';
+              const url    = (sv.https ? 'https' : 'http') + '://' + SRV + ':' + sv.port;
+              return `<div class="hd-svc ${dotCls}${hasUI ? ' clickable' : ''}"
+                  ${hasUI ? `onclick="openIframeWs('${escH(sv.name)}',${sv.port},'${url}')"` : ''}
+                  title="${escH(sv.desc || sv.name)}">
+                <div class="hd-sdot"></div>
+                <div class="hd-svc-info">
+                  <div class="hd-svc-name">${escH(sv.name)}</div>
+                  <div class="hd-svc-port">:${sv.port}</div>
+                </div>
+              </div>`;
+            }).join('')}
+          </div>`
+        ).join('')
+    }
+  `;
+}
+
+function refreshDashboards() {
+  document.querySelectorAll('[id^="dash-"]').forEach(el => renderDash(el.id));
 }
 
 // ── VAULT ─────────────────────────────────────────────────────────────────────
@@ -2424,74 +2545,79 @@ function setCfgSection(section) {
   const body = document.getElementById('cfg-body');
   if (!body) return;
 
+  // ── APPEARANCE ────────────────────────────────────────────────────────────
   if (section === 'appearance') {
     body.innerHTML = `
       <div class="cfg-heading">Appearance</div>
-      <div class="vs-section">
-        <div class="vs-row"><label>Theme</label>
-          <select id="cfg-theme" onchange="applyTheme(this.value)">
-            <option value="dark">Dark</option><option value="light">Light</option>
-          </select>
+      <div class="cfg-tabs">
+        <div class="cfg-tab active" onclick="setCfgTab(this,'theme')">Theme</div>
+        <div class="cfg-tab" onclick="setCfgTab(this,'interface')">Interface</div>
+      </div>
+      <div id="cfg-tab-theme" class="cfg-tab-pane">
+        <div class="vs-section">
+          <div class="vs-row"><label>Color mode</label>
+            <select id="cfg-theme" onchange="applyTheme(this.value)">
+              <option value="dark">Dark</option><option value="light">Light</option>
+            </select>
+          </div>
+          <div class="vs-row" style="align-items:flex-start"><label style="margin-top:4px">Accent</label>
+            <div style="display:flex;gap:7px;flex-wrap:wrap">
+              ${['#58a6ff','#39d0c4','#3fb950','#a371f7','#d29922','#f85149'].map(c=>`<div class="accent-swatch" style="background:${c}" onclick="setAccent('${c}')" title="${c}"></div>`).join('')}
+            </div>
+          </div>
         </div>
-        <div class="vs-row"><label>Accent color</label>
-          <div style="display:flex;gap:7px;flex-wrap:wrap">
-            ${['#39d0c4','#58a6ff','#d29922','#f85149','#3fb950','#a371f7'].map(c=>`<div class="accent-swatch" style="background:${c}" onclick="setAccent('${c}')" title="${c}"></div>`).join('')}
+      </div>
+      <div id="cfg-tab-interface" class="cfg-tab-pane hidden">
+        <div class="vs-section">
+          <div class="vs-row"><label>Section nav</label>
+            <button class="btn" onclick="toggleSecNav()" style="font-size:11px">Toggle Sidebar</button>
+          </div>
+          <div class="vs-row"><label>Bookmark bar</label>
+            <button class="btn" onclick="document.getElementById('bkbar').style.display=document.getElementById('bkbar').style.display==='none'?'flex':'none'" style="font-size:11px">Toggle Bar</button>
+          </div>
+          <div style="font-size:10px;color:var(--muted);margin-top:8px;line-height:1.6">
+            Workspace tabs sit above the pane area.<br>
+            Bookmarks bar sits below tabs. Star any nav item (☆) to add it.
           </div>
         </div>
       </div>`;
 
+  // ── CONNECTION ────────────────────────────────────────────────────────────
   } else if (section === 'connection') {
     body.innerHTML = `
       <div class="cfg-heading">Connection</div>
-      <div class="vs-section">
-        <div class="vs-row"><label>Local IP</label><input id="cfg-local-ip" class="vs-inp" value="${SRV}" placeholder="192.168.1.229"></div>
-        <div class="vs-row"><label>Tailscale IP</label><input id="cfg-ts-ip" class="vs-inp" placeholder="100.75.1.105"></div>
-        <div class="vs-row"><label>SSH User</label><input id="cfg-ssh-user" class="vs-inp" value="admin1" placeholder="admin1"></div>
-        <div class="vs-row"><label>Hub Port</label><input id="cfg-port" class="vs-inp" value="8765" placeholder="8765"></div>
-        <button class="btn p" style="margin-top:6px" onclick="saveSettings()">Save Connection</button>
-      </div>`;
-
-  } else if (section === 'users') {
-    body.innerHTML = `
-      <div class="cfg-heading">Users</div>
-      <div class="vs-section">
-        <div id="users-list" style="margin-bottom:10px"></div>
-        <div style="display:flex;gap:6px;flex-wrap:wrap">
-          <input id="new-usr" class="vs-inp" placeholder="Username" style="width:120px">
-          <input id="new-pw"  class="vs-inp" type="password" placeholder="Password" style="width:120px">
-          <button class="btn p" onclick="addUser()">Add User</button>
+      <div class="cfg-tabs">
+        <div class="cfg-tab active" onclick="setCfgTab(this,'network')">Network</div>
+        <div class="cfg-tab" onclick="setCfgTab(this,'ssh')">SSH</div>
+      </div>
+      <div id="cfg-tab-network" class="cfg-tab-pane">
+        <div class="vs-section">
+          <div class="vs-row"><label>Local IP</label><input id="cfg-local-ip" class="vs-inp" value="${SRV}" placeholder="192.168.1.229"></div>
+          <div class="vs-row"><label>Tailscale IP</label><input id="cfg-ts-ip" class="vs-inp" placeholder="100.75.1.105"></div>
+          <div class="vs-row"><label>Hub Port</label><input id="cfg-port" class="vs-inp" value="8765" placeholder="8765"></div>
+          <button class="btn p" style="margin-top:8px" onclick="saveSettings()">Save</button>
+        </div>
+      </div>
+      <div id="cfg-tab-ssh" class="cfg-tab-pane hidden">
+        <div class="vs-section">
+          <div class="vs-row"><label>SSH User</label><input id="cfg-ssh-user" class="vs-inp" value="admin1" placeholder="admin1"></div>
+          <div style="font-size:10px;color:var(--muted);margin-top:8px;line-height:1.6">
+            Key: <code style="font-family:var(--mono)">~/.ssh/id_ed25519_server</code><br>
+            Server: Ubuntu 24.04 · fks-services · 216 GB RAM<br>
+            Tailscale name: <code style="font-family:var(--mono)">fks-services</code>
+          </div>
+          <button class="btn p" style="margin-top:8px" onclick="saveSettings()">Save</button>
         </div>
       </div>`;
-    loadUsersPanel();
 
-  } else if (section === 'ai') {
-    body.innerHTML = `
-      <div class="cfg-heading">AI Assistant</div>
-      <div class="vs-section">
-        <div class="vs-row"><label>Provider</label>
-          <select id="ai-provider" class="vs-inp" style="width:160px">
-            <option value="claude">Claude (Anthropic)</option>
-            <option value="openai">OpenAI (GPT-4o)</option>
-            <option value="gemini">Gemini (Google)</option>
-          </select>
-        </div>
-        <div class="vs-row"><label>API Key</label>
-          <input id="ai-key" class="vs-inp" type="password" placeholder="sk-ant-… / sk-… / AIza…" style="flex:1">
-        </div>
-        <div style="display:flex;gap:6px;margin-top:6px">
-          <button class="btn p" onclick="saveAIConfig()">Save AI Key</button>
-          <button class="btn" onclick="testAIChat()">Test</button>
-        </div>
-        <div id="ai-test-result" style="font-size:11px;color:var(--muted);margin-top:7px"></div>
-      </div>`;
-    loadAISettings();
-
+  // ── SECURITY ──────────────────────────────────────────────────────────────
   } else if (section === 'security') {
     body.innerHTML = `
       <div class="cfg-heading">Security</div>
       <div class="cfg-tabs">
         <div class="cfg-tab active" onclick="setCfgTab(this,'totp')">2FA Gate</div>
         <div class="cfg-tab" onclick="setCfgTab(this,'update')">Hub Update</div>
+        <div class="cfg-tab" onclick="setCfgTab(this,'firewall')">Firewall</div>
       </div>
       <div id="cfg-tab-totp" class="cfg-tab-pane">
         <div class="vs-section" id="totp-sec">
@@ -2502,20 +2628,140 @@ function setCfgSection(section) {
       <div id="cfg-tab-update" class="cfg-tab-pane hidden">
         <div class="vs-section">
           <div style="font-size:11px;color:var(--muted);margin-bottom:10px">Pull latest code from GitHub and restart the hub. Page reloads automatically.</div>
-          <button class="btn p" id="hub-update-btn" onclick="runHubUpdate()">⬆ Pull Latest & Restart</button>
+          <button class="btn p" id="hub-update-btn" onclick="runHubUpdate()">⬆ Pull Latest &amp; Restart</button>
           <pre id="hub-update-out" style="display:none;margin-top:8px;font-size:10px;max-height:140px;overflow-y:auto;background:var(--bg);padding:9px;border-radius:var(--r);border:1px solid var(--border);color:var(--green);white-space:pre-wrap;word-break:break-all"></pre>
+        </div>
+      </div>
+      <div id="cfg-tab-firewall" class="cfg-tab-pane hidden">
+        <div class="vs-section">
+          <div style="font-size:11px;color:var(--muted);margin-bottom:10px">UFW rules — open ports from the Network view for a live read.</div>
+          <button class="btn" onclick="openView('network')">→ Open Network View</button>
         </div>
       </div>`;
     loadTOTPStatus();
 
+  // ── USERS ─────────────────────────────────────────────────────────────────
+  } else if (section === 'users') {
+    body.innerHTML = `
+      <div class="cfg-heading">Users</div>
+      <div class="cfg-tabs">
+        <div class="cfg-tab active" onclick="setCfgTab(this,'accounts')">Accounts</div>
+        <div class="cfg-tab" onclick="setCfgTab(this,'session')">Session</div>
+      </div>
+      <div id="cfg-tab-accounts" class="cfg-tab-pane">
+        <div class="vs-section">
+          <div id="users-list" style="margin-bottom:10px"></div>
+          <div style="display:flex;gap:6px;flex-wrap:wrap">
+            <input id="new-usr" class="vs-inp" placeholder="Username" style="width:120px">
+            <input id="new-pw"  class="vs-inp" type="password" placeholder="Password" style="width:120px">
+            <button class="btn p" onclick="addUser()">Add User</button>
+          </div>
+        </div>
+      </div>
+      <div id="cfg-tab-session" class="cfg-tab-pane hidden">
+        <div class="vs-section">
+          <div style="font-size:11px;color:var(--muted);margin-bottom:10px">Your current session is stored in browser sessionStorage — it clears when you close the tab.</div>
+          <div class="vs-row"><label>Token</label><code style="font-family:var(--mono);font-size:10px;color:var(--muted)">${(()=>{const t=sessionStorage.getItem('hub_token')||'';return t?t.slice(0,8)+'…':'(none)';})()}</code></div>
+          <div style="margin-top:10px">
+            <button class="btn" style="border-color:var(--red);color:var(--red)" onclick="doLogout()">Sign Out</button>
+          </div>
+        </div>
+      </div>`;
+    loadUsersPanel();
+
+  // ── INTEGRATIONS ──────────────────────────────────────────────────────────
+  } else if (section === 'integrations') {
+    body.innerHTML = `
+      <div class="cfg-heading">Integrations</div>
+      <div class="cfg-tabs">
+        <div class="cfg-tab active" onclick="setCfgTab(this,'ai')">AI</div>
+        <div class="cfg-tab" onclick="setCfgTab(this,'alerts')">Alerts</div>
+        <div class="cfg-tab" onclick="setCfgTab(this,'automation')">Automation</div>
+      </div>
+      <div id="cfg-tab-ai" class="cfg-tab-pane">
+        <div class="vs-section">
+          <div class="vs-row"><label>Provider</label>
+            <select id="ai-provider" class="vs-inp" style="width:160px">
+              <option value="claude">Claude (Anthropic)</option>
+              <option value="openai">OpenAI (GPT-4o)</option>
+              <option value="gemini">Gemini (Google)</option>
+            </select>
+          </div>
+          <div class="vs-row"><label>API Key</label>
+            <input id="ai-key" class="vs-inp" type="password" placeholder="sk-ant-… / sk-… / AIza…" style="flex:1">
+          </div>
+          <div style="display:flex;gap:6px;margin-top:8px">
+            <button class="btn p" onclick="saveAIConfig()">Save Key</button>
+            <button class="btn" onclick="testAIChat()">Test Connection</button>
+          </div>
+          <div id="ai-test-result" style="font-size:11px;color:var(--muted);margin-top:8px"></div>
+        </div>
+      </div>
+      <div id="cfg-tab-alerts" class="cfg-tab-pane hidden">
+        <div class="vs-section">
+          <div style="font-size:11px;color:var(--muted);margin-bottom:10px;line-height:1.6">
+            Push alerts go to <strong style="color:var(--text)">ntfy</strong> on port 8085.<br>
+            Subscribe on your phone: <code style="font-family:var(--mono)">server-alerts</code> topic.
+          </div>
+          <div class="vs-row"><label>ntfy URL</label>
+            <a href="http://${SRV}:8085" target="_blank" style="color:var(--accent);font-size:11px;font-family:var(--mono)">:8085</a>
+          </div>
+          <div class="vs-row"><label>Topic</label>
+            <code style="font-family:var(--mono);font-size:11px;color:var(--muted)">server-alerts</code>
+          </div>
+          <div class="vs-row"><label>Alert timer</label>
+            <code style="font-family:var(--mono);font-size:11px;color:var(--muted)">hub-alert.timer · every 15 min</code>
+          </div>
+          <div class="vs-row"><label>Daily brief</label>
+            <code style="font-family:var(--mono);font-size:11px;color:var(--muted)">hub-daily.timer · 07:00 daily</code>
+          </div>
+          <div style="margin-top:10px;display:flex;gap:6px">
+            <button class="btn" onclick="openIframeWs('ntfy',8085,'http://${SRV}:8085')">Open ntfy</button>
+            <button class="btn" onclick="openIframeWs('Uptime Kuma',3001,'http://${SRV}:3001')">Open Uptime Kuma</button>
+          </div>
+        </div>
+      </div>
+      <div id="cfg-tab-automation" class="cfg-tab-pane hidden">
+        <div class="vs-section">
+          <div style="font-size:11px;color:var(--muted);margin-bottom:10px;line-height:1.6">
+            n8n handles scheduled automation workflows — disk alerts every 2h via Netdata.
+          </div>
+          <div class="vs-row"><label>n8n URL</label>
+            <a href="http://${SRV}:5678" target="_blank" style="color:var(--accent);font-size:11px;font-family:var(--mono)">:5678</a>
+          </div>
+          <div class="vs-row"><label>Disk alert</label>
+            <code style="font-family:var(--mono);font-size:11px;color:var(--muted)">every 2h · warn 72% · crit 85%</code>
+          </div>
+          <div style="margin-top:10px">
+            <button class="btn" onclick="openIframeWs('n8n',5678,'http://${SRV}:5678')">Open n8n</button>
+          </div>
+        </div>
+      </div>`;
+    loadAISettings();
+
+  // ── SYSTEM ────────────────────────────────────────────────────────────────
   } else if (section === 'system') {
+    const st = S.status || {};
     body.innerHTML = `
       <div class="cfg-heading">System</div>
       <div class="cfg-tabs">
-        <div class="cfg-tab active" onclick="setCfgTab(this,'snapshot')">Snapshot</div>
+        <div class="cfg-tab active" onclick="setCfgTab(this,'info')">Server Info</div>
+        <div class="cfg-tab" onclick="setCfgTab(this,'snapshot')">Snapshot</div>
         <div class="cfg-tab" onclick="setCfgTab(this,'danger')">Danger Zone</div>
       </div>
-      <div id="cfg-tab-snapshot" class="cfg-tab-pane">
+      <div id="cfg-tab-info" class="cfg-tab-pane">
+        <div class="vs-section">
+          <div class="vs-row"><label>Status</label><span style="color:${st.online?'var(--green)':'var(--red)'};font-size:11px">${st.online?'● Online':'● Offline'}</span></div>
+          <div class="vs-row"><label>Uptime</label><code style="font-family:var(--mono);font-size:11px;color:var(--muted)">${st.uptime||'—'}</code></div>
+          <div class="vs-row"><label>RAM</label><code style="font-family:var(--mono);font-size:11px;color:var(--muted)">${st.ram_used_mb?(st.ram_used_mb/1024).toFixed(1)+'GB / '+(st.ram_total_mb/1024).toFixed(0)+'GB':'—'}</code></div>
+          <div class="vs-row"><label>Disk</label><code style="font-family:var(--mono);font-size:11px;color:var(--muted)">${st.disk_pct?st.disk_used+' / '+st.disk_total+' ('+st.disk_pct+'%)':'—'}</code></div>
+          <div class="vs-row"><label>Load</label><code style="font-family:var(--mono);font-size:11px;color:var(--muted)">${st.load||'—'} (24 cores)</code></div>
+          <div class="vs-row"><label>Containers</label><code style="font-family:var(--mono);font-size:11px;color:var(--muted)">${st.containers!==undefined?st.containers:' —'} running</code></div>
+          <div class="vs-row"><label>OS</label><code style="font-family:var(--mono);font-size:11px;color:var(--muted)">Ubuntu 24.04 LTS · fks-services</code></div>
+          <div class="vs-row"><label>Updated</label><code style="font-family:var(--mono);font-size:11px;color:var(--muted)">${st.fetched_at||'—'}</code></div>
+        </div>
+      </div>
+      <div id="cfg-tab-snapshot" class="cfg-tab-pane hidden">
         <div class="vs-section">
           <div style="font-size:11px;color:var(--muted);margin-bottom:10px">Download a full JSON snapshot of services, containers, health, and server info.</div>
           <button class="btn p" onclick="downloadManifest()">📦 Download System Snapshot</button>

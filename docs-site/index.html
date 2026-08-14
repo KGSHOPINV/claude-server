@@ -1,0 +1,788 @@
+<title>Server Kit — Documentation</title>
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#f8f7f4;
+  --sidebar:#efecea;
+  --surface:#ffffff;
+  --border:#d4cfc9;
+  --text:#1c2128;
+  --muted:#57606a;
+  --accent:#0969da;
+  --accent-bg:#ddf4ff;
+  --code-bg:#f0ede8;
+  --code-text:#24292f;
+  --green:#1a7f37;
+  --green-bg:#dafbe1;
+  --yellow:#7d5900;
+  --yellow-bg:#fff3cd;
+  --red:#cf222e;
+  --red-bg:#ffebe9;
+  --sidebar-w:264px;
+  --top-h:54px;
+}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',system-ui,sans-serif;background:var(--bg);color:var(--text);font-size:15.5px;line-height:1.75;min-height:100vh}
+a{color:var(--accent);text-decoration:none}
+a:hover{text-decoration:underline}
+code,pre{font-family:'Cascadia Code','Fira Code','JetBrains Mono',Consolas,monospace}
+
+/* ── TOP BAR ── */
+#topbar{position:fixed;top:0;left:0;right:0;height:var(--top-h);background:var(--surface);border-bottom:1px solid var(--border);display:flex;align-items:center;gap:14px;padding:0 20px;z-index:200}
+#topbar .logo{font-weight:800;font-size:15px;color:var(--text);letter-spacing:-.3px;display:flex;align-items:center;gap:8px}
+#topbar .logo .pill{background:var(--accent);color:#fff;font-size:10px;font-weight:700;padding:2px 7px;border-radius:10px;letter-spacing:.3px}
+#topbar .nav-links{display:flex;gap:2px;margin-left:auto}
+#topbar .nav-links a{font-size:13px;color:var(--muted);padding:5px 10px;border-radius:6px;transition:background .13s,color .13s}
+#topbar .nav-links a:hover{background:var(--bg);color:var(--text);text-decoration:none}
+#hamburger{display:none;background:none;border:none;cursor:pointer;padding:6px;border-radius:6px;color:var(--muted)}
+#hamburger:hover{background:var(--bg)}
+#hamburger svg{display:block}
+
+/* ── LAYOUT ── */
+#layout{display:flex;padding-top:var(--top-h);min-height:100vh}
+
+/* ── SIDEBAR ── */
+#sidebar{width:var(--sidebar-w);flex-shrink:0;position:fixed;top:var(--top-h);bottom:0;left:0;background:var(--sidebar);border-right:1px solid var(--border);overflow-y:auto;padding:20px 0 40px;transition:transform .22s ease}
+#sidebar-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.35);z-index:149}
+.sk-group{margin-bottom:4px}
+.sk-group-label{font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.8px;color:var(--muted);padding:10px 18px 4px;display:block}
+.sk-link{display:block;font-size:13.5px;color:var(--muted);padding:5px 18px;border-radius:0;transition:background .12s,color .12s;cursor:pointer;border-left:3px solid transparent}
+.sk-link:hover{background:rgba(0,0,0,.04);color:var(--text);text-decoration:none}
+.sk-link.active{color:var(--accent);background:var(--accent-bg);border-left-color:var(--accent);font-weight:600}
+
+/* ── CONTENT ── */
+#content{margin-left:var(--sidebar-w);flex:1;padding:40px 48px 80px;max-width:calc(var(--sidebar-w) + 800px)}
+.section{display:none}
+.section.active{display:block}
+
+/* ── TYPOGRAPHY ── */
+h1{font-size:28px;font-weight:800;letter-spacing:-.4px;margin-bottom:10px;line-height:1.25}
+h2{font-size:20px;font-weight:700;letter-spacing:-.2px;margin:40px 0 12px;padding-bottom:8px;border-bottom:1px solid var(--border)}
+h3{font-size:16px;font-weight:700;margin:28px 0 8px}
+h4{font-size:14px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);margin:22px 0 6px}
+p{margin-bottom:14px}
+.lead{font-size:17px;color:var(--muted);line-height:1.65;margin-bottom:24px}
+ul,ol{padding-left:20px;margin-bottom:14px}
+li{margin-bottom:4px}
+
+/* ── CODE ── */
+code{background:var(--code-bg);color:var(--code-text);padding:1px 5px;border-radius:4px;font-size:13px}
+pre{background:var(--code-bg);border:1px solid var(--border);border-radius:8px;padding:16px 18px;overflow-x:auto;margin:14px 0 20px;line-height:1.55}
+pre code{background:none;padding:0;font-size:13px;color:var(--code-text)}
+.cmd{background:#1c2128;color:#e6edf3;border:none}
+.cmd code{color:#e6edf3}
+
+/* ── CALLOUTS ── */
+.callout{border-radius:8px;padding:14px 16px;margin:18px 0;border-left:4px solid;font-size:14px;line-height:1.65}
+.callout p{margin:0}
+.callout-tip{background:var(--green-bg);border-color:var(--green);color:#0d3620}
+.callout-warn{background:var(--yellow-bg);border-color:var(--yellow);color:#3d2a00}
+.callout-info{background:var(--accent-bg);border-color:var(--accent);color:#0a3069}
+.callout-danger{background:var(--red-bg);border-color:var(--red);color:#5c0011}
+
+/* ── TABLES ── */
+.table-wrap{overflow-x:auto;margin:16px 0 24px}
+table{width:100%;border-collapse:collapse;font-size:14px}
+th{text-align:left;padding:8px 14px;background:var(--sidebar);border-bottom:2px solid var(--border);font-size:11.5px;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);white-space:nowrap}
+td{padding:9px 14px;border-bottom:1px solid var(--border);vertical-align:top}
+tr:last-child td{border-bottom:none}
+td code{font-size:12px}
+.badge{display:inline-block;font-size:10px;font-weight:700;padding:2px 7px;border-radius:10px;letter-spacing:.2px;text-transform:uppercase}
+.badge-up{background:var(--green-bg);color:var(--green)}
+.badge-off{background:var(--code-bg);color:var(--muted)}
+.badge-warn{background:var(--yellow-bg);color:var(--yellow)}
+.badge-docker{background:#ddf4ff;color:#0550ae}
+.badge-sys{background:#f0ede8;color:#57606a}
+
+/* ── DIAGRAM ── */
+.arch-diagram{display:flex;gap:0;margin:24px 0;border-radius:10px;overflow:hidden;border:1px solid var(--border)}
+.arch-col{flex:1;padding:18px 20px}
+.arch-col:first-child{background:#e8f4fb;border-right:1px solid var(--border)}
+.arch-col:last-child{background:#f0ede8}
+.arch-col h4{margin-top:0;font-size:11px}
+.arch-col .repo-name{font-size:14px;font-weight:800;color:var(--accent);font-family:monospace;margin-bottom:8px}
+.arch-col ul{list-style:none;padding:0;margin:0}
+.arch-col li{font-size:13px;color:var(--muted);padding:2px 0;display:flex;gap:7px;align-items:baseline}
+.arch-col li::before{content:'→';color:var(--border);font-size:11px;flex-shrink:0}
+
+/* ── STEP LIST ── */
+.steps{counter-reset:step;list-style:none;padding:0;margin:16px 0 24px}
+.steps li{counter-increment:step;display:flex;gap:14px;margin-bottom:18px;align-items:flex-start}
+.steps li::before{content:counter(step);width:26px;height:26px;border-radius:50%;background:var(--accent);color:#fff;font-size:12px;font-weight:700;display:flex;align-items:center;justify-content:center;flex-shrink:0;margin-top:2px}
+.steps li .step-body{flex:1}
+.steps li strong{display:block;margin-bottom:3px;font-size:15px}
+.steps li p{margin:0;font-size:14px;color:var(--muted)}
+
+/* ── GRID CARDS ── */
+.card-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:12px;margin:16px 0 24px}
+.card{background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:14px 16px}
+.card h4{margin:0 0 4px;font-size:13px;text-transform:none;letter-spacing:0;color:var(--text)}
+.card p{margin:0;font-size:12.5px;color:var(--muted);line-height:1.5}
+.card .port{font-family:monospace;font-size:11px;color:var(--accent);margin-top:5px;display:block}
+
+/* ── HERO ── */
+.hero{background:linear-gradient(135deg,#e8f4fb 0%,#f0ede8 100%);border-radius:12px;padding:32px 36px;margin-bottom:36px;border:1px solid var(--border)}
+.hero h1{font-size:32px;margin-bottom:8px}
+.hero .lead{margin-bottom:24px}
+.hero-btns{display:flex;gap:10px;flex-wrap:wrap}
+.btn{display:inline-flex;align-items:center;gap:7px;padding:9px 20px;border-radius:7px;font-size:14px;font-weight:600;cursor:pointer;border:none;transition:all .15s;text-decoration:none!important}
+.btn-primary{background:var(--accent);color:#fff}
+.btn-primary:hover{background:#0860ca;text-decoration:none}
+.btn-outline{background:transparent;color:var(--text);border:1.5px solid var(--border)}
+.btn-outline:hover{border-color:var(--accent);color:var(--accent)}
+
+/* ── RESPONSIVE ── */
+@media(max-width:1023px){
+  #hamburger{display:flex}
+  #sidebar{transform:translateX(-100%);z-index:150}
+  #sidebar.open{transform:translateX(0)}
+  #sidebar-overlay.show{display:block;z-index:149}
+  #content{margin-left:0;padding:32px 28px 80px}
+}
+@media(max-width:600px){
+  h1{font-size:22px}
+  h2{font-size:17px}
+  #content{padding:24px 18px 60px}
+  .arch-diagram{flex-direction:column}
+  .arch-col:first-child{border-right:none;border-bottom:1px solid var(--border)}
+  .hero{padding:22px 20px}
+  #topbar .nav-links{display:none}
+}
+</style>
+
+<!-- TOP BAR -->
+<div id="topbar">
+  <button id="hamburger" onclick="toggleSidebar()" aria-label="Menu">
+    <svg width="20" height="20" fill="none" stroke="currentColor" stroke-width="2"><line x1="3" y1="6" x2="17" y2="6"/><line x1="3" y1="11" x2="17" y2="11"/><line x1="3" y1="16" x2="17" y2="16"/></svg>
+  </button>
+  <div class="logo">⚙ Server Kit <span class="pill">DOCS</span></div>
+  <nav class="nav-links">
+    <a href="https://github.com/KGSHOPINV/server-kit" target="_blank">GitHub</a>
+    <a href="https://github.com/KGSHOPINV/claude-server" target="_blank">Hub Repo</a>
+  </nav>
+</div>
+
+<div id="sidebar-overlay" onclick="toggleSidebar()"></div>
+
+<!-- SIDEBAR -->
+<div id="layout">
+<nav id="sidebar">
+  <div class="sk-group">
+    <span class="sk-group-label">Getting Started</span>
+    <a class="sk-link active" onclick="show('overview')">Overview</a>
+    <a class="sk-link" onclick="show('install')">Installation</a>
+    <a class="sk-link" onclick="show('what-installed')">What Gets Installed</a>
+  </div>
+  <div class="sk-group">
+    <span class="sk-group-label">Reference</span>
+    <a class="sk-link" onclick="show('ports')">Port Reference</a>
+    <a class="sk-link" onclick="show('non-docker')">System Layer</a>
+    <a class="sk-link" onclick="show('cli')">CLI Tools</a>
+  </div>
+  <div class="sk-group">
+    <span class="sk-group-label">The Hub</span>
+    <a class="sk-link" onclick="show('hub')">Hub Overview</a>
+    <a class="sk-link" onclick="show('alerting')">Alerting</a>
+    <a class="sk-link" onclick="show('runbooks')">Runbooks</a>
+  </div>
+  <div class="sk-group">
+    <span class="sk-group-label">Maintenance</span>
+    <a class="sk-link" onclick="show('update')">Updating</a>
+    <a class="sk-link" onclick="show('troubleshoot')">Troubleshooting</a>
+  </div>
+</nav>
+
+<!-- CONTENT -->
+<main id="content">
+
+<!-- ══ OVERVIEW ══════════════════════════════════════════════════════════ -->
+<div class="section active" id="s-overview">
+  <div class="hero">
+    <h1>Server Kit</h1>
+    <p class="lead">A one-command bootstrap that turns a bare Ubuntu server into a fully running self-hosted stack — with a browser-based control panel, push alerts, automated backups, and 16 pre-configured services.</p>
+    <div class="hero-btns">
+      <a class="btn btn-primary" onclick="show('install')">Get Started →</a>
+      <a class="btn btn-outline" onclick="show('ports')">Port Reference</a>
+    </div>
+  </div>
+
+  <h2>Two Repos, One System</h2>
+  <p>The project is split across two GitHub repositories with a clear division of responsibility:</p>
+
+  <div class="arch-diagram">
+    <div class="arch-col">
+      <h4>INSTALLER</h4>
+      <div class="repo-name">server-kit</div>
+      <ul>
+        <li>16 numbered setup scripts</li>
+        <li>Docker compose files for every service</li>
+        <li>CLI tools deployed to /usr/local/bin/</li>
+        <li>One-command install.sh</li>
+        <li>Clones the Hub at install time</li>
+      </ul>
+    </div>
+    <div class="arch-col">
+      <h4>CONTROL PANEL</h4>
+      <div class="repo-name">claude-server</div>
+      <ul>
+        <li>hub/server.py — Python API server</li>
+        <li>hub/app.html — browser control panel</li>
+        <li>hub/mobile.html — mobile view</li>
+        <li>Vault, terminal, survey, runbooks</li>
+        <li>Updates independently of Docker stack</li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="callout callout-info">
+    <p><strong>Key design principle:</strong> The Hub and the Docker stack update independently. Push new Hub features without touching containers. Restart containers without reloading the UI.</p>
+  </div>
+
+  <h2>What You End Up With</h2>
+  <div class="card-grid">
+    <div class="card"><h4>🖥 Hub Control Panel</h4><p>Browser-based control room. Live stats, terminal, vault, logs, runbooks — all in one place.</p><span class="port">:8765</span></div>
+    <div class="card"><h4>🔀 Nginx Proxy Manager</h4><p>Route domains to containers, handle SSL — no config files needed.</p><span class="port">:81 admin · :80/443</span></div>
+    <div class="card"><h4>🐳 Portainer</h4><p>Visual Docker manager. Start, stop, view logs for any container.</p><span class="port">:9443 (https)</span></div>
+    <div class="card"><h4>📊 Netdata</h4><p>Real-time CPU, RAM, disk, network graphs. No agent setup needed.</p><span class="port">:19999</span></div>
+    <div class="card"><h4>🔔 Uptime Kuma</h4><p>Service uptime monitoring with alerts. Visual dashboard.</p><span class="port">:3001</span></div>
+    <div class="card"><h4>📱 ntfy</h4><p>Push notifications to your phone. Alerts, daily briefs, disk warnings.</p><span class="port">:8085</span></div>
+    <div class="card"><h4>🔐 Vault</h4><p>Client-side encrypted password manager built into the hub. AES-256-GCM.</p><span class="port">built-in</span></div>
+    <div class="card"><h4>🔒 Fail2Ban + UFW</h4><p>SSH brute-force protection and firewall. Pre-configured, running from install.</p><span class="port">system</span></div>
+  </div>
+</div>
+
+<!-- ══ INSTALL ══════════════════════════════════════════════════════════ -->
+<div class="section" id="s-install">
+  <h1>Installation</h1>
+  <p class="lead">One command. Four questions. Everything else is automated.</p>
+
+  <h2>Prerequisites</h2>
+  <ul>
+    <li>Ubuntu 24.04 LTS (fresh install) — other Debian-based distros work, see OS modes below</li>
+    <li>SSH access with sudo privileges</li>
+    <li>At least 20 GB disk, 4 GB RAM (more is better)</li>
+    <li>Internet access from the server</li>
+  </ul>
+
+  <h2>Quick Install</h2>
+  <pre class="cmd"><code>git clone https://github.com/KGSHOPINV/server-kit ~/server-kit
+cd ~/server-kit
+bash install.sh</code></pre>
+
+  <h2>The Four Questions</h2>
+  <ol class="steps">
+    <li><div class="step-body"><strong>Server IP</strong><p>The LAN IP of this machine — e.g. <code>192.168.1.229</code>. Used to configure services and firewall rules.</p></div></li>
+    <li><div class="step-body"><strong>SSH Username</strong><p>The user running the hub service — e.g. <code>admin1</code>. The hub runs as this user via systemd.</p></div></li>
+    <li><div class="step-body"><strong>Timezone</strong><p>e.g. <code>America/Los_Angeles</code>. Sets system time, alert schedules, and log timestamps.</p></div></li>
+    <li><div class="step-body"><strong>Admin Password</strong><p>Your hub web login password. Stored as SHA-256 in SQLite — never written to any file.</p></div></li>
+  </ol>
+
+  <h2>OS Modes</h2>
+  <p>The installer detects your OS at startup and uses the correct package manager throughout — no hardcoded <code>apt</code> calls:</p>
+  <pre><code># Detected automatically — you don't set this
+Ubuntu / Debian  →  apt install -y
+CentOS / RHEL    →  dnf install -y
+Fedora           →  dnf install -y
+Arch Linux       →  pacman -S --noconfirm</code></pre>
+  <div class="callout callout-warn">
+    <p><strong>Tested on Ubuntu 24.04 LTS.</strong> Other distros are supported in theory but package names may differ. The installer will warn you if it can't identify your OS and ask before continuing.</p>
+  </div>
+
+  <h2>What Happens Next</h2>
+  <p>The installer runs 16 numbered scripts in order. Each one logs what it's doing. The whole process takes 5–15 minutes depending on your internet connection.</p>
+
+  <p>When it's done:</p>
+  <pre class="cmd"><code># Browse to your hub
+http://YOUR_SERVER_IP:8765
+
+# Login with
+Username: admin
+Password: (whatever you set in question 4)</code></pre>
+</div>
+
+<!-- ══ WHAT GETS INSTALLED ══════════════════════════════════════════════ -->
+<div class="section" id="s-what-installed">
+  <h1>What Gets Installed</h1>
+  <p class="lead">The 16 scripts install two categories of things: <strong>Docker services</strong> (containers) and the <strong>system layer</strong> (things that run directly on the host OS). Both matter.</p>
+
+  <h2>The 16 Scripts</h2>
+  <div class="table-wrap">
+  <table>
+    <tr><th>#</th><th>Script</th><th>What it does</th><th>Type</th></tr>
+    <tr><td><code>01</code></td><td>System Setup</td><td>curl, git, htop, ufw, fail2ban — core packages + firewall base rules</td><td><span class="badge badge-sys">System</span></td></tr>
+    <tr><td><code>02</code></td><td>Docker</td><td>Docker Engine + Docker Compose via official install script. Creates <code>proxy</code> network.</td><td><span class="badge badge-sys">System</span></td></tr>
+    <tr><td><code>03</code></td><td>Nginx Proxy Manager</td><td>SSL + domain routing. Compose at <code>/srv/docker/npm/</code></td><td><span class="badge badge-docker">Docker</span></td></tr>
+    <tr><td><code>04</code></td><td>Cloudflare Tunnel</td><td>Outbound-only tunnel — no open inbound ports needed for public access</td><td><span class="badge badge-docker">Docker</span></td></tr>
+    <tr><td><code>05</code></td><td>Portainer</td><td>Visual Docker manager at <code>:9443</code></td><td><span class="badge badge-docker">Docker</span></td></tr>
+    <tr><td><code>06</code></td><td>Monitoring</td><td>Uptime Kuma <code>:3001</code> + Netdata <code>:19999</code></td><td><span class="badge badge-docker">Docker</span></td></tr>
+    <tr><td><code>07</code></td><td>Claude CLI</td><td>Node.js 22 LTS + Claude Code CLI + MCP config (filesystem + fetch)</td><td><span class="badge badge-sys">System</span></td></tr>
+    <tr><td><code>08</code></td><td>Optional Services</td><td>Menu-driven: n8n, Redis, Adminer, Mailpit, Wiki.js, SurrealDB, MinIO, Watchtower — pick what you need</td><td><span class="badge badge-docker">Docker</span></td></tr>
+    <tr><td><code>09</code></td><td>Backup</td><td>Daily 3am cron, <code>server-backup</code> CLI tool, <code>/srv/backups/</code> storage</td><td><span class="badge badge-sys">System</span></td></tr>
+    <tr><td><code>10</code></td><td>Linux Helpers</td><td>CLI tools to <code>/usr/local/bin/</code> + bash aliases. See CLI Tools section.</td><td><span class="badge badge-sys">System</span></td></tr>
+    <tr><td><code>11</code></td><td>Hardware Monitor</td><td>lm-sensors, smartmontools, s-tui, stress. <code>hw-monitor</code> CLI tool.</td><td><span class="badge badge-sys">System</span></td></tr>
+    <tr><td><code>12</code></td><td>Security</td><td>rkhunter, lynis, auditd, CrowdSec, unattended-upgrades, Docker Bench</td><td><span class="badge badge-sys">System</span></td></tr>
+    <tr><td><code>13</code></td><td>GitHub Deploy</td><td><code>gh</code> CLI + webhook receiver + <code>deploy-project</code> tool</td><td><span class="badge badge-sys">System</span></td></tr>
+    <tr><td><code>14</code></td><td>Terminal Setup</td><td>tmux config, custom MOTD login banner, <code>dashboard</code> 4-pane layout</td><td><span class="badge badge-sys">System</span></td></tr>
+    <tr><td><code>15</code></td><td>Server Console</td><td>ntfy <code>:8085</code>, Cockpit <code>:9090</code>, alert scripts, hub systemd service</td><td><span class="badge badge-docker">Both</span></td></tr>
+    <tr><td><code>16</code></td><td>AI Stack</td><td>Ollama <code>:11434</code> + Open WebUI <code>:3004</code>. <strong>Keep off without a GPU.</strong></td><td><span class="badge badge-docker">Docker</span></td></tr>
+  </table>
+  </div>
+
+  <div class="callout callout-tip">
+    <p><strong>Optional services (script 08)</strong> can be added any time after the initial install by re-running <code>~/server-kit/08-extras-setup.sh</code> — you don't have to pick everything upfront.</p>
+  </div>
+
+  <h2>Directories Created</h2>
+  <div class="table-wrap">
+  <table>
+    <tr><th>Path</th><th>Purpose</th></tr>
+    <tr><td><code>/srv/docker/</code></td><td>All Docker compose files — one subdirectory per service</td></tr>
+    <tr><td><code>/srv/backups/</code></td><td>Backup storage — daily snapshots land here</td></tr>
+    <tr><td><code>/srv/docker/docker-bench/</code></td><td>Docker security scanner</td></tr>
+    <tr><td><code>~/hub/</code></td><td>Hub application — cloned from <code>claude-server</code> repo</td></tr>
+    <tr><td><code>~/server-kit/</code></td><td>The installer itself — kept for re-running individual scripts</td></tr>
+    <tr><td><code>~/db/</code></td><td>SQLite database for the hub (hub_config, users, vault, journal)</td></tr>
+  </table>
+  </div>
+</div>
+
+<!-- ══ PORTS ════════════════════════════════════════════════════════════ -->
+<div class="section" id="s-ports">
+  <h1>Port Reference</h1>
+  <p class="lead">Every port used by Server Kit — what's listening, what it's for, and how to change it.</p>
+
+  <h2>Centralised Port Config</h2>
+  <p>All ports are defined in one file that every script sources. To change a port, edit it here and re-run the relevant setup script:</p>
+  <pre><code># ~/server-kit/conf/ports.conf
+# Edit here — scripts read from this file
+
+HUB_PORT=8765
+NPM_ADMIN_PORT=81
+NPM_HTTP_PORT=80
+NPM_HTTPS_PORT=443
+PORTAINER_PORT=9443
+HOMEPAGE_PORT=3000
+UPTIME_KUMA_PORT=3001
+NETDATA_PORT=19999
+DOZZLE_PORT=8090
+COCKPIT_PORT=9090
+N8N_PORT=5678
+ADMINER_PORT=8082
+MAILPIT_PORT=8025
+MAILPIT_SMTP_PORT=1025
+WIKIJS_PORT=3002
+NTFY_PORT=8085
+SURREALDB_PORT=8001
+REDIS_PORT=6379
+MINIO_API_PORT=9000
+MINIO_CONSOLE_PORT=9001
+OLLAMA_PORT=11434
+OPEN_WEBUI_PORT=3004
+POSTGRESQL_PORT=5432</code></pre>
+  <div class="callout callout-info">
+    <p>Scripts source this at the top: <code>source "$(dirname "$0")/conf/ports.conf"</code><br>
+    UFW rules, Docker compose <code>ports:</code> entries, and hub config all use <code>$VARIABLE</code> references — one change propagates everywhere.</p>
+  </div>
+
+  <h2>Full Port Map</h2>
+  <div class="table-wrap">
+  <table>
+    <tr><th>Service</th><th>Port(s)</th><th>URL</th><th>Status</th><th>Notes</th></tr>
+    <tr><td><strong>Hub</strong></td><td><code>8765</code></td><td>http://SERVER_IP:8765</td><td><span class="badge badge-up">Core</span></td><td>Main control panel</td></tr>
+    <tr><td>Nginx Proxy Manager</td><td><code>81, 80, 443</code></td><td>http://SERVER_IP:81</td><td><span class="badge badge-up">Core</span></td><td>Admin on :81</td></tr>
+    <tr><td>Portainer</td><td><code>9443</code></td><td>https://SERVER_IP:9443</td><td><span class="badge badge-up">Core</span></td><td>HTTPS only</td></tr>
+    <tr><td>Cockpit</td><td><code>9090</code></td><td>https://SERVER_IP:9090</td><td><span class="badge badge-up">Core</span></td><td>Linux admin panel</td></tr>
+    <tr><td>Homepage</td><td><code>3000</code></td><td>http://SERVER_IP:3000</td><td><span class="badge badge-up">Monitoring</span></td><td>Service dashboard</td></tr>
+    <tr><td>Uptime Kuma</td><td><code>3001</code></td><td>http://SERVER_IP:3001</td><td><span class="badge badge-up">Monitoring</span></td><td>Uptime + alerts</td></tr>
+    <tr><td>Netdata</td><td><code>19999</code></td><td>http://SERVER_IP:19999</td><td><span class="badge badge-up">Monitoring</span></td><td>Real-time metrics</td></tr>
+    <tr><td>Dozzle</td><td><code>8090</code></td><td>http://SERVER_IP:8090</td><td><span class="badge badge-up">Monitoring</span></td><td>Container logs</td></tr>
+    <tr><td>ntfy</td><td><code>8085</code></td><td>http://SERVER_IP:8085</td><td><span class="badge badge-up">Alerts</span></td><td>Push notifications</td></tr>
+    <tr><td>n8n</td><td><code>5678</code></td><td>http://SERVER_IP:5678</td><td><span class="badge badge-warn">Optional</span></td><td>Workflow automation</td></tr>
+    <tr><td>Adminer</td><td><code>8082</code></td><td>http://SERVER_IP:8082</td><td><span class="badge badge-warn">Optional</span></td><td>DB browser</td></tr>
+    <tr><td>Mailpit</td><td><code>8025, 1025</code></td><td>http://SERVER_IP:8025</td><td><span class="badge badge-warn">Optional</span></td><td>SMTP on :1025</td></tr>
+    <tr><td>Wiki.js</td><td><code>3002</code></td><td>http://SERVER_IP:3002</td><td><span class="badge badge-warn">Optional</span></td><td>Knowledge base</td></tr>
+    <tr><td>SurrealDB</td><td><code>8001</code></td><td>http://SERVER_IP:8001</td><td><span class="badge badge-warn">Optional</span></td><td>Multi-model DB</td></tr>
+    <tr><td>Redis</td><td><code>6379</code></td><td>internal only</td><td><span class="badge badge-warn">Optional</span></td><td>No web UI</td></tr>
+    <tr><td>MinIO</td><td><code>9000, 9001</code></td><td>http://SERVER_IP:9001</td><td><span class="badge badge-warn">Optional</span></td><td>Console on :9001</td></tr>
+    <tr><td>PostgreSQL</td><td><code>5432</code></td><td>internal only</td><td><span class="badge badge-warn">Optional</span></td><td>No web UI</td></tr>
+    <tr><td>Ollama</td><td><code>11434</code></td><td>http://SERVER_IP:11434</td><td><span class="badge badge-off">AI — keep off</span></td><td>No GPU = slow</td></tr>
+    <tr><td>Open WebUI</td><td><code>3004</code></td><td>http://SERVER_IP:3004</td><td><span class="badge badge-off">AI — keep off</span></td><td>No GPU = slow</td></tr>
+  </table>
+  </div>
+</div>
+
+<!-- ══ NON-DOCKER / SYSTEM LAYER ════════════════════════════════════════ -->
+<div class="section" id="s-non-docker">
+  <h1>System Layer</h1>
+  <p class="lead">Everything installed directly on the host OS — not in a container. These run even if Docker is stopped.</p>
+
+  <h2>Systemd Services</h2>
+  <div class="table-wrap">
+  <table>
+    <tr><th>Unit</th><th>Schedule</th><th>What it does</th></tr>
+    <tr><td><code>hub.service</code></td><td>Always on</td><td>Hub API server. Auto-restarts if it crashes. Runs as your SSH user.</td></tr>
+    <tr><td><code>hub-alert.timer</code></td><td>Every 15 min</td><td>Checks 11 services — sends ntfy alert only when state changes (down or recovery)</td></tr>
+    <tr><td><code>hub-daily.timer</code></td><td>07:00 daily</td><td>Morning brief to ntfy — containers up/down, disk %, RAM, load</td></tr>
+    <tr><td><code>hub-maintenance.timer</code></td><td>03:00 nightly</td><td>Runs maintenance.py — logs cleanup, health checks, journal entries</td></tr>
+  </table>
+  </div>
+  <pre class="cmd"><code># Manage hub service
+systemctl --user status hub
+systemctl --user restart hub
+journalctl --user -u hub -f</code></pre>
+
+  <h2>Firewall — UFW Rules</h2>
+  <p>UFW is configured by the installer. All service ports are opened using variables from <code>ports.conf</code>:</p>
+  <pre><code>22/tcp    SSH
+80/tcp    HTTP (NPM)
+443/tcp   HTTPS (NPM)
+81/tcp    NPM admin
+8765/tcp  Hub
+9443/tcp  Portainer
+9090/tcp  Cockpit
+3000/tcp  Homepage
+3001/tcp  Uptime Kuma
+19999/tcp Netdata
+8090/tcp  Dozzle
+8085/tcp  ntfy
+5678/tcp  n8n
+8082/tcp  Adminer
+8025/tcp  Mailpit
+3002/tcp  Wiki.js
+8001/tcp  SurrealDB</code></pre>
+  <div class="callout callout-warn">
+    <p>If you add a new service and it's unreachable, UFW is almost always the reason. Run <code>sudo ufw allow PORT/tcp</code> and verify with <code>sudo ufw status</code>.</p>
+  </div>
+
+  <h2>Fail2Ban</h2>
+  <div class="table-wrap">
+  <table>
+    <tr><th>Jail</th><th>Trigger</th><th>Ban</th></tr>
+    <tr><td>sshd</td><td>3 failed login attempts</td><td>24 hours</td></tr>
+    <tr><td>recidive</td><td>Repeat offender (already banned once)</td><td>1 week</td></tr>
+  </table>
+  </div>
+  <pre class="cmd"><code># If you lock yourself out from your work PC (192.168.1.192):
+sudo fail2ban-client set sshd unbanip 192.168.1.192
+
+# Check who's banned:
+sudo fail2ban-client status sshd</code></pre>
+
+  <h2>SSH Hardening</h2>
+  <p>Script 01 backs up <code>/etc/ssh/sshd_config</code> to <code>/etc/ssh/sshd_config.bak</code> and applies hardening. Key settings:</p>
+  <ul>
+    <li>Public key authentication enabled</li>
+    <li>Login banner enabled</li>
+    <li>SSH config backup preserved for rollback</li>
+  </ul>
+
+  <h2>Tailscale</h2>
+  <p>Installed via official script. Provides a VPN IP (<code>100.75.1.105</code>) accessible from anywhere without port forwarding. The server appears as <code>fks-services</code> in your Tailscale network.</p>
+  <pre class="cmd"><code># Access server from anywhere (no VPN config needed):
+ssh admin1@100.75.1.105
+http://100.75.1.105:8765</code></pre>
+
+  <h2>Claude CLI + MCP</h2>
+  <p>Installed by script 07. Lets you run Claude prompts over SSH and gives Claude awareness of the server filesystem.</p>
+  <ul>
+    <li><strong>Location:</strong> <code>/usr/local/bin/claude</code> (via Node.js 22 npm global)</li>
+    <li><strong>MCP config:</strong> <code>~/.claude/mcp-config.json</code></li>
+    <li><strong>filesystem MCP:</strong> access to <code>/srv/docker</code>, <code>/srv/backups</code>, <code>/home</code></li>
+    <li><strong>fetch MCP:</strong> HTTP requests from prompts</li>
+  </ul>
+
+  <h2>Security Tools</h2>
+  <div class="table-wrap">
+  <table>
+    <tr><th>Tool</th><th>What it does</th><th>Run with</th></tr>
+    <tr><td>rkhunter</td><td>Rootkit scanner</td><td><code>sudo rkhunter --check</code></td></tr>
+    <tr><td>lynis</td><td>Security audit — scores your system config</td><td><code>sudo lynis audit system</code></td></tr>
+    <tr><td>auditd</td><td>Kernel audit daemon — logs privileged actions</td><td>Rules at <code>/etc/audit/rules.d/server-kit.rules</code></td></tr>
+    <tr><td>CrowdSec</td><td>Threat intelligence — blocks known bad IPs</td><td><code>sudo systemctl start crowdsec</code></td></tr>
+    <tr><td>Docker Bench</td><td>Container security scan</td><td><code>cd /srv/docker/docker-bench && bash docker-bench-security.sh</code></td></tr>
+    <tr><td>unattended-upgrades</td><td>Auto-applies security patches</td><td>Runs automatically</td></tr>
+  </table>
+  </div>
+
+  <h2>Hardware Monitoring</h2>
+  <div class="table-wrap">
+  <table>
+    <tr><th>Tool</th><th>What it does</th></tr>
+    <tr><td>lm-sensors</td><td>CPU temperature, voltages</td></tr>
+    <tr><td>smartmontools</td><td>Disk health — S.M.A.R.T. data (<code>smartctl -a /dev/sda</code>)</td></tr>
+    <tr><td>s-tui</td><td>Terminal CPU/temp stress monitor</td></tr>
+    <tr><td>powertop</td><td>Power usage analysis</td></tr>
+  </table>
+  </div>
+
+  <h2>Login Banner (MOTD)</h2>
+  <p>A custom banner displays every time you SSH in. Configured at <code>/etc/update-motd.d/99-server-kit</code> — shows server name, uptime, and quick stats.</p>
+
+  <h2>tmux Config</h2>
+  <p>Custom <code>~/.tmux.conf</code> installed by script 14. Run <code>dashboard</code> to open a pre-built 4-pane tmux layout — terminal, logs, stats, and a spare pane ready to go.</p>
+</div>
+
+<!-- ══ CLI ════════════════════════════════════════════════════════════ -->
+<div class="section" id="s-cli">
+  <h1>CLI Tools</h1>
+  <p class="lead">All CLI tools are installed to <code>/usr/local/bin/</code> — available from any SSH session.</p>
+
+  <h2>Server Management</h2>
+  <div class="table-wrap">
+  <table>
+    <tr><th>Command</th><th>What it does</th></tr>
+    <tr><td><code>server-menu</code></td><td>Interactive menu — covers everything below and more</td></tr>
+    <tr><td><code>health-check</code></td><td>Full service + port status report — run this before touching anything</td></tr>
+    <tr><td><code>server-backup</code></td><td>Run a backup right now (cron also runs it nightly at 3am)</td></tr>
+    <tr><td><code>server-update</code></td><td>Pull latest images + system package updates</td></tr>
+    <tr><td><code>security-check</code></td><td>Quick security scan (rkhunter + lynis summary)</td></tr>
+    <tr><td><code>hw-monitor</code></td><td>CPU temp, disk health, hardware stats</td></tr>
+    <tr><td><code>dashboard</code></td><td>Open 4-pane tmux dashboard</td></tr>
+    <tr><td><code>ai-models</code></td><td>Manage Ollama AI models (only relevant if AI stack is on)</td></tr>
+  </table>
+  </div>
+
+  <h2>Docker Shortcuts</h2>
+  <div class="table-wrap">
+  <table>
+    <tr><th>Command</th><th>Equivalent</th></tr>
+    <tr><td><code>dkps</code></td><td><code>docker ps</code> — running containers</td></tr>
+    <tr><td><code>dklogs [name]</code></td><td><code>docker logs -f [name]</code> — stream logs</td></tr>
+    <tr><td><code>dkrestart [name]</code></td><td><code>docker restart [name]</code></td></tr>
+    <tr><td><code>dkstop [name]</code></td><td><code>docker stop [name]</code></td></tr>
+    <tr><td><code>dkstart [name]</code></td><td><code>docker start [name]</code></td></tr>
+  </table>
+  </div>
+
+  <h2>Bash Aliases</h2>
+  <p>Shorter versions of the above — only work in interactive SSH sessions (not non-interactive commands):</p>
+  <pre><code>menu      → server-menu
+health    → health-check
+hw        → hw-monitor
+dash      → dashboard
+dps       → docker ps
+dlogs     → docker logs
+dcu       → docker compose up -d
+dcd       → docker compose down
+dcr       → docker compose restart
+dcp       → docker compose pull
+update-kit → kit-update</code></pre>
+
+  <h2>Docker Compose Locations</h2>
+  <p>All services live under <code>/srv/docker/</code> — one folder per service:</p>
+  <pre class="cmd"><code># Start a service
+cd /srv/docker/SERVICE && docker compose up -d
+
+# Stop a service
+cd /srv/docker/SERVICE && docker compose down
+
+# Stream logs
+cd /srv/docker/SERVICE && docker compose logs -f
+
+# Update image and restart
+cd /srv/docker/SERVICE && docker compose pull && docker compose up -d</code></pre>
+</div>
+
+<!-- ══ HUB ════════════════════════════════════════════════════════════ -->
+<div class="section" id="s-hub">
+  <h1>The Hub</h1>
+  <p class="lead">A browser-based control panel that lives at <code>http://SERVER_IP:8765</code>. It gives you a visual interface over SSH — everything you'd do on the command line, available from any browser.</p>
+
+  <h2>Navigation</h2>
+  <div class="table-wrap">
+  <table>
+    <tr><th>Section</th><th>Coverage</th></tr>
+    <tr><td><strong>Server</strong></td><td>Dashboard (live stats), Survey (deep health check), Terminal, Logs, Network (UFW/fail2ban), Storage, Files</td></tr>
+    <tr><td><strong>Services</strong></td><td>Live list of every service — click to open in a browser pane. Green dot = up, red = down.</td></tr>
+    <tr><td><strong>Ops</strong></td><td>Runbooks (step-by-step fix guides), Issues tracker, Journal (manual log entries)</td></tr>
+    <tr><td><strong>Tools</strong></td><td>Quick-launch pad — one click to Terminal, Survey, Logs, Vault, Settings from anywhere</td></tr>
+    <tr><td><strong>Vault</strong></td><td>Password manager — AES-256-GCM encrypted, master password never leaves the browser</td></tr>
+    <tr><td><strong>Docs</strong></td><td>Markdown guides from the <code>guides/</code> folder — rendered in-browser</td></tr>
+    <tr><td><strong>Guide</strong></td><td>Hub feature overview + task docket</td></tr>
+  </table>
+  </div>
+
+  <h2>Home Dashboard</h2>
+  <p>The pinned Home tab shows live server state on load — disk %, RAM, load average, container count, and a per-service status grid. Data comes from the hub's <code>/api/status</code> and <code>/api/services</code> endpoints, refreshed every 60 seconds.</p>
+
+  <h2>Survey</h2>
+  <p>A one-click deep health check. Runs 6 parallel SSH commands and surfaces: all container states with ages, per-filesystem disk usage, RAM, CPU load, maintenance log tail, and coloured alerts for anything over threshold.</p>
+
+  <h2>Vault</h2>
+  <p>Client-side AES-256-GCM password manager. The master password is derived with 200k rounds of PBKDF2 — it is never sent to the server. The encrypted blob is stored in SQLite. If you forget the master password, the vault cannot be recovered.</p>
+
+  <h2>Settings</h2>
+  <p>Each settings category has tabs for sub-topics:</p>
+  <ul>
+    <li><strong>Appearance</strong> — Theme, Interface</li>
+    <li><strong>Connection</strong> — Network addresses, SSH config</li>
+    <li><strong>Security</strong> — 2FA Gate (TOTP), Hub Update (git pull + restart), Firewall</li>
+    <li><strong>Users</strong> — Accounts, Session info</li>
+    <li><strong>Integrations</strong> — AI provider/key, Alerts (ntfy config), Automation (n8n)</li>
+    <li><strong>System</strong> — Live server info, Snapshot download, Danger Zone</li>
+  </ul>
+</div>
+
+<!-- ══ ALERTING ════════════════════════════════════════════════════════ -->
+<div class="section" id="s-alerting">
+  <h1>Alerting</h1>
+  <p class="lead">Three layers of push notifications to your phone — state-change alerts, a daily brief, and scheduled disk monitoring.</p>
+
+  <h2>ntfy Setup</h2>
+  <p>ntfy runs on <code>:8085</code>. Subscribe from your phone:</p>
+  <ol>
+    <li>Install the <strong>ntfy</strong> app (Android/iOS)</li>
+    <li>Add server: <code>http://SERVER_IP:8085</code></li>
+    <li>Subscribe to topic: <code>server-alerts</code></li>
+  </ol>
+  <div class="callout callout-warn">
+    <p>Make sure port 8085 is open in UFW if you're accessing from a phone on your LAN: <code>sudo ufw allow 8085/tcp</code></p>
+  </div>
+
+  <h2>Alert Layers</h2>
+  <div class="table-wrap">
+  <table>
+    <tr><th>Layer</th><th>Schedule</th><th>What triggers it</th></tr>
+    <tr><td>State-change alerts</td><td>Every 15 min</td><td>Any of 11 services goes down <em>or</em> recovers. Fires only on change — not every check.</td></tr>
+    <tr><td>Daily brief</td><td>07:00 daily</td><td>Always fires. Container count, disk %, RAM, load average.</td></tr>
+    <tr><td>Disk warning (n8n)</td><td>Every 2 hours</td><td>Disk over 72% (warn) or 85% (critical). Uses Netdata API — no SSH needed.</td></tr>
+  </table>
+  </div>
+
+  <h2>Scripts Location</h2>
+  <pre><code>~/hub/scripts/alert-check.sh   # state-change alerting
+~/hub/scripts/daily-summary.sh  # morning brief</code></pre>
+</div>
+
+<!-- ══ RUNBOOKS ════════════════════════════════════════════════════════ -->
+<div class="section" id="s-runbooks">
+  <h1>Runbooks</h1>
+  <p class="lead">Step-by-step response guides for the most common server problems. Available in the hub under <strong>Ops → Runbooks</strong>.</p>
+
+  <h2>SSH Lockout (Fail2Ban)</h2>
+  <pre class="cmd"><code>sudo fail2ban-client set sshd unbanip YOUR_IP</code></pre>
+  <p>Check your work PC's IP first: usually <code>192.168.1.192</code> on the local network.</p>
+
+  <h2>Container Won't Start</h2>
+  <pre class="cmd"><code>dklogs CONTAINER_NAME          # 1. Check logs for error
+dkrestart CONTAINER_NAME       # 2. Try restart
+cd /srv/docker/NAME && docker compose down && docker compose up -d  # 3. Full restart</code></pre>
+
+  <h2>Disk Almost Full</h2>
+  <pre class="cmd"><code>df -h                          # 1. Find what's full
+docker system prune -f         # 2. Remove unused images/volumes
+docker system df               # 3. Check Docker disk usage</code></pre>
+
+  <h2>Hub Won't Load</h2>
+  <pre class="cmd"><code>systemctl --user status hub    # 1. Check status
+systemctl --user restart hub   # 2. Restart
+journalctl --user -u hub -f    # 3. Watch logs
+sudo ufw status                # 4. Check firewall</code></pre>
+
+  <h2>Portainer Locked Out</h2>
+  <pre class="cmd"><code>cd /srv/docker/portainer
+docker compose down
+docker volume rm portainer_data
+docker compose up -d
+# Browse to :9443 and set up a new admin account</code></pre>
+
+  <h2>Full Health Check</h2>
+  <pre class="cmd"><code>health-check    # Run from SSH — full status report</code></pre>
+</div>
+
+<!-- ══ UPDATE ════════════════════════════════════════════════════════ -->
+<div class="section" id="s-update">
+  <h1>Updating</h1>
+
+  <h2>Update the Hub (App Only)</h2>
+  <pre class="cmd"><code>cd ~/hub && git pull origin master
+systemctl --user restart hub</code></pre>
+  <p>Or from inside the Hub: <strong>Settings → Security → Hub Update → Pull Latest &amp; Restart</strong></p>
+
+  <h2>Update Docker Containers</h2>
+  <pre class="cmd"><code>server-update   # Updates all containers + system packages</code></pre>
+  <p>Or per-service:</p>
+  <pre class="cmd"><code>cd /srv/docker/SERVICE
+docker compose pull
+docker compose up -d</code></pre>
+
+  <h2>Update server-kit Scripts</h2>
+  <pre class="cmd"><code>cd ~/server-kit && git pull
+# Re-run any individual script if needed:
+bash 10-linux-helpers.sh</code></pre>
+
+  <div class="callout callout-tip">
+    <p>The hub and Docker stack update independently — you can push new hub features any time without touching your running containers.</p>
+  </div>
+</div>
+
+<!-- ══ TROUBLESHOOT ════════════════════════════════════════════════════ -->
+<div class="section" id="s-troubleshoot">
+  <h1>Troubleshooting</h1>
+
+  <h2>Service Unreachable on Expected Port</h2>
+  <ol>
+    <li>Is the container running? <code>dkps | grep NAME</code></li>
+    <li>Is the port open in UFW? <code>sudo ufw status | grep PORT</code></li>
+    <li>Is anything listening? <code>sudo ss -tlnp | grep PORT</code></li>
+    <li>Check container logs: <code>dklogs NAME</code></li>
+  </ol>
+
+  <h2>Hub Shows Offline / Won't Connect</h2>
+  <pre class="cmd"><code>systemctl --user is-active hub     # Should say: active
+curl http://localhost:8765/api/status  # Should return JSON</code></pre>
+
+  <h2>SSH Times Out</h2>
+  <p>If SSH keeps dropping, add these to your <code>~/.ssh/config</code> on the connecting machine:</p>
+  <pre><code>Host 192.168.1.229
+  ServerAliveInterval 30
+  ServerAliveCountMax 3
+  ConnectTimeout 20</code></pre>
+
+  <h2>Docker Compose Not Found</h2>
+  <pre class="cmd"><code>docker compose version   # Should work — plugin style
+docker-compose version   # Old standalone — may not be installed</code></pre>
+  <p>If <code>docker compose</code> fails, Docker wasn't installed via the official script. Re-run script 02.</p>
+
+  <h2>Reset Hub Password</h2>
+  <pre class="cmd"><code>python3 -c "
+import sqlite3, hashlib
+pw = 'YOUR_NEW_PASSWORD'
+h = hashlib.sha256(pw.encode()).hexdigest()
+c = sqlite3.connect('/home/admin1/db/server.db')
+c.execute('UPDATE users SET password_hash=? WHERE username=?', (h, 'admin'))
+c.commit()
+print('Done')
+"</code></pre>
+</div>
+
+</main>
+</div>
+
+<script>
+function show(id) {
+  document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
+  document.querySelectorAll('.sk-link').forEach(l => l.classList.remove('active'));
+  const el = document.getElementById('s-' + id);
+  if (el) el.classList.add('active');
+  document.querySelectorAll('.sk-link').forEach(l => {
+    if (l.getAttribute('onclick') && l.getAttribute('onclick').includes("'" + id + "'")) {
+      l.classList.add('active');
+    }
+  });
+  window.scrollTo(0, 0);
+  // close sidebar on mobile after navigation
+  if (window.innerWidth < 1024) closeSidebar();
+}
+
+function toggleSidebar() {
+  const sb = document.getElementById('sidebar');
+  const ov = document.getElementById('sidebar-overlay');
+  sb.classList.toggle('open');
+  ov.classList.toggle('show');
+}
+
+function closeSidebar() {
+  document.getElementById('sidebar').classList.remove('open');
+  document.getElementById('sidebar-overlay').classList.remove('show');
+}
+</script>

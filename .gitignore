@@ -3,3 +3,4 @@ notes/secrets.env
 *.env.local
 *.env.*.local
 db/server.db
+.netlify/

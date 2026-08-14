@@ -1,0 +1,503 @@
+<title>Get Started — Server Kit</title>
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#f8f7f4;
+  --surface:#ffffff;
+  --border:#d4cfc9;
+  --text:#1c2128;
+  --muted:#57606a;
+  --light:#8b949e;
+  --accent:#0969da;
+  --accent-bg:#ddf4ff;
+  --accent-dim:#b3d7f7;
+  --green:#1a7f37;
+  --green-bg:#dafbe1;
+  --code-bg:#f0ede8;
+  --code-text:#24292f;
+  --step-size:36px;
+}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',system-ui,sans-serif;background:var(--bg);color:var(--text);font-size:15.5px;line-height:1.75;min-height:100vh}
+a{color:var(--accent)}
+
+/* ── PROGRESS BAR ── */
+#progress-bar{position:fixed;top:0;left:0;height:3px;background:var(--accent);transition:width .4s ease;z-index:300}
+
+/* ── TOP BAR ── */
+#topbar{position:fixed;top:0;left:0;right:0;height:52px;background:var(--surface);border-bottom:1px solid var(--border);display:flex;align-items:center;padding:0 28px;gap:12px;z-index:200}
+#topbar .logo{font-weight:800;font-size:14px;color:var(--text);display:flex;align-items:center;gap:8px;text-decoration:none}
+#topbar .pill{background:var(--accent);color:#fff;font-size:10px;font-weight:700;padding:2px 7px;border-radius:10px;letter-spacing:.4px}
+#topbar .back{margin-left:auto;font-size:13px;color:var(--muted);text-decoration:none;display:flex;align-items:center;gap:5px}
+#topbar .back:hover{color:var(--accent)}
+
+/* ── LAYOUT ── */
+#page{padding-top:52px;min-height:100vh;display:flex;flex-direction:column;align-items:center}
+#inner{width:100%;max-width:700px;padding:40px 28px 80px}
+
+/* ── STEP INDICATOR ── */
+#step-indicator{display:flex;align-items:center;gap:0;margin:8px 0 44px;position:relative}
+.si-step{display:flex;flex-direction:column;align-items:center;flex:1;position:relative;z-index:1}
+.si-circle{width:var(--step-size);height:var(--step-size);border-radius:50%;border:2px solid var(--border);background:var(--bg);display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:700;color:var(--light);transition:all .3s ease;position:relative}
+.si-label{font-size:11px;color:var(--light);margin-top:7px;font-weight:500;text-align:center;transition:color .3s;white-space:nowrap}
+.si-connector{flex:1;height:2px;background:var(--border);margin-top:calc(0px - var(--step-size)/2 - 4px);transition:background .3s;z-index:0;position:relative;top:calc(var(--step-size)/-2 + 1px)}
+
+/* step states */
+.si-step.done .si-circle{background:var(--green);border-color:var(--green);color:#fff}
+.si-step.done .si-label{color:var(--green)}
+.si-step.active .si-circle{background:var(--accent);border-color:var(--accent);color:#fff;box-shadow:0 0 0 4px var(--accent-bg)}
+.si-step.active .si-label{color:var(--accent);font-weight:700}
+.si-connector.done{background:var(--green)}
+.si-connector.active{background:var(--accent-dim)}
+
+/* ── STEP PANELS ── */
+.step-panel{display:none;animation:fadeIn .25s ease}
+.step-panel.active{display:block}
+@keyframes fadeIn{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
+
+/* ── TYPOGRAPHY ── */
+.step-eyebrow{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.8px;color:var(--accent);margin-bottom:6px}
+.step-title{font-size:26px;font-weight:800;letter-spacing:-.4px;line-height:1.2;margin-bottom:10px}
+.step-lead{font-size:16px;color:var(--muted);line-height:1.65;margin-bottom:28px}
+h3{font-size:15px;font-weight:700;margin:24px 0 8px}
+p{margin-bottom:12px}
+ul,ol{padding-left:20px;margin-bottom:12px}
+li{margin-bottom:5px}
+
+/* ── OS TABS ── */
+.os-tabs{display:flex;gap:2px;border:1px solid var(--border);border-radius:8px;background:var(--code-bg);padding:4px;margin-bottom:0;width:fit-content}
+.os-tab{font-size:12.5px;font-weight:600;padding:6px 16px;border-radius:5px;cursor:pointer;color:var(--muted);transition:all .15s;border:none;background:none}
+.os-tab:hover{color:var(--text)}
+.os-tab.active{background:var(--surface);color:var(--text);box-shadow:0 1px 3px rgba(0,0,0,.1)}
+.os-content{display:none}
+.os-content.active{display:block}
+
+/* ── CODE ── */
+code{background:var(--code-bg);color:var(--code-text);padding:1px 5px;border-radius:4px;font-size:13px;font-family:'Cascadia Code','Fira Code','JetBrains Mono',Consolas,monospace}
+pre{background:#1c2128;color:#e6edf3;border-radius:9px;padding:16px 20px;overflow-x:auto;margin:10px 0 18px;line-height:1.55;position:relative}
+pre code{background:none;padding:0;font-size:13px;color:#e6edf3}
+.copy-btn{position:absolute;top:10px;right:10px;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.15);color:#a0aab4;font-size:11px;font-weight:600;padding:4px 10px;border-radius:5px;cursor:pointer;transition:all .15s}
+.copy-btn:hover{background:rgba(255,255,255,.15);color:#fff}
+.copy-btn.copied{color:#3fb950;border-color:#3fb950}
+
+/* ── CHECKLIST ── */
+.checklist{list-style:none;padding:0;margin:0 0 24px}
+.checklist li{display:flex;gap:12px;align-items:flex-start;padding:10px 14px;border-radius:8px;margin-bottom:4px;font-size:15px;cursor:pointer;transition:background .12s}
+.checklist li:hover{background:rgba(0,0,0,.03)}
+.checklist li .ck{width:20px;height:20px;border-radius:50%;border:2px solid var(--border);flex-shrink:0;margin-top:2px;display:flex;align-items:center;justify-content:center;transition:all .2s}
+.checklist li.checked .ck{background:var(--green);border-color:var(--green);color:#fff}
+.checklist li.checked .ck::after{content:'✓';font-size:11px;font-weight:700}
+.checklist li.checked .ck-label{color:var(--muted)}
+.ck-label{flex:1;line-height:1.5}
+.ck-label small{display:block;font-size:13px;color:var(--light);margin-top:1px}
+
+/* ── CALLOUT ── */
+.callout{border-radius:8px;padding:13px 16px;margin:16px 0;border-left:3px solid;font-size:14px;line-height:1.65}
+.callout p{margin:0}
+.callout-info{background:var(--accent-bg);border-color:var(--accent);color:#0a3069}
+.callout-tip{background:var(--green-bg);border-color:var(--green);color:#0d3620}
+.callout-warn{background:#fff3cd;border-color:#c79100;color:#3d2a00}
+
+/* ── QUESTIONS (step 3) ── */
+.q-list{margin:0 0 24px}
+.q-item{border:1px solid var(--border);border-radius:9px;margin-bottom:8px;overflow:hidden;background:var(--surface)}
+.q-header{display:flex;align-items:center;gap:12px;padding:14px 16px;cursor:pointer;transition:background .12s}
+.q-header:hover{background:var(--bg)}
+.q-num{width:26px;height:26px;border-radius:50%;background:var(--accent);color:#fff;font-size:12px;font-weight:700;display:flex;align-items:center;justify-content:center;flex-shrink:0}
+.q-title{font-weight:600;font-size:15px;flex:1}
+.q-chevron{color:var(--light);transition:transform .2s;font-size:12px}
+.q-body{display:none;padding:0 16px 16px 54px;font-size:14px;color:var(--muted)}
+.q-body p{margin:0}
+.q-item.open .q-chevron{transform:rotate(90deg)}
+.q-item.open .q-body{display:block}
+
+/* ── TIMELINE ── */
+.timeline{position:relative;padding-left:28px;margin:16px 0 24px}
+.timeline::before{content:'';position:absolute;left:7px;top:6px;bottom:6px;width:2px;background:var(--border);border-radius:1px}
+.tl-item{position:relative;margin-bottom:16px}
+.tl-item::before{content:'';position:absolute;left:-24px;top:6px;width:10px;height:10px;border-radius:50%;background:var(--accent-dim);border:2px solid var(--accent);transition:all .3s}
+.tl-item:first-child::before{background:var(--green);border-color:var(--green)}
+.tl-item strong{display:block;font-size:14px;font-weight:700}
+.tl-item span{font-size:13px;color:var(--muted)}
+
+/* ── FIRST LOGIN (step 4) ── */
+.first-login-url{background:#1c2128;color:#58a6ff;border-radius:9px;padding:18px 20px;font-family:'Cascadia Code','Fira Code',Consolas,monospace;font-size:16px;margin:12px 0 20px;text-align:center;letter-spacing:.5px}
+.next-cards{display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin:12px 0 24px}
+.next-card{background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:14px 14px;text-align:center}
+.next-card .nc-icon{font-size:22px;margin-bottom:6px;display:block}
+.next-card strong{display:block;font-size:13px;margin-bottom:3px}
+.next-card span{font-size:12px;color:var(--muted);line-height:1.4;display:block}
+
+/* ── NAV BUTTONS ── */
+#nav-btns{display:flex;justify-content:space-between;align-items:center;margin-top:36px;padding-top:24px;border-top:1px solid var(--border)}
+.btn{display:inline-flex;align-items:center;gap:8px;padding:10px 22px;border-radius:8px;font-size:14.5px;font-weight:600;cursor:pointer;border:none;transition:all .15s;text-decoration:none}
+.btn-primary{background:var(--accent);color:#fff}
+.btn-primary:hover{background:#0860ca}
+.btn-ghost{background:transparent;color:var(--muted);border:1.5px solid var(--border)}
+.btn-ghost:hover{border-color:var(--accent);color:var(--accent)}
+.btn-success{background:var(--green);color:#fff}
+.btn-success:hover{background:#166030}
+#btn-prev{visibility:hidden}
+.step-counter{font-size:13px;color:var(--light);font-weight:500}
+
+/* ── RESPONSIVE ── */
+@media(max-width:640px){
+  #inner{padding:28px 16px 60px}
+  .step-title{font-size:21px}
+  .next-cards{grid-template-columns:1fr}
+  .si-label{display:none}
+  .os-tabs{flex-wrap:wrap}
+}
+</style>
+
+<!-- progress bar -->
+<div id="progress-bar" style="width:25%"></div>
+
+<!-- top bar -->
+<div id="topbar">
+  <a class="logo" href="index.html">⚙ Server Kit <span class="pill">DOCS</span></a>
+  <a class="back" href="index.html">← Full Reference</a>
+</div>
+
+<div id="page">
+<div id="inner">
+
+  <!-- STEP INDICATOR -->
+  <div id="step-indicator">
+    <div class="si-step active" data-step="1">
+      <div class="si-circle" id="si-1">1</div>
+      <div class="si-label">Before you start</div>
+    </div>
+    <div class="si-connector" id="sc-1"></div>
+    <div class="si-step" data-step="2">
+      <div class="si-circle" id="si-2">2</div>
+      <div class="si-label">Connect &amp; download</div>
+    </div>
+    <div class="si-connector" id="sc-2"></div>
+    <div class="si-step" data-step="3">
+      <div class="si-circle" id="si-3">3</div>
+      <div class="si-label">Run the installer</div>
+    </div>
+    <div class="si-connector" id="sc-3"></div>
+    <div class="si-step" data-step="4">
+      <div class="si-circle" id="si-4">4</div>
+      <div class="si-label">First login</div>
+    </div>
+  </div>
+
+  <!-- ══ STEP 1 ══════════════════════════════════════════════════════════ -->
+  <div class="step-panel active" id="panel-1">
+    <div class="step-eyebrow">Step 1 of 4</div>
+    <h1 class="step-title">Before you start</h1>
+    <p class="step-lead">Run through this checklist. The installer handles everything else — these are the only things you bring to the table.</p>
+
+    <ul class="checklist" id="ck1">
+      <li onclick="toggleCk(this)">
+        <div class="ck"></div>
+        <div class="ck-label"><strong>A machine to be the server</strong><small>Physical PC, old laptop, mini-PC, or a VM — anything with 4 GB RAM and 40 GB disk. More is always better.</small></div>
+      </li>
+      <li onclick="toggleCk(this)">
+        <div class="ck"></div>
+        <div class="ck-label"><strong>Linux installed and booted</strong><small>Ubuntu 24.04 LTS is the tested default. Debian, Fedora, and Arch also work — see the OS tabs below.</small></div>
+      </li>
+      <li onclick="toggleCk(this)">
+        <div class="ck"></div>
+        <div class="ck-label"><strong>SSH access from your main computer</strong><small>You'll need to connect over the network. Run <code>ssh user@SERVER_IP</code> and make sure it works before continuing.</small></div>
+      </li>
+      <li onclick="toggleCk(this)">
+        <div class="ck"></div>
+        <div class="ck-label"><strong>Internet on the server</strong><small>The installer pulls packages and Docker images. A wired connection is best for the initial setup.</small></div>
+      </li>
+      <li onclick="toggleCk(this)">
+        <div class="ck"></div>
+        <div class="ck-label"><strong>The server's local IP address</strong><small>Run <code>ip a</code> on the server and note the IP — e.g. <code>192.168.1.100</code>. You'll enter this during the install.</small></div>
+      </li>
+    </ul>
+
+    <h3>Pick your OS</h3>
+    <p style="font-size:14px;color:var(--muted);margin-bottom:10px">The installer detects this automatically — but make sure you know which package manager your system uses.</p>
+
+    <div class="os-tabs" style="margin-bottom:14px">
+      <button class="os-tab active" onclick="switchOS('ubuntu',this)">Ubuntu</button>
+      <button class="os-tab" onclick="switchOS('debian',this)">Debian</button>
+      <button class="os-tab" onclick="switchOS('fedora',this)">Fedora / RHEL</button>
+      <button class="os-tab" onclick="switchOS('arch',this)">Arch</button>
+    </div>
+
+    <div class="os-content active" id="os-ubuntu">
+      <div class="callout callout-tip"><p>✓ <strong>Fully tested.</strong> Ubuntu 24.04 LTS is the primary target — all scripts are written and validated against this.</p></div>
+      <pre><code><span style="color:#79c0ff"># Confirm Ubuntu version</span>
+lsb_release -a
+<span style="color:#79c0ff"># Should show: Ubuntu 24.04 LTS</span></code><button class="copy-btn" onclick="copyCode(this)">Copy</button></pre>
+      <p style="font-size:14px;color:var(--muted)">Package manager: <code>apt</code> · Installer variable: <code>PKG_INSTALL="apt install -y"</code></p>
+    </div>
+
+    <div class="os-content" id="os-debian">
+      <div class="callout callout-info"><p>✓ <strong>Supported.</strong> Debian 11+ (Bullseye and later). Nearly identical to Ubuntu — same <code>apt</code> package names.</p></div>
+      <pre><code><span style="color:#79c0ff"># Confirm Debian version</span>
+cat /etc/debian_version
+<span style="color:#79c0ff"># Should be 11 or higher</span></code><button class="copy-btn" onclick="copyCode(this)">Copy</button></pre>
+      <p style="font-size:14px;color:var(--muted)">Package manager: <code>apt</code> · Installer variable: <code>PKG_INSTALL="apt install -y"</code></p>
+    </div>
+
+    <div class="os-content" id="os-fedora">
+      <div class="callout callout-warn"><p>⚠ <strong>Community supported.</strong> Fedora 38+ and RHEL/Rocky/Alma 9+. Most packages install fine — a few names differ from the Ubuntu equivalents.</p></div>
+      <pre><code><span style="color:#79c0ff"># Confirm Fedora/RHEL</span>
+cat /etc/os-release | grep NAME
+<span style="color:#79c0ff"># Enable EPEL if on RHEL/Rocky:</span>
+sudo dnf install -y epel-release</code><button class="copy-btn" onclick="copyCode(this)">Copy</button></pre>
+      <p style="font-size:14px;color:var(--muted)">Package manager: <code>dnf</code> · Installer variable: <code>PKG_INSTALL="dnf install -y"</code></p>
+    </div>
+
+    <div class="os-content" id="os-arch">
+      <div class="callout callout-warn"><p>⚠ <strong>Advanced users.</strong> Arch Linux (and Manjaro) work but require some manual intervention. Package names and service management differ.</p></div>
+      <pre><code><span style="color:#79c0ff"># Update package database first</span>
+sudo pacman -Syu
+<span style="color:#79c0ff"># Confirm system is up to date before installing</span></code><button class="copy-btn" onclick="copyCode(this)">Copy</button></pre>
+      <p style="font-size:14px;color:var(--muted)">Package manager: <code>pacman</code> · Installer variable: <code>PKG_INSTALL="pacman -S --noconfirm"</code></p>
+    </div>
+
+    <div class="callout callout-info" style="margin-top:16px">
+      <p>Not sure what you have? Run <code>cat /etc/os-release</code> on the server — the <code>NAME</code> field tells you everything.</p>
+    </div>
+  </div>
+
+  <!-- ══ STEP 2 ══════════════════════════════════════════════════════════ -->
+  <div class="step-panel" id="panel-2">
+    <div class="step-eyebrow">Step 2 of 4</div>
+    <h1 class="step-title">Connect &amp; download</h1>
+    <p class="step-lead">SSH into your server and pull the kit down. Two commands. Takes about 30 seconds.</p>
+
+    <h3>Open an SSH connection</h3>
+    <p>From your main computer's terminal — replace <code>YOUR_USER</code> and <code>SERVER_IP</code> with your actual values:</p>
+    <pre><code>ssh YOUR_USER@SERVER_IP</code><button class="copy-btn" onclick="copyCode(this)">Copy</button></pre>
+
+    <div class="callout callout-tip">
+      <p><strong>First time connecting?</strong> You'll see a fingerprint prompt — type <code>yes</code> and press Enter. This only happens once per machine.</p>
+    </div>
+
+    <h3>Clone server-kit</h3>
+    <p>Once you're in, run this on the server:</p>
+    <pre><code>git clone https://github.com/KGSHOPINV/server-kit ~/server-kit</code><button class="copy-btn" onclick="copyCode(this)">Copy</button></pre>
+
+    <h3>Enter the directory</h3>
+    <pre><code>cd ~/server-kit</code><button class="copy-btn" onclick="copyCode(this)">Copy</button></pre>
+
+    <div class="callout callout-info">
+      <p>No <code>git</code> on the server yet? Install it first: <code>sudo apt install -y git</code> (Ubuntu/Debian) or <code>sudo dnf install -y git</code> (Fedora).</p>
+    </div>
+
+    <h3>What you just downloaded</h3>
+    <pre><code>server-kit/
+  install.sh          ← the one command you run next
+  01-system-setup.sh
+  02-docker.sh
+  03-npm.sh
+  …
+  16-ai-setup.sh
+  conf/
+    ports.conf        ← all port assignments live here
+  tools/              ← CLI tools that get installed</code><button class="copy-btn" onclick="copyCode(this)">Copy</button></pre>
+  </div>
+
+  <!-- ══ STEP 3 ══════════════════════════════════════════════════════════ -->
+  <div class="step-panel" id="panel-3">
+    <div class="step-eyebrow">Step 3 of 4</div>
+    <h1 class="step-title">Run the installer</h1>
+    <p class="step-lead">One command. It asks you four questions, then runs 16 setup scripts in order. Go get a coffee — it takes about 10 minutes.</p>
+
+    <h3>The command</h3>
+    <pre><code>bash install.sh</code><button class="copy-btn" onclick="copyCode(this)">Copy</button></pre>
+
+    <h3>The four questions — click each to see what to enter</h3>
+    <div class="q-list">
+      <div class="q-item">
+        <div class="q-header" onclick="toggleQ(this)">
+          <div class="q-num">1</div>
+          <div class="q-title">Server IP address</div>
+          <div class="q-chevron">▶</div>
+        </div>
+        <div class="q-body"><p>Your server's local LAN IP — the one you SSH'd into in Step 2. Example: <code>192.168.1.229</code><br><br>This is used to configure UFW firewall rules, Docker bind addresses, and service URLs baked into the hub. Get it right — it's used everywhere.</p></div>
+      </div>
+      <div class="q-item">
+        <div class="q-header" onclick="toggleQ(this)">
+          <div class="q-num">2</div>
+          <div class="q-title">SSH username</div>
+          <div class="q-chevron">▶</div>
+        </div>
+        <div class="q-body"><p>The Linux username you logged in as. Example: <code>admin1</code> or <code>ubuntu</code><br><br>The hub runs as a systemd service under this user. This is also the user that gets the bash aliases, CLI tools, and hub folder in their home directory.</p></div>
+      </div>
+      <div class="q-item">
+        <div class="q-header" onclick="toggleQ(this)">
+          <div class="q-num">3</div>
+          <div class="q-title">Timezone</div>
+          <div class="q-chevron">▶</div>
+        </div>
+        <div class="q-body"><p>Your timezone in tz format. Examples: <code>America/Los_Angeles</code> · <code>America/New_York</code> · <code>Europe/London</code> · <code>Australia/Sydney</code><br><br>Sets the system clock, alert schedules (like the 7am daily brief), log timestamps, and backup windows. Not sure of the exact format? Run <code>timedatectl list-timezones | grep America</code> to search.</p></div>
+      </div>
+      <div class="q-item">
+        <div class="q-header" onclick="toggleQ(this)">
+          <div class="q-num">4</div>
+          <div class="q-title">Hub admin password</div>
+          <div class="q-chevron">▶</div>
+        </div>
+        <div class="q-body"><p>The password you'll use to log into the hub web UI at <code>:8765</code>. The username will be <code>admin</code>.<br><br>It's stored as a SHA-256 hash in SQLite — never written to any file in plaintext. You can reset it later if you forget it.</p></div>
+      </div>
+    </div>
+
+    <h3>What happens next</h3>
+    <div class="timeline">
+      <div class="tl-item"><strong>OS detection</strong><span>Reads /etc/os-release and sets the right package manager for your distro</span></div>
+      <div class="tl-item"><strong>Scripts 01–16 run in order</strong><span>Each one logs what it's doing. Most take 30–90 seconds. Docker images are the longest part.</span></div>
+      <div class="tl-item"><strong>Hub is cloned</strong><span>server-kit clones the claude-server repo to ~/hub on your behalf</span></div>
+      <div class="tl-item"><strong>hub.service starts</strong><span>systemd starts the Python API server and keeps it running. It restarts automatically if it crashes.</span></div>
+      <div class="tl-item"><strong>Done</strong><span>You'll see a summary of what's running and the URL to open. Total time: ~10 minutes on a good connection.</span></div>
+    </div>
+
+    <div class="callout callout-warn">
+      <p><strong>Script 16 (AI stack) asks if you want it enabled.</strong> Unless you have a GPU, say no — Ollama runs on CPU only and will peg your cores at 100% whenever it's active.</p>
+    </div>
+  </div>
+
+  <!-- ══ STEP 4 ══════════════════════════════════════════════════════════ -->
+  <div class="step-panel" id="panel-4">
+    <div class="step-eyebrow">Step 4 of 4</div>
+    <h1 class="step-title">First login</h1>
+    <p class="step-lead">Open a browser on any machine on your network. Type this in the address bar:</p>
+
+    <div class="first-login-url">http://YOUR_SERVER_IP:8765</div>
+
+    <p style="font-size:14px;color:var(--muted)">Login with username <code>admin</code> and the password you set in question 4. That's it — you're in.</p>
+
+    <h3>First three things to do</h3>
+    <div class="next-cards">
+      <div class="next-card">
+        <span class="nc-icon">📊</span>
+        <strong>Check the dashboard</strong>
+        <span>Home tab shows live disk, RAM, load, and all service dots. Anything red needs attention.</span>
+      </div>
+      <div class="next-card">
+        <span class="nc-icon">🔔</span>
+        <strong>Set up ntfy alerts</strong>
+        <span>Install the ntfy app, add your server at :8085, subscribe to <em>server-alerts</em>.</span>
+      </div>
+      <div class="next-card">
+        <span class="nc-icon">🐳</span>
+        <strong>Open Portainer</strong>
+        <span>Services → Portainer (:9443) to see every container at a glance. Create your admin account before the timeout.</span>
+      </div>
+    </div>
+
+    <h3>Add optional services</h3>
+    <p>Script 08 has extras you can add any time — n8n, Redis, Adminer, Mailpit, Wiki.js and more. Re-run it from your SSH session:</p>
+    <pre><code>cd ~/server-kit && bash 08-extras-setup.sh</code><button class="copy-btn" onclick="copyCode(this)">Copy</button></pre>
+
+    <div class="callout callout-tip">
+      <p><strong>You're done.</strong> From here, the <a href="index.html">full reference docs</a> cover every service, port, CLI tool, runbook, and setting in detail.</p>
+    </div>
+  </div>
+
+  <!-- NAV BUTTONS -->
+  <div id="nav-btns">
+    <button class="btn btn-ghost" id="btn-prev" onclick="prevStep()">← Back</button>
+    <span class="step-counter" id="step-counter">Step 1 of 4</span>
+    <button class="btn btn-primary" id="btn-next" onclick="nextStep()">Next step →</button>
+  </div>
+
+</div>
+</div>
+
+<script>
+let current = 1;
+const total = 4;
+
+function goTo(n) {
+  // hide old panel
+  document.getElementById('panel-' + current).classList.remove('active');
+  // update indicator
+  const oldStep = document.querySelector('.si-step[data-step="' + current + '"]');
+  oldStep.classList.remove('active');
+  if (n > current) {
+    oldStep.classList.add('done');
+    const oldCircle = document.getElementById('si-' + current);
+    oldCircle.innerHTML = '✓';
+    // connector
+    const conn = document.getElementById('sc-' + current);
+    if (conn) conn.classList.add('done');
+  } else {
+    oldStep.classList.remove('done');
+    document.getElementById('si-' + current).innerHTML = current;
+    const conn = document.getElementById('sc-' + current);
+    if (conn) { conn.classList.remove('done'); conn.classList.remove('active'); }
+  }
+
+  current = n;
+
+  // show new panel
+  document.getElementById('panel-' + current).classList.add('active');
+  const newStep = document.querySelector('.si-step[data-step="' + current + '"]');
+  newStep.classList.add('active');
+  newStep.classList.remove('done');
+  document.getElementById('si-' + current).innerHTML = current;
+
+  // update connectors behind current
+  for (let i = 1; i < total; i++) {
+    const conn = document.getElementById('sc-' + i);
+    if (!conn) continue;
+    conn.classList.remove('done','active');
+    if (i < current - 1) conn.classList.add('done');
+    else if (i === current - 1) conn.classList.add('done');
+  }
+
+  // buttons
+  const prev = document.getElementById('btn-prev');
+  const next = document.getElementById('btn-next');
+  prev.style.visibility = current === 1 ? 'hidden' : 'visible';
+  document.getElementById('step-counter').textContent = 'Step ' + current + ' of ' + total;
+
+  if (current === total) {
+    next.textContent = '✓ Done — open the docs';
+    next.className = 'btn btn-success';
+    next.onclick = () => window.location.href = 'index.html';
+  } else {
+    next.textContent = 'Next step →';
+    next.className = 'btn btn-primary';
+    next.onclick = nextStep;
+  }
+
+  // progress bar
+  document.getElementById('progress-bar').style.width = ((current / total) * 100) + '%';
+
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+}
+
+function nextStep() { if (current < total) goTo(current + 1); }
+function prevStep() { if (current > 1) goTo(current - 1); }
+
+// OS tabs
+function switchOS(os, btn) {
+  document.querySelectorAll('.os-tab').forEach(t => t.classList.remove('active'));
+  document.querySelectorAll('.os-content').forEach(c => c.classList.remove('active'));
+  btn.classList.add('active');
+  document.getElementById('os-' + os).classList.add('active');
+}
+
+// Checklist items
+function toggleCk(li) { li.classList.toggle('checked'); }
+
+// Accordion for questions
+function toggleQ(header) {
+  const item = header.parentElement;
+  item.classList.toggle('open');
+}
+
+// Copy buttons
+function copyCode(btn) {
+  const pre = btn.parentElement;
+  const code = pre.querySelector('code');
+  navigator.clipboard.writeText(code.innerText).then(() => {
+    btn.textContent = 'Copied!';
+    btn.classList.add('copied');
+    setTimeout(() => { btn.textContent = 'Copy'; btn.classList.remove('copied'); }, 2000);
+  });
+}
+</script>
