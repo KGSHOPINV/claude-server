@@ -281,6 +281,53 @@ def db_conn():
     conn.row_factory = sqlite3.Row
     return conn
 
+def get_setup_status():
+    """Check which parts of server-kit have been installed."""
+    home = os.path.expanduser('~')
+    kit  = os.path.join(home, 'server-kit')
+
+    def cmd_ok(c):
+        try:
+            return subprocess.run(c, shell=True, capture_output=True, timeout=3).returncode == 0
+        except Exception:
+            return False
+
+    def svc_running(name):
+        return cmd_ok(f"systemctl is-active {name} --quiet 2>/dev/null || systemctl --user is-active {name} --quiet 2>/dev/null")
+
+    steps = [
+        {'id': '01', 'label': 'System packages',   'done': cmd_ok('command -v git && command -v curl && command -v ufw')},
+        {'id': '02', 'label': 'Docker',             'done': cmd_ok('docker info >/dev/null 2>&1')},
+        {'id': '03', 'label': 'Nginx Proxy Mgr',   'done': cmd_ok('docker ps --filter name=npm --format "{{.Names}}" | grep -q npm')},
+        {'id': '04', 'label': 'Cloudflare Tunnel',  'done': cmd_ok('docker ps --filter name=cloudflared --format "{{.Names}}" | grep -q cloudflared')},
+        {'id': '05', 'label': 'Portainer',          'done': cmd_ok('docker ps --filter name=portainer --format "{{.Names}}" | grep -q portainer')},
+        {'id': '06', 'label': 'Monitoring',         'done': cmd_ok('docker ps --filter name=uptime-kuma --format "{{.Names}}" | grep -q uptime-kuma')},
+        {'id': '07', 'label': 'Claude CLI',         'done': cmd_ok('command -v claude')},
+        {'id': '08', 'label': 'Optional services',  'done': os.path.isfile(os.path.join(home, '.server-kit-extras-done'))},
+        {'id': '09', 'label': 'Backup',             'done': cmd_ok('command -v server-backup')},
+        {'id': '10', 'label': 'CLI helpers',        'done': cmd_ok('command -v health-check')},
+        {'id': '11', 'label': 'Hardware monitor',   'done': cmd_ok('command -v hw-monitor')},
+        {'id': '12', 'label': 'Security tools',     'done': cmd_ok('command -v rkhunter')},
+        {'id': '13', 'label': 'GitHub deploy',      'done': cmd_ok('command -v gh')},
+        {'id': '14', 'label': 'Terminal setup',     'done': os.path.isfile(os.path.join(home, '.tmux.conf'))},
+        {'id': '15', 'label': 'Alerts + ntfy',      'done': cmd_ok('docker ps --filter name=ntfy --format "{{.Names}}" | grep -q ntfy')},
+        {'id': '16', 'label': 'AI stack',           'done': cmd_ok('docker ps --filter name=ollama --format "{{.Names}}" | grep -q ollama')},
+    ]
+
+    done_count = sum(1 for s in steps if s['done'])
+    kit_present = os.path.isdir(kit)
+    bootstrapped = done_count >= 2  # at least packages + docker
+
+    return {
+        'steps': steps,
+        'done_count': done_count,
+        'total': len(steps),
+        'complete': done_count == len(steps),
+        'bootstrapped': bootstrapped,
+        'kit_present': kit_present,
+        'kit_path': kit if kit_present else None,
+    }
+
 def vault_get():
     try:
         conn = db_conn()
@@ -794,6 +841,9 @@ class Handler(http.server.BaseHTTPRequestHandler):
 
         elif p == '/api/status':
             self.send_json(get_status(force=force))
+
+        elif p == '/api/setup/status':
+            self.send_json(get_setup_status())
 
         elif p == '/api/containers':
             self.send_json(get_containers(force=force))
