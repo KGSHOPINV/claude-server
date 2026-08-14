@@ -771,9 +771,22 @@ body.desk-mode #desk-exit { display:flex; align-items:center; gap:6px; }
     <div class="vm-field"><label>Username / Email</label><input id="vm-usr" placeholder="admin" autocomplete="off"></div>
     <div class="vm-field"><label>Password</label>
       <div class="vm-pw-row">
-        <input id="vm-pw" type="password" placeholder="password" autocomplete="new-password">
+        <input id="vm-pw" type="password" placeholder="password" autocomplete="new-password" oninput="vaultPwStrength(this.value)">
         <button class="btn" title="Show/hide" onclick="var e=document.getElementById('vm-pw');e.type=e.type==='password'?'text':'password'" style="padding:0 9px;font-size:13px">👁</button>
         <button class="btn" title="Generate strong password" onclick="vaultGenPw()" style="padding:0 9px;font-size:13px">⚡</button>
+      </div>
+      <div style="margin-top:6px">
+        <div style="display:flex;gap:3px;margin-bottom:3px" id="vm-strength-bars">
+          <div style="flex:1;height:3px;border-radius:2px;background:var(--border)" id="vsb0"></div>
+          <div style="flex:1;height:3px;border-radius:2px;background:var(--border)" id="vsb1"></div>
+          <div style="flex:1;height:3px;border-radius:2px;background:var(--border)" id="vsb2"></div>
+          <div style="flex:1;height:3px;border-radius:2px;background:var(--border)" id="vsb3"></div>
+        </div>
+        <div style="display:flex;justify-content:space-between;align-items:center">
+          <span id="vm-strength-lbl" style="font-size:10px;color:var(--muted)"></span>
+          <span style="font-size:10px;color:var(--muted)">Length: <span id="vm-gen-len-lbl">20</span>
+            <input type="range" id="vm-gen-len" min="12" max="40" value="20" style="width:60px;vertical-align:middle;margin-left:4px" oninput="document.getElementById('vm-gen-len-lbl').textContent=this.value"></span>
+        </div>
       </div>
     </div>
     <div class="vm-field"><label>URL</label><input id="vm-url" placeholder="https://192.168.1.229:9443" autocomplete="off"></div>
@@ -1192,29 +1205,32 @@ const CATEGORIES = {
       ]},
     ]
   },
-  // ── TOOLS — quick-launch anything from one place ──────────────────────────
+  // ── TOOLS — things not covered by any other category ─────────────────────
   tools: {
     title: 'Tools',
     sections: [
-      { label:'Quick Launch', items:[
-        {icon:'⌨', label:'Terminal',  action:()=>openView('terminal')},
-        {icon:'🔍', label:'Survey',   action:()=>openView('survey')},
-        {icon:'📋', label:'Logs',     action:()=>openView('logs')},
-        {icon:'🗺', label:'Infra Map',action:()=>openView('map')},
-        {icon:'🤖', label:'AI Chat',  action:()=>openView('chat')},
+      { label:'Explore', items:[
+        {icon:'🗺', label:'Infra Map',  action:()=>openView('map')},
+        {icon:'🌐', label:'Browser',   action:()=>openView('browser')},
       ]},
-      { label:'Admin', items:[
-        {icon:'🔐', label:'Vault',    action:()=>openView('vault')},
-        {icon:'⚙', label:'Settings', action:()=>openView('settings')},
+      { label:'AI', items:[
+        {icon:'🤖', label:'AI Chat',   action:()=>openView('chat')},
+      ]},
+      { label:'Config', items:[
+        {icon:'⚙', label:'Settings',  action:()=>openView('settings')},
+        {icon:'📋', label:'Task Docket', action:()=>openView('tasks')},
       ]},
     ]
   },
-  // ── VAULT — credentials ───────────────────────────────────────────────────
+  // ── VAULT — credentials (standalone — client-side AES-256-GCM) ───────────
   vault: {
     title: 'Vault',
     sections: [
-      { label:'', items:[
+      { label:'Credentials', items:[
         {icon:'🔐', label:'Password Vault', action:()=>openView('vault')},
+      ]},
+      { label:'Security', items:[
+        {icon:'🛡', label:'2FA Gate',  action:()=>openView('settings')},
       ]},
     ]
   },
@@ -1224,9 +1240,8 @@ const CATEGORIES = {
   guide: {
     title: 'Guide',
     sections: [
-      { label:'', items:[
+      { label:'Reference', items:[
         {icon:'🏠', label:"What's Here",  action:()=>openView('guide')},
-        {icon:'📋', label:'Task Docket',  action:()=>openView('tasks')},
       ]},
     ]
   },
@@ -2385,7 +2400,7 @@ function vaultBodyHTML() {
 
 function vaultEntryHTML(e, i) {
   const icon = V_ICONS[e.category||'Other'] || '🔐';
-  return `<div class="ve2">
+  return `<div class="ve2" data-i="${i}">
     <div class="ve2-hdr">
       <div class="ve2-icon">${icon}</div>
       <div class="ve2-title">${escH(e.title||'—')}</div>
@@ -2470,17 +2485,6 @@ function toggleVPw(i) {
   }
 }
 
-function vCopy(i, field, label) {
-  const val = S.vaultData?.entries[i]?.[field] || '';
-  navigator.clipboard.writeText(val).then(() => showToast(label + ' copied ✓'));
-}
-
-async function delVE(i) {
-  if (!confirm(`Delete "${S.vaultData.entries[i]?.title}"?`)) return;
-  S.vaultData.entries.splice(i,1); await saveVault();
-  document.querySelectorAll('.view-vault').forEach(el => el.innerHTML = vaultBodyHTML());
-}
-
 function vaultAdd() { openVaultModal(-1); }
 
 function vaultEdit(i) {
@@ -2526,12 +2530,61 @@ async function vaultSaveEntry() {
 }
 
 function vaultGenPw() {
+  const len   = parseInt(document.getElementById('vm-gen-len')?.value || '20');
   const chars = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!@#$%^&*-_';
-  const pw = Array.from(crypto.getRandomValues(new Uint8Array(20)))
+  const pw = Array.from(crypto.getRandomValues(new Uint8Array(len)))
     .map(b => chars[b % chars.length]).join('');
   const el = document.getElementById('vm-pw');
-  if (el) { el.value = pw; el.type = 'text'; }
+  if (el) { el.value = pw; el.type = 'text'; vaultPwStrength(pw); }
   showToast('Strong password generated ⚡');
+}
+
+function vaultPwStrength(pw) {
+  const bars  = [0,1,2,3].map(i => document.getElementById('vsb'+i));
+  const lbl   = document.getElementById('vm-strength-lbl');
+  if (!bars[0] || !lbl) return;
+  let score = 0;
+  if (pw.length >= 8)  score++;
+  if (pw.length >= 16) score++;
+  if (/[A-Z]/.test(pw) && /[a-z]/.test(pw)) score++;
+  if (/[0-9]/.test(pw)) score++;
+  if (/[^A-Za-z0-9]/.test(pw)) score = Math.min(4, score + 1);
+  const colours = ['','#f85149','#d29922','#3fb950','#58a6ff'];
+  const labels  = ['','Weak','Fair','Strong','Very strong'];
+  bars.forEach((b,i) => b.style.background = i < score ? colours[score] : 'var(--border)');
+  lbl.textContent = pw ? labels[Math.min(score,4)] : '';
+  lbl.style.color = colours[Math.min(score,4)] || 'var(--muted)';
+}
+
+function vCopy(i, field, label) {
+  const val = S.vaultData?.entries[i]?.[field] || '';
+  navigator.clipboard.writeText(val).then(() => {
+    showToast(label + ' copied ✓');
+    // Flash every matching copy button briefly
+    document.querySelectorAll(`.ve2-copybtn[onclick*="vCopy(${i},'${field}'"]`).forEach(btn => {
+      const orig = btn.textContent;
+      btn.textContent = '✓';
+      btn.style.color = 'var(--green)';
+      setTimeout(() => { btn.textContent = orig; btn.style.color = ''; }, 1400);
+    });
+  });
+}
+
+async function delVE(i) {
+  const title = S.vaultData?.entries[i]?.title || 'this entry';
+  const card  = document.querySelector(`.ve2[data-i="${i}"]`);
+  if (!card) { _doDelVE(i); return; }
+  // Inline confirm — replaces card content briefly
+  const orig = card.innerHTML;
+  card.innerHTML = `<div style="padding:12px;display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+    <span style="font-size:12px;color:var(--text);flex:1">Delete <strong>${escH(title)}</strong>?</span>
+    <button class="btn d" style="font-size:11px" onclick="_doDelVE(${i})">Delete</button>
+    <button class="btn" style="font-size:11px" onclick="refreshVaultList()">Cancel</button>
+  </div>`;
+}
+async function _doDelVE(i) {
+  S.vaultData.entries.splice(i,1); await saveVault();
+  document.querySelectorAll('.view-vault').forEach(el => el.innerHTML = vaultBodyHTML());
 }
 
 async function vEnc(data,pw){const salt=crypto.getRandomValues(new Uint8Array(16)),iv=crypto.getRandomValues(new Uint8Array(12));const k=await vKey(pw,salt);const ct=await crypto.subtle.encrypt({name:'AES-GCM',iv},k,new TextEncoder().encode(JSON.stringify(data)));const o=new Uint8Array(28+ct.byteLength);o.set(salt,0);o.set(iv,16);o.set(new Uint8Array(ct),28);return btoa(String.fromCharCode(...o));}
@@ -3990,7 +4043,7 @@ async function initTOTPSetup() {
   act.innerHTML = `<span style="font-size:11px;color:var(--muted)">Generating secret…</span>`;
   const r = await fetch(API+'/api/totp/setup');
   const d = await r.json();
-  if (d.configured) { showToast('2FA already active'); loadTOTPStatus(); return; }
+  // Always fresh — server generates a new temp secret every call, never saves it.
   // Store pending secret in module scope — NOT saved to server DB yet.
   // Exiting or cancelling without confirming leaves DB untouched → 2FA stays off.
   _totpPendingSecret = d.secret || '';

@@ -956,15 +956,13 @@ class Handler(http.server.BaseHTTPRequestHandler):
             self.send_json({'configured': bool(secret), 'gates': gates})
 
         elif p == '/api/totp/setup':
-            secret = config_get('totp_secret', '')
-            if secret and 'force' not in self.path:
-                self.send_json({'configured': True})
-                return
+            # Always generate a fresh temp secret — never saved to DB here.
+            # The status endpoint tells the UI whether 2FA is already active.
+            # This endpoint is only called when the user wants to begin setup.
             new_secret = totp_new_secret()
             sess = check_auth(self)
             account = sess['user'] if sess else 'admin'
             self.send_json({
-                'configured': False,
                 'secret': new_secret,
                 'uri': totp_uri(new_secret, account),
             })
