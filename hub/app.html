@@ -2746,6 +2746,7 @@ function setCfgSection(section) {
       <div class="cfg-heading">System</div>
       <div class="cfg-tabs">
         <div class="cfg-tab active" onclick="setCfgTab(this,'info')">Server Info</div>
+        <div class="cfg-tab" onclick="setCfgTab(this,'setup');loadSetupStatus()">Setup</div>
         <div class="cfg-tab" onclick="setCfgTab(this,'snapshot')">Snapshot</div>
         <div class="cfg-tab" onclick="setCfgTab(this,'danger')">Danger Zone</div>
       </div>
@@ -2759,6 +2760,16 @@ function setCfgSection(section) {
           <div class="vs-row"><label>Containers</label><code style="font-family:var(--mono);font-size:11px;color:var(--muted)">${st.containers!==undefined?st.containers:' —'} running</code></div>
           <div class="vs-row"><label>OS</label><code style="font-family:var(--mono);font-size:11px;color:var(--muted)">Ubuntu 24.04 LTS · fks-services</code></div>
           <div class="vs-row"><label>Updated</label><code style="font-family:var(--mono);font-size:11px;color:var(--muted)">${st.fetched_at||'—'}</code></div>
+        </div>
+      </div>
+      <div id="cfg-tab-setup" class="cfg-tab-pane hidden">
+        <div class="vs-section">
+          <div class="vs-hdr">Server Kit Setup</div>
+          <div style="font-size:11px;color:var(--muted);margin-bottom:12px">Shows which of the 16 install scripts have run on this server. Run remaining scripts from ~/server-kit to complete the stack.</div>
+          <div id="setup-status-body">
+            <div style="font-size:11px;color:var(--muted)">Checking install state…</div>
+          </div>
+          <div style="margin-top:14px;display:flex;gap:8px;flex-wrap:wrap" id="setup-actions"></div>
         </div>
       </div>
       <div id="cfg-tab-snapshot" class="cfg-tab-pane hidden">
@@ -3881,6 +3892,76 @@ async function submitGateCode() {
 }
 
 // ── TOTP MANAGEMENT ──────────────────────────────────────────────────────────
+// ── SETUP STATUS PANEL ───────────────────────────────────────────────────────
+
+async function loadSetupStatus() {
+  const body = document.getElementById('setup-status-body');
+  const actions = document.getElementById('setup-actions');
+  if (!body) return;
+  body.innerHTML = `<div style="font-size:11px;color:var(--muted)">Checking install state…</div>`;
+  try {
+    const r = await fetch(API + '/api/setup/status');
+    const d = await r.json();
+    const steps = d.steps || [];
+    const done = d.done_count || 0;
+    const total = d.total || 16;
+    const pct = Math.round((done / total) * 100);
+
+    // Progress bar
+    const barColor = done === total ? 'var(--green)' : done >= 2 ? 'var(--accent)' : 'var(--red)';
+    let html = `
+      <div style="margin-bottom:14px">
+        <div style="display:flex;justify-content:space-between;font-size:11px;color:var(--muted);margin-bottom:4px">
+          <span>${done} of ${total} scripts completed</span>
+          <span style="color:${barColor};font-weight:700">${pct}%</span>
+        </div>
+        <div style="height:5px;background:var(--bg3);border-radius:3px;overflow:hidden">
+          <div style="height:100%;width:${pct}%;background:${barColor};border-radius:3px;transition:width .4s"></div>
+        </div>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:4px 12px">`;
+
+    for (const s of steps) {
+      const icon = s.done ? `<span style="color:var(--green);font-size:11px">✓</span>` : `<span style="color:var(--border);font-size:11px">○</span>`;
+      const labelColor = s.done ? 'var(--text)' : 'var(--muted)';
+      html += `<div style="display:flex;align-items:center;gap:6px;padding:4px 0;border-bottom:1px solid var(--bg3)">
+        ${icon}
+        <span style="font-size:11px;color:${labelColor}"><span style="color:var(--muted);font-family:var(--mono)">${s.id}</span> ${s.label}</span>
+      </div>`;
+    }
+    html += `</div>`;
+
+    // Warning if stale/incomplete
+    if (done < total) {
+      const missing = steps.filter(s => !s.done).map(s => s.id).join(', ');
+      html += `<div style="margin-top:12px;padding:10px 12px;background:var(--bg3);border-left:3px solid var(--accent);border-radius:0 6px 6px 0;font-size:11px;color:var(--muted)">
+        <strong style="color:var(--text)">Not fully installed</strong> — scripts ${missing} haven't run.<br>
+        From SSH: <code style="font-family:var(--mono);background:var(--bg2);padding:1px 4px;border-radius:3px">cd ~/server-kit && bash install.sh</code>
+      </div>`;
+    } else {
+      html += `<div style="margin-top:12px;padding:10px 12px;background:var(--green-bg,#dafbe1);border-left:3px solid var(--green);border-radius:0 6px 6px 0;font-size:11px;color:var(--muted)">
+        <strong style="color:var(--green)">✓ Fully installed</strong> — all 16 scripts have run.
+      </div>`;
+    }
+
+    body.innerHTML = html;
+
+    // Action buttons
+    if (actions) {
+      actions.innerHTML = `
+        <button class="btn" onclick="loadSetupStatus()" style="font-size:11px">↻ Refresh</button>
+        ${d.kit_present ? `<button class="btn" style="font-size:11px" onclick="runCmd('cd ~/server-kit && bash install.sh')">▶ Run installer via terminal</button>` : ''}
+      `;
+    }
+  } catch(e) {
+    body.innerHTML = `<div style="font-size:11px;color:var(--red)">Could not reach /api/setup/status — is the hub server running?</div>`;
+  }
+}
+
+// ── TOTP MANAGEMENT ───────────────────────────────────────────────────────────
+// Pending secret is held in memory only — never saved to DB until confirmed with a valid code.
+// Exiting/cancelling mid-setup leaves DB untouched → 2FA stays off.
+let _totpPendingSecret = '';
 
 async function loadTOTPStatus() {
   const msg = document.getElementById('totp-status-msg');
@@ -3910,19 +3991,21 @@ async function initTOTPSetup() {
   const r = await fetch(API+'/api/totp/setup');
   const d = await r.json();
   if (d.configured) { showToast('2FA already active'); loadTOTPStatus(); return; }
-  const secret = d.secret || '';
-  const grouped = secret.match(/.{1,4}/g)?.join(' ') || secret;
+  // Store pending secret in module scope — NOT saved to server DB yet.
+  // Exiting or cancelling without confirming leaves DB untouched → 2FA stays off.
+  _totpPendingSecret = d.secret || '';
+  const grouped = _totpPendingSecret.match(/.{1,4}/g)?.join(' ') || _totpPendingSecret;
   act.innerHTML = `
     <div style="background:var(--bg3);border:1px solid var(--border);border-radius:6px;padding:12px">
       <div style="font-size:11px;color:var(--muted);margin-bottom:6px">1. Open your authenticator app (Google Authenticator, Authy, etc.)</div>
       <div style="font-size:11px;color:var(--muted);margin-bottom:4px">2. Add account → Enter setup key manually:</div>
-      <div style="font-family:var(--mono);font-size:13px;background:var(--bg2);padding:8px 10px;border-radius:4px;letter-spacing:2px;margin-bottom:8px;word-break:break-all;color:var(--accent);cursor:pointer" onclick="navigator.clipboard?.writeText('${secret}');showToast('Secret copied')" title="Click to copy">${grouped}</div>
+      <div style="font-family:var(--mono);font-size:13px;background:var(--bg2);padding:8px 10px;border-radius:4px;letter-spacing:2px;margin-bottom:8px;word-break:break-all;color:var(--accent);cursor:pointer" onclick="navigator.clipboard?.writeText('${_totpPendingSecret}');showToast('Secret copied')" title="Click to copy">${grouped}</div>
       <div style="font-size:10px;color:var(--muted);margin-bottom:10px">Account: ServerHub — Issuer: ServerHub — 6 digits, 30s interval</div>
-      <div style="font-size:11px;color:var(--muted);margin-bottom:6px">3. Enter the 6-digit code to confirm setup:</div>
+      <div style="font-size:11px;color:var(--muted);margin-bottom:6px">3. Enter the 6-digit code from your app to activate:</div>
       <div style="display:flex;gap:6px;align-items:center">
         <input id="totp-confirm-inp" class="vs-inp" placeholder="000000" maxlength="6" inputmode="numeric" style="width:120px;font-family:var(--mono);letter-spacing:3px;text-align:center" onkeydown="if(event.key==='Enter')confirmTOTPSetup()">
-        <button class="btn p" onclick="confirmTOTPSetup()">Confirm</button>
-        <button class="btn" onclick="loadTOTPStatus()">Cancel</button>
+        <button class="btn p" onclick="confirmTOTPSetup()">Activate</button>
+        <button class="btn" onclick="_totpPendingSecret='';loadTOTPStatus()">Cancel</button>
       </div>
       <div id="totp-setup-err" style="font-size:11px;color:var(--red);margin-top:6px;min-height:14px"></div>
     </div>`;
@@ -3932,13 +4015,14 @@ async function initTOTPSetup() {
 async function confirmTOTPSetup() {
   const code = document.getElementById('totp-confirm-inp')?.value.trim();
   const err  = document.getElementById('totp-setup-err');
-  if (!code) return;
-  const r = await fetch(API+'/api/totp/verify', {method:'POST', headers:{'Content-Type':'application/json'},
-    body: JSON.stringify({code, level:3, duration_s:1800})});
+  if (!code || !_totpPendingSecret) return;
+  // POST to /confirm — server verifies code against the temp secret, saves only if valid
+  const r = await fetch(API+'/api/totp/confirm', {method:'POST', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({secret: _totpPendingSecret, code})});
   const d = await r.json();
   if (d.ok) {
-    setGateToken(d.gate_token, d.expires_at);
-    showToast('2FA enabled! Gate unlocked for 30min');
+    _totpPendingSecret = '';
+    showToast('2FA activated ✓ — now unlock the gate to proceed');
     loadTOTPStatus();
   } else {
     if (err) err.textContent = d.error || 'Invalid code — check your app and try again';

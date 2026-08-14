@@ -715,9 +715,17 @@ def totp_verify(code):
     return any(_totp_hotp(secret, t + d) == code for d in (-1, 0, 1))
 
 def totp_new_secret():
-    secret = base64.b32encode(os.urandom(20)).decode()
-    config_set('totp_secret', secret)
-    return secret
+    # Generate only — does NOT save to DB.
+    # Caller must call /api/totp/confirm with a valid code to activate.
+    return base64.b32encode(os.urandom(20)).decode()
+
+def totp_verify_secret(secret, code):
+    """Verify a code against any given secret (not necessarily the saved one)."""
+    if not secret:
+        return False
+    t = int(time.time()) // 30
+    code = str(code).strip().zfill(6)
+    return any(_totp_hotp(secret, t + d) == code for d in (-1, 0, 1))
 
 def totp_uri(secret, account='admin'):
     import urllib.parse as _up
@@ -1080,6 +1088,22 @@ class Handler(http.server.BaseHTTPRequestHandler):
             api_key  = body.get('api_key', '').strip()
             if provider: config_set('ai_provider', provider)
             if api_key:  config_set('ai_api_key', api_key)
+            self.send_json({'ok': True})
+
+        elif p == '/api/totp/confirm':
+            # Activate 2FA: verify code against a temp secret, save only if valid.
+            # This is called during setup — not for gate unlock.
+            secret = str(body.get('secret', '')).strip()
+            code   = str(body.get('code', '')).strip()
+            if not secret:
+                self.send_json({'ok': False, 'error': 'No secret provided'}, 400)
+                return
+            if not totp_verify_secret(secret, code):
+                self.send_json({'ok': False, 'error': 'Invalid code — check your authenticator app'}, 401)
+                return
+            # Code is valid → save secret → 2FA is now active
+            config_set('totp_secret', secret)
+            journal_add('security', '2FA enabled via setup confirmation', '')
             self.send_json({'ok': True})
 
         elif p == '/api/totp/verify':
