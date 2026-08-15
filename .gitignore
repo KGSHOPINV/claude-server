@@ -4,3 +4,8 @@ notes/secrets.env
 *.env.*.local
 db/server.db
 .netlify/
+
+# CLAUDE.md is your personal workspace config (real IPs, SSH user, etc.)
+# Copy CLAUDE.example.md → CLAUDE.md and fill in your values.
+# It is intentionally gitignored so credentials never reach GitHub.
+CLAUDE.md
