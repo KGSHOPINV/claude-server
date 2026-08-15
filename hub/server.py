@@ -40,8 +40,9 @@ HTTPS_PORTS = {9443, 9090}
 _ssl_ctx = ssl.create_default_context()
 _ssl_ctx.check_hostname = False
 _ssl_ctx.verify_mode = ssl.CERT_NONE
-SSH_HOST   = os.environ.get('HUB_SSH_HOST', 'homeserver')
-SERVER_IP  = os.environ.get('HUB_SERVER_IP', '192.168.1.229')
+SSH_HOST   = os.environ.get('HUB_SSH_HOST', 'localhost')
+SSH_USER   = os.environ.get('HUB_SSH_USER', '')   # optional; overrides user parsed from SSH_HOST
+SERVER_IP  = os.environ.get('HUB_SERVER_IP', '')  # leave blank — hub reads actual IP from server
 
 # ── Proxy cache ───────────────────────────────────────────────────────────────
 # HTML pages: 5s TTL (they change). JS/CSS/images: 60s TTL (static assets).
@@ -169,6 +170,46 @@ _cache = {'status': None, 'ts': 0, 'containers': None, 'containers_ts': 0}
 _lock = threading.Lock()
 _sessions = {}  # token -> {user, created}
 _users_lock = threading.Lock()
+_server_info_cache = None   # cached once per process restart
+
+def get_server_info():
+    """Fetch server identity once and cache for the lifetime of the process."""
+    global _server_info_cache
+    if _server_info_cache is not None:
+        return _server_info_cache
+    r = ssh_run(
+        'printf "%s\t%s\t%s\t%s\t%s\t%s"'
+        ' "$(hostname)"'
+        ' "$(lsb_release -rs 2>/dev/null || uname -r)"'
+        ' "$(ip route get 1 2>/dev/null | awk \'{print $7}\' | head -1)"'
+        ' "$(tailscale ip -4 2>/dev/null || echo none)"'
+        ' "$(nproc)"'
+        ' "$(echo $HOME)"'
+    )
+    if r.get('online') and r.get('output'):
+        parts = r['output'].split('\t')
+        _server_info_cache = {
+            'hostname':    parts[0].strip() if len(parts) > 0 else '',
+            'os':          f"Ubuntu {parts[1].strip()}" if len(parts) > 1 else '',
+            'local_ip':    parts[2].strip() if len(parts) > 2 else '',
+            'tailscale_ip': parts[3].strip() if len(parts) > 3 else 'none',
+            'cpu_cores':   int(parts[4].strip()) if len(parts) > 4 and parts[4].strip().isdigit() else 0,
+            'home_dir':    parts[5].strip() if len(parts) > 5 and parts[5].strip() else '/root',
+            'ssh_user':    SSH_USER or (SSH_HOST.split('@')[0] if '@' in SSH_HOST else ''),
+        }
+    else:
+        # Offline / local mode fallback
+        import pwd
+        _server_info_cache = {
+            'hostname': '',
+            'os': '',
+            'local_ip': '',
+            'tailscale_ip': 'none',
+            'cpu_cores': 0,
+            'home_dir': os.path.expanduser('~'),
+            'ssh_user': SSH_USER,
+        }
+    return _server_info_cache
 
 def get_status(force=False):
     with _lock:
@@ -206,6 +247,15 @@ def get_status(force=False):
         except Exception as e:
             data = {'online': True, 'parse_error': str(e), 'raw': r['output']}
 
+    if data.get('online'):
+        si = get_server_info()
+        # Attach ram_total_gb from the status we just parsed
+        if data.get('ram_total_mb'):
+            si = dict(si)  # don't mutate the cached copy
+            si['ram_total_gb'] = round(data['ram_total_mb'] / 1024, 1)
+        data['server_info'] = si
+        if si.get('cpu_cores'):
+            data['cpu_cores'] = si['cpu_cores']
     with _lock:
         _cache['status'] = data
         _cache['ts'] = time.time()
@@ -463,7 +513,7 @@ def get_storage_info():
     r2 = ssh_run("docker system df 2>/dev/null")
     results['docker_df'] = r2.get('output','') if r2.get('online') else ''
     # Key directory sizes
-    r3 = ssh_run("du -sh /srv/docker /srv/backups /home/admin1 2>/dev/null")
+    r3 = ssh_run("du -sh /srv/docker /srv/backups $HOME 2>/dev/null")
     results['dirs'] = r3.get('output','') if r3.get('online') else ''
     # Docker volumes list
     r4 = ssh_run("docker volume ls --format '{{.Name}}' 2>/dev/null | head -30")
@@ -473,7 +523,7 @@ def get_storage_info():
 def get_files(path):
     safe = path.replace('..','').replace('~','').strip()
     if not safe.startswith('/'):
-        safe = '/home/admin1'
+        safe = get_server_info().get('home_dir', '/root')
     r = ssh_run(f"ls -lah --time-style=short-iso '{safe}' 2>&1 | head -60")
     return {'path': safe, 'listing': r.get('output',''), 'error': r.get('error','') if not r.get('online') else ''}
 
@@ -549,7 +599,7 @@ def ai_system_prompt():
     running = [c['name'] for c in containers if c.get('running')]
     lines = [
         'You are an AI assistant with full context about this Linux server.',
-        f'Hostname: {SERVER_IP}  |  OS: Ubuntu  |  Mode: {"local" if LOCAL_MODE else "remote"}',
+        f'Hostname: {SSH_HOST}  |  OS: Ubuntu  |  Mode: {"local" if LOCAL_MODE else "remote"}',
         f'RAM: {status.get("ram_used_mb","?")}MB / {status.get("ram_total_mb","?")}MB  '
         f'|  Disk: {status.get("disk_used","?")} / {status.get("disk_total","?")} ({status.get("disk_pct","?")})',
         f'Load: {status.get("load","?")}  |  Uptime: {status.get("uptime","?")}',
@@ -1000,11 +1050,20 @@ class Handler(http.server.BaseHTTPRequestHandler):
             else:
                 self.send_json({'ok': False}, 401)
 
+        elif p == '/api/my-ip':
+            # Return the connecting client's IP address (useful for fail2ban unban)
+            client_ip = self.client_address[0]
+            # X-Forwarded-For from reverse proxy
+            xff = self.headers.get('X-Forwarded-For', '')
+            if xff:
+                client_ip = xff.split(',')[0].strip()
+            self.send_json({'ip': client_ip})
+
         elif p == '/api/storage':
             self.send_json(get_storage_info())
 
         elif p == '/api/files':
-            path = '/home/admin1'
+            path = get_server_info().get('home_dir', '/')
             if '?' in self.path:
                 for part in self.path.split('?',1)[1].split('&'):
                     if part.startswith('path='):
