@@ -789,7 +789,7 @@ body.desk-mode #desk-exit { display:flex; align-items:center; gap:6px; }
         </div>
       </div>
     </div>
-    <div class="vm-field"><label>URL</label><input id="vm-url" placeholder="https://192.168.1.229:9443" autocomplete="off"></div>
+    <div class="vm-field"><label>URL</label><input id="vm-url" placeholder="https://server:9443" autocomplete="off"></div>
     <div class="vm-field"><label>Notes</label><input id="vm-notes" placeholder="Optional notes" autocomplete="off"></div>
     <div class="vm-field"><label>Category</label>
       <select id="vm-cat">
@@ -999,7 +999,9 @@ body.desk-mode #desk-exit { display:flex; align-items:center; gap:6px; }
 <script>
 'use strict';
 const API = window.location.origin;  // works from any host — localhost, Tailscale IP, LAN IP
-const SRV = window.location.hostname === 'localhost' ? '192.168.1.229' : window.location.hostname;
+// SRV = the server's address as seen by this browser — always correct at runtime.
+// If accessing the hub from localhost (dev mode), SRV points at localhost too; the API calls will work.
+const SRV = window.location.hostname;
 
 // ── Client-side API cache ──────────────────────────────────────────────────────
 // Avoids re-fetching on every view switch. TTLs in ms.
@@ -1063,6 +1065,7 @@ async function downloadManifest() {
 // ── GLOBAL STATE ────────────────────────────────────────────────────────────
 const S = {
   status: null,
+  server_info: null,     // {hostname, os, local_ip, tailscale_ip, cpu_cores, home_dir, ssh_user}
   services: [],
   issues: [],
   containers: [],
@@ -1094,6 +1097,7 @@ async function fetchStatus(force=false) {
   try {
     if (force) delete _cache['/api/status'];
     S.status = await apiFetch('/api/status' + (force?'?force=1':''));
+    if (S.status?.server_info) S.server_info = S.status.server_info;
     applyStatus();
   } catch { applyStatus(false); }
 }
@@ -1717,12 +1721,12 @@ function mountPaneContent(wsId, paneId, viewType, viewConfig, body) {
           <span class="qc" onclick="qcmd('${key}','ls /srv/docker/')">docker dirs</span>
         </div>
         <div class="term-in-row">
-          <span class="term-prompt">admin1@homeserver ~$</span>
+          <span class="term-prompt">${S.server_info?.ssh_user||'user'}@${S.server_info?.hostname||'server'} ~$</span>
           <input class="term-inp" id="tinp-${key}" type="text" placeholder="command…" autocomplete="off" spellcheck="false">
           <button class="btn p" onclick="runTerm('${key}')">Run</button>
         </div>
       </div>`;
-      tline(key,'tl-info','  Shell · homeserver 192.168.1.229');
+      tline(key,'tl-info',`  Shell · ${S.server_info?.hostname||SRV||'server'} ${S.server_info?.local_ip||''}`.trimEnd());
       tline(key,'tl-info','  ─────────────────────────────────');
       const ti = document.getElementById(`tinp-${key}`);
       if (ti) {
@@ -1827,12 +1831,12 @@ function mountPaneContent(wsId, paneId, viewType, viewConfig, body) {
       body.innerHTML = `<div class="view-files">
         <div class="files-bar">
           <button onclick="filesNav('${key}','..')" class="btn" style="padding:2px 8px;font-size:11px">↑ Up</button>
-          <input id="fpath-${key}" class="vs-inp" value="/home/admin1" style="flex:1;font-family:var(--mono);font-size:11px" onkeydown="if(event.key==='Enter')loadFiles('${key}',this.value)">
+          <input id="fpath-${key}" class="vs-inp" value="${S.server_info?.home_dir||'/'}" style="flex:1;font-family:var(--mono);font-size:11px" onkeydown="if(event.key==='Enter')loadFiles('${key}',this.value)">
           <button onclick="loadFiles('${key}',document.getElementById('fpath-${key}').value)" class="btn" style="padding:2px 8px">Go</button>
         </div>
         <div id="flist-${key}" style="overflow-y:auto;flex:1;padding:4px 0"></div>
       </div>`;
-      loadFiles(key, '/home/admin1');
+      loadFiles(key, S.server_info?.home_dir||'/');
       break;
 
     case 'journal':
@@ -1904,6 +1908,13 @@ function tline(key, cls, text) {
 function qcmd(key, cmd) {
   const inp = document.getElementById(`tinp-${key}`);
   if (inp) { inp.value = cmd; runTerm(key); }
+}
+async function unbanMyIP(key) {
+  try {
+    const r = await apiFetch('/api/my-ip');
+    if (!r?.ip) { showToast('Could not detect your IP'); return; }
+    qcmd(key, `sudo fail2ban-client set sshd unbanip ${r.ip}`);
+  } catch { showToast('Could not reach /api/my-ip'); }
 }
 async function runTerm(key) {
   const inp = document.getElementById(`tinp-${key}`);
@@ -2332,7 +2343,7 @@ function renderDash(elId) {
         <div class="hd-stat-lbl">⚡ Load</div>
         <div class="hd-stat-val ${valClass(loadPct, 60, 80)}">${loadVal ? loadVal.toFixed(1) : '—'}</div>
         ${loadVal ? `<div class="sv-bar"><div class="sv-bar-fill ${loadPct>=80?'red':loadPct>=60?'yellow':'green'}" style="width:${loadPct}%"></div></div>` : ''}
-        <div class="hd-stat-sub">24 cores${loadPct ? ' · ' + loadPct + '%' : ''}</div>
+        <div class="hd-stat-sub">${S.server_info?.cpu_cores||'?'} cores${loadPct ? ' · ' + loadPct + '%' : ''}</div>
       </div>
     </div>
 
@@ -2676,19 +2687,18 @@ function setCfgSection(section) {
       </div>
       <div id="cfg-tab-network" class="cfg-tab-pane">
         <div class="vs-section">
-          <div class="vs-row"><label>Local IP</label><input id="cfg-local-ip" class="vs-inp" value="${SRV}" placeholder="192.168.1.229"></div>
-          <div class="vs-row"><label>Tailscale IP</label><input id="cfg-ts-ip" class="vs-inp" placeholder="100.75.1.105"></div>
-          <div class="vs-row"><label>Hub Port</label><input id="cfg-port" class="vs-inp" value="8765" placeholder="8765"></div>
+          <div class="vs-row"><label>Local IP</label><input id="cfg-local-ip" class="vs-inp" value="${S.server_info?.local_ip||SRV}" placeholder="e.g. 192.168.x.x"></div>
+          <div class="vs-row"><label>Tailscale IP</label><input id="cfg-ts-ip" class="vs-inp" value="${S.server_info?.tailscale_ip!=='none'?S.server_info?.tailscale_ip||'':''}" placeholder="e.g. 100.x.x.x"></div>
+          <div class="vs-row"><label>Hub Port</label><input id="cfg-port" class="vs-inp" value="${window.location.port||'8765'}" placeholder="8765"></div>
           <button class="btn p" style="margin-top:8px" onclick="saveSettings()">Save</button>
         </div>
       </div>
       <div id="cfg-tab-ssh" class="cfg-tab-pane hidden">
         <div class="vs-section">
-          <div class="vs-row"><label>SSH User</label><input id="cfg-ssh-user" class="vs-inp" value="admin1" placeholder="admin1"></div>
+          <div class="vs-row"><label>SSH User</label><input id="cfg-ssh-user" class="vs-inp" value="${S.server_info?.ssh_user||''}" placeholder="e.g. admin"></div>
           <div style="font-size:10px;color:var(--muted);margin-top:8px;line-height:1.6">
-            Key: <code style="font-family:var(--mono)">~/.ssh/id_ed25519_server</code><br>
-            Server: Ubuntu 24.04 · fks-services · 216 GB RAM<br>
-            Tailscale name: <code style="font-family:var(--mono)">fks-services</code>
+            Server: ${S.server_info?.os||'—'} · ${S.server_info?.hostname||'—'} · ${S.server_info?.ram_total_gb!=null?S.server_info.ram_total_gb+' GB RAM':'—'}<br>
+            Tailscale: <code style="font-family:var(--mono)">${S.server_info?.tailscale_ip!=='none'?S.server_info?.tailscale_ip||'not connected':'not connected'}</code>
           </div>
           <button class="btn p" style="margin-top:8px" onclick="saveSettings()">Save</button>
         </div>
@@ -2840,9 +2850,9 @@ function setCfgSection(section) {
           <div class="vs-row"><label>Uptime</label><code style="font-family:var(--mono);font-size:11px;color:var(--muted)">${st.uptime||'—'}</code></div>
           <div class="vs-row"><label>RAM</label><code style="font-family:var(--mono);font-size:11px;color:var(--muted)">${st.ram_used_mb?(st.ram_used_mb/1024).toFixed(1)+'GB / '+(st.ram_total_mb/1024).toFixed(0)+'GB':'—'}</code></div>
           <div class="vs-row"><label>Disk</label><code style="font-family:var(--mono);font-size:11px;color:var(--muted)">${st.disk_pct?st.disk_used+' / '+st.disk_total+' ('+st.disk_pct+'%)':'—'}</code></div>
-          <div class="vs-row"><label>Load</label><code style="font-family:var(--mono);font-size:11px;color:var(--muted)">${st.load||'—'} (24 cores)</code></div>
+          <div class="vs-row"><label>Load</label><code style="font-family:var(--mono);font-size:11px;color:var(--muted)">${st.load||'—'}${st.cpu_cores?' ('+st.cpu_cores+' cores)':''}</code></div>
           <div class="vs-row"><label>Containers</label><code style="font-family:var(--mono);font-size:11px;color:var(--muted)">${st.containers!==undefined?st.containers:' —'} running</code></div>
-          <div class="vs-row"><label>OS</label><code style="font-family:var(--mono);font-size:11px;color:var(--muted)">Ubuntu 24.04 LTS · fks-services</code></div>
+          <div class="vs-row"><label>OS</label><code style="font-family:var(--mono);font-size:11px;color:var(--muted)">${S.server_info?.os||'—'} · ${S.server_info?.hostname||'—'}</code></div>
           <div class="vs-row"><label>Updated</label><code style="font-family:var(--mono);font-size:11px;color:var(--muted)">${st.fetched_at||'—'}</code></div>
         </div>
       </div>
@@ -2948,14 +2958,15 @@ async function runSurvey(key) {
   // Parse load
   const lm = (load.output||'').match(/load average:\s*([\d.]+)/);
   const loadVal  = lm ? parseFloat(lm[1]) : 0;
-  const loadPct  = Math.round((loadVal / 24) * 100); // 24 cores
+  const _cores   = S.server_info?.cpu_cores || 1;
+  const loadPct  = Math.round((loadVal / _cores) * 100);
 
   // Alerts
   const alerts = [];
   if (nDown > 0)      alerts.push({ level:'crit', msg: `${nDown} container${nDown>1?'s':''} not running: ${containers.filter(c=>!c.up).map(c=>c.name).join(', ')}` });
   diskLines.filter(d=>d.pct>=85).forEach(d => alerts.push({ level:'crit', msg: `${d.mount} at ${d.pct}% (${d.used}/${d.size}) — run: docker system prune -f` }));
   diskLines.filter(d=>d.pct>=70&&d.pct<85).forEach(d => alerts.push({ level:'warn', msg: `${d.mount} at ${d.pct}% (${d.used}/${d.size}) — getting full` }));
-  if (loadPct >= 80)  alerts.push({ level:'warn', msg: `High CPU load: ${loadVal.toFixed(2)} avg (${loadPct}% of 24 cores)` });
+  if (loadPct >= 80)  alerts.push({ level:'warn', msg: `High CPU load: ${loadVal.toFixed(2)} avg (${loadPct}% of ${_cores} cores)` });
 
   const overall = nDown > 0 || diskPct >= 85 ? 'crit' : alerts.length > 0 ? 'warn' : 'good';
   const statusIcon  = {good:'✅', warn:'⚠️', crit:'🔴'}[overall];
@@ -2994,7 +3005,7 @@ async function runSurvey(key) {
         <div class="sv-stat-sub">${memAvail} free · ${memTotal} total</div>
       </div>
       <div class="sv-stat">
-        <div class="sv-stat-label">⚡ CPU Load <span style="font-weight:400;font-size:8px">(24 cores)</span></div>
+        <div class="sv-stat-label">⚡ CPU Load <span style="font-weight:400;font-size:8px">(${S.server_info?.cpu_cores||'?'} cores)</span></div>
         <div class="sv-stat-val ${loadClass}">${loadVal.toFixed(2)}</div>
         <div class="sv-bar"><div class="sv-bar-fill ${loadColor}" style="width:${Math.min(loadPct,100)}%"></div></div>
         <div class="sv-stat-sub">${loadPct}% capacity · 15-min avg</div>
@@ -3287,7 +3298,7 @@ function updateContextPanel() {
         `<div class="w-type-item" style="font-family:var(--mono);font-size:10px" onclick="qcmd('${ws.id}-${pane.id}','${cmd.replace(/'/g,"\\'").replace(/"/g,'&quot;')}')">${cmd}</div>`
       ).join('') +
       divider() + secHead('Connection') +
-      ctxInfo('Host', 'homeserver') + ctxInfo('User', 'admin1') + ctxInfo('IP', '192.168.1.229');
+      ctxInfo('Host', S.server_info?.hostname||SRV) + ctxInfo('User', S.server_info?.ssh_user||'—') + ctxInfo('IP', S.server_info?.local_ip||SRV);
 
   } else if (vt === 'iframe') {
     const svc = S.services.find(s=>s.port===vc.port) || {};
@@ -3350,7 +3361,7 @@ function updateContextPanel() {
   } else if (vt === 'network') {
     title = 'Network Tools';
     html = secHead('Actions') +
-      ctxBtn('🔓','Unban my IP', `qcmd('${ws?.id}-${pane?.id}','sudo fail2ban-client set sshd unbanip 192.168.1.192')`) +
+      ctxBtn('🔓','Unban my IP', `unbanMyIP('${ws?.id}-${pane?.id}')`) +
       ctxBtn('🔥','UFW status', `qcmd('${ws?.id}-${pane?.id}','sudo ufw status numbered')`) +
       ctxBtn('📡','Open ports', `qcmd('${ws?.id}-${pane?.id}','ss -tlnp')`);
 
@@ -3676,7 +3687,7 @@ function loadBrowser(key) {
   const frame = document.getElementById(`bframe-${key}`); if (!frame) return;
   try {
     const u = new URL(url);
-    const isLocal = u.hostname===SRV||u.hostname==='192.168.1.229'||u.hostname==='localhost'||u.hostname==='127.0.0.1';
+    const isLocal = u.hostname===SRV||u.hostname==='localhost'||u.hostname==='127.0.0.1'||u.hostname===(S.server_info?.local_ip||'');
     if (isLocal) {
       const port = u.port || (u.protocol==='https:'?'443':'80');
       frame.src = `${API}/proxy/${port}/${u.pathname.slice(1)}${u.search}`;
@@ -4270,9 +4281,9 @@ function buildCmdIndex() {
    {icon:'💾',label:'df -h',cmd:'df -h /'},
    {icon:'📊',label:'free -h',cmd:'free -h'},
    {icon:'⏱',label:'uptime',cmd:'uptime'},
-   {icon:'🔓',label:'unban my IP',cmd:'sudo fail2ban-client set sshd unbanip 192.168.1.192'},
+   {icon:'🔓',label:'unban my IP',noCmd:true,action:async()=>{const r=await apiFetch('/api/my-ip');if(r?.ip)runFromPalette(`sudo fail2ban-client set sshd unbanip ${r.ip}`);else showToast('Cannot detect IP');}},
    {icon:'🧹',label:'docker prune',cmd:'docker system prune -f'},
-  ].forEach(c=>items.push({grp:'Shell', icon:c.icon, label:`$ ${c.label}`, hint:'ssh run', action:()=>runFromPalette(c.cmd), kw:[c.label,'shell','cmd']}));
+  ].forEach(c=>items.push({grp:'Shell', icon:c.icon, label:`$ ${c.label}`, hint:'ssh run', action:c.noCmd?c.action:()=>runFromPalette(c.cmd), kw:[c.label,'shell','cmd']}));
   // System actions
   items.push({grp:'System', icon:'📦', label:'Download system snapshot', hint:'manifest JSON', action:()=>downloadManifest(), kw:['manifest','snapshot','download','export','pulse']});
   items.push({grp:'System', icon:'🔄', label:'Hard refresh all data', hint:'clears cache', action:()=>hardRefresh(), kw:['refresh','reload','cache','hard']});
@@ -4395,7 +4406,7 @@ function renderGuideView(body) {
     <div class="guide-hero">
       <div class="guide-hero-icon">🖥</div>
       <div class="guide-hero-title">Server Hub</div>
-      <div class="guide-hero-sub">Home server control panel · 192.168.1.229 · Ubuntu 24.04 · 216 GB RAM</div>
+      <div class="guide-hero-sub">Home server control panel${S.server_info?.local_ip?' · '+S.server_info.local_ip:''}${S.server_info?.os?' · '+S.server_info.os:''}${S.server_info?.ram_total_gb?' · '+S.server_info.ram_total_gb+' GB RAM':''}</div>
       <div class="guide-badges">
         <span class="guide-badge">⚡ ${running}/${total} services up</span>
         <span class="guide-badge">🐳 Docker stack</span>
