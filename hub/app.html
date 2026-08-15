@@ -869,35 +869,40 @@ body.desk-mode #desk-exit { display:flex; align-items:center; gap:6px; }
 <!-- MAIN AREA -->
 <div id="main">
 
-  <!-- CATEGORY NAV (far left) -->
+  <!-- CATEGORY NAV (far left) — ordered: core → operational → security → advanced → meta -->
   <nav id="catnav">
-    <button class="cat-item active" data-cat="server" onclick="setCategory('server')" title="Server">
+    <!-- CORE — daily essentials -->
+    <button class="cat-item active" data-cat="server" onclick="setCategory('server')" title="Server — terminal, logs, network">
       <span class="cat-icon">🖥</span><span class="cat-label">Server</span>
     </button>
-    <button class="cat-item" data-cat="services" onclick="setCategory('services')" title="Services">
+    <button class="cat-item" data-cat="services" onclick="setCategory('services')" title="Services — all running containers">
       <span class="cat-icon">⚙</span><span class="cat-label">Svcs</span>
     </button>
     <div class="cat-sep"></div>
-    <button class="cat-item" data-cat="docs" onclick="setCategory('docs')" title="Knowledge Base">
-      <span class="cat-icon">📚</span><span class="cat-label">Docs</span>
-    </button>
-    <button class="cat-item" data-cat="ops" onclick="setCategory('ops')" title="Ops & Runbooks">
+    <!-- OPERATIONAL — act and track -->
+    <button class="cat-item" data-cat="ops" onclick="setCategory('ops')" title="Ops — runbooks, tasks, issues, journal">
       <span class="cat-icon">▶</span><span class="cat-label">Ops</span>
     </button>
-    <button class="cat-item" data-cat="tools" onclick="setCategory('tools')" title="Tools">
-      <span class="cat-icon">🛠</span><span class="cat-label">Tools</span>
-    </button>
     <div class="cat-sep"></div>
-    <button class="cat-item" data-cat="vault" onclick="setCategory('vault')" title="Vault">
+    <!-- SECURITY & ACCESS -->
+    <button class="cat-item" data-cat="vault" onclick="setCategory('vault')" title="Vault — passwords and 2FA">
       <span class="cat-icon">🔐</span><span class="cat-label">Vault</span>
     </button>
-    <div class="cat-sep"></div>
-    <button class="cat-item" data-cat="favorites" onclick="setCategory('favorites')" title="Favorites">
-      <span class="cat-icon">⭐</span><span class="cat-label">Favs</span>
+    <button class="cat-item" data-cat="remote" onclick="setCategory('remote')" title="Remote — access from anywhere">
+      <span class="cat-icon">🌍</span><span class="cat-label">Remote</span>
     </button>
     <div class="cat-sep"></div>
-    <button class="cat-item" data-cat="guide" onclick="setCategory('guide')" title="Hub Guide">
-      <span class="cat-icon">🏠</span><span class="cat-label">Guide</span>
+    <!-- ADVANCED — power features and reference -->
+    <button class="cat-item" data-cat="tools" onclick="setCategory('tools')" title="Tools — infra map, browser, AI">
+      <span class="cat-icon">🛠</span><span class="cat-label">Tools</span>
+    </button>
+    <button class="cat-item" data-cat="docs" onclick="setCategory('docs')" title="Docs — guides and hub reference">
+      <span class="cat-icon">📚</span><span class="cat-label">Docs</span>
+    </button>
+    <div class="cat-sep"></div>
+    <!-- META -->
+    <button class="cat-item" data-cat="favorites" onclick="setCategory('favorites')" title="Favorites">
+      <span class="cat-icon">⭐</span><span class="cat-label">Favs</span>
     </button>
   </nav>
 
@@ -1170,90 +1175,104 @@ async function fetchIssues() {
 }
 
 // ── CATEGORY NAV ─────────────────────────────────────────────────────────────
+// Order: core daily use → operational → security/access → advanced → meta
 const CATEGORIES = {
-  // ── SERVER — what's happening right now ───────────────────────────────────
+
+  // ── SERVER — direct control of the machine ────────────────────────────────
+  // Terminal, logs, network: you are touching the server right now.
+  // Dashboard + survey for quick situational awareness without leaving server context.
   server: {
     title: 'Server',
     sections: [
-      { label:'Health', items:[
-        {icon:'⊞',  label:'Dashboard',  action:()=>openView('dashboard')},
-        {icon:'🔍', label:'Survey',     action:()=>openView('survey')},
-      ]},
-      { label:'Access', items:[
+      { label:'Control', items:[
         {icon:'⌨', label:'Terminal',   action:()=>openView('terminal')},
         {icon:'📋', label:'Logs',       action:()=>openView('logs')},
         {icon:'🌐', label:'Network',    action:()=>openView('network')},
       ]},
-      { label:'Data', items:[
+      { label:'Overview', items:[
+        {icon:'⊞',  label:'Dashboard', action:()=>openView('dashboard')},
+        {icon:'🔍', label:'Survey',    action:()=>openView('survey')},
+      ]},
+      { label:'Storage', items:[
         {icon:'💾', label:'Storage',   action:()=>openView('storage')},
         {icon:'📁', label:'Files',     action:()=>openView('files')},
       ]},
     ]
   },
-  // ── SERVICES — jump to any running service ────────────────────────────────
-  services: { title: 'Services', sections: [] }, // built dynamically
-  // ── OPS — fix things and track things ────────────────────────────────────
+
+  // ── SERVICES — what's running ─────────────────────────────────────────────
+  // Every live container. Click any to open in current pane.
+  services: { title: 'Services', sections: [] }, // built dynamically from docker ps
+
+  // ── OPS — act on problems, track what matters ─────────────────────────────
+  // Runbooks when something breaks. Tasks + issues + journal for ongoing work.
   ops: {
     title: 'Ops',
     sections: [
-      { label:'Response', items:[
-        {icon:'▶',  label:'Runbooks',  action:()=>openView('runbooks')},
+      { label:'Act', items:[
+        {icon:'▶',  label:'Runbooks',     action:()=>openView('runbooks')},
       ]},
       { label:'Track', items:[
-        {icon:'⚑',  label:'Issues',   action:()=>openView('issues')},
-        {icon:'📓', label:'Journal',  action:()=>openView('journal')},
+        {icon:'📋', label:'Task Docket',  action:()=>openView('tasks')},
+        {icon:'⚑',  label:'Issues',       action:()=>openView('issues')},
+        {icon:'📓', label:'Journal',      action:()=>openView('journal')},
       ]},
     ]
   },
-  // ── TOOLS — things not covered by any other category ─────────────────────
-  tools: {
-    title: 'Tools',
-    sections: [
-      { label:'Explore', items:[
-        {icon:'🗺', label:'Infra Map',  action:()=>openView('map')},
-        {icon:'🌐', label:'Browser',   action:()=>openView('browser')},
-      ]},
-      { label:'AI', items:[
-        {icon:'🤖', label:'AI Chat',   action:()=>openView('chat')},
-      ]},
-      { label:'Config', items:[
-        {icon:'⚙', label:'Settings',  action:()=>openView('settings')},
-        {icon:'📋', label:'Task Docket', action:()=>openView('tasks')},
-      ]},
-    ]
-  },
-  // ── VAULT — credentials (standalone — client-side AES-256-GCM) ───────────
+
+  // ── VAULT — credentials and 2FA gate ─────────────────────────────────────
+  // Everything about protecting access: stored secrets + the auth layer.
   vault: {
     title: 'Vault',
     sections: [
       { label:'Credentials', items:[
         {icon:'🔐', label:'Password Vault', action:()=>openView('vault')},
       ]},
-      { label:'Security', items:[
-        {icon:'🛡', label:'2FA Gate',  action:()=>openView('settings')},
+      { label:'Gate', items:[
+        {icon:'🛡', label:'2FA Setup',      action:()=>openView('settings')},
+        {icon:'⚙', label:'Hub Settings',   action:()=>openView('settings')},
       ]},
     ]
   },
-  // ── DOCS — markdown guides ────────────────────────────────────────────────
-  docs: { title: 'Docs', sections: [] }, // built from files
-  // ── GUIDE — hub reference ─────────────────────────────────────────────────
-  guide: {
-    title: 'Guide',
-    sections: [
-      { label:'Reference', items:[
-        {icon:'🏠', label:"What's Here",  action:()=>openView('guide')},
-      ]},
-    ]
-  },
-  // ── REMOTE — public access & tunnels ──────────────────────────────────────
+
+  // ── REMOTE — access from outside this network ──────────────────────────────
+  // Local IP, Tailscale, Cloudflare tunnel. The front door for anyone not here.
   remote: {
     title: 'Remote',
     sections: [
-      { label:'Access', items:[
+      { label:'Connect', items:[
         {icon:'🌍', label:'Remote Access', action:()=>openView('remote')},
       ]},
     ]
   },
+
+  // ── TOOLS — power features for when you need to go deeper ─────────────────
+  // Infra map to visualise the stack. In-hub browser. AI chat for CPU tasks.
+  tools: {
+    title: 'Tools',
+    sections: [
+      { label:'Explore', items:[
+        {icon:'🗺', label:'Infra Map', action:()=>openView('map')},
+        {icon:'🌐', label:'Browser',  action:()=>openView('browser')},
+      ]},
+      { label:'AI', items:[
+        {icon:'🤖', label:'AI Chat',  action:()=>openView('chat')},
+      ]},
+    ]
+  },
+
+  // ── DOCS — guides and hub reference ──────────────────────────────────────
+  // Markdown files from ~/guides/ on the server + the built-in hub guide.
+  docs: { title: 'Docs', sections: [] }, // built dynamically from server
+  guide: {
+    title: 'Guide',
+    sections: [
+      { label:'Hub Reference', items:[
+        {icon:'🏠', label:"What's Here", action:()=>openView('guide')},
+      ]},
+    ]
+  },
+
 };
 
 function setCategory(cat) {
