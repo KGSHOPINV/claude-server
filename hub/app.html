@@ -2516,8 +2516,10 @@ function vaultLock() {
 
 async function saveVault() {
   const blob = await vEnc(S.vaultData, S.vaultMP);
-  try { await fetch(API+'/api/vault',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({blob})}); }
-  catch { localStorage.setItem('vault_backup', blob); }
+  try {
+    const r = await apiPost('/api/vault', {blob});
+    if (!r.ok) localStorage.setItem('vault_backup', blob);
+  } catch { localStorage.setItem('vault_backup', blob); }
 }
 
 function toggleVPw(i) {
@@ -2707,6 +2709,7 @@ function setCfgSection(section) {
           <button class="btn p" style="margin-top:8px" onclick="saveSettings()">Save</button>
         </div>
       </div>`;
+    loadConnectionCfg();
 
   // ── SECURITY ──────────────────────────────────────────────────────────────
   } else if (section === 'security') {
@@ -2728,6 +2731,11 @@ function setCfgSection(section) {
           <div style="font-size:11px;color:var(--muted);margin-bottom:10px">Pull latest code from GitHub and restart the hub. Page reloads automatically.</div>
           <button class="btn p" id="hub-update-btn" onclick="runHubUpdate()">⬆ Pull Latest &amp; Restart</button>
           <pre id="hub-update-out" style="display:none;margin-top:8px;font-size:10px;max-height:140px;overflow-y:auto;background:var(--bg);padding:9px;border-radius:var(--r);border:1px solid var(--border);color:var(--green);white-space:pre-wrap;word-break:break-all"></pre>
+          <div style="margin-top:16px;padding-top:12px;border-top:1px solid var(--border)">
+            <div style="font-size:11px;color:var(--muted);margin-bottom:8px">Generate a filled-in <code style="font-family:var(--mono)">CLAUDE.md</code> with this server's real IPs and SSH details. Saved to <code style="font-family:var(--mono)">~/hub/CLAUDE.md</code> — gitignored, stays local.</div>
+            <button class="btn" onclick="generateClaudeMd()" style="font-size:11px">⚙ Generate CLAUDE.md</button>
+            <div id="claude-md-out" style="margin-top:6px;font-size:10px;color:var(--muted)"></div>
+          </div>
         </div>
       </div>
       <div id="cfg-tab-firewall" class="cfg-tab-pane hidden">
@@ -2901,17 +2909,24 @@ async function runHubUpdate() {
   const btn = document.getElementById('hub-update-btn');
   const out = document.getElementById('hub-update-out');
   btn.disabled = true; btn.textContent = '⏳ Pulling…';
-  out.style.display = 'block'; out.textContent = '→ Pulling from GitHub…\n';
-  const pull = await apiRun('cd ~/hub && git pull origin master 2>&1', 60);
-  out.textContent += (pull.output || pull.error || '(no output)') + '\n';
-  out.textContent += '→ Copying files…\n';
-  await apiRun('cp ~/hub/hub/server.py ~/hub/server.py && cp ~/hub/hub/app.html ~/hub/app.html && cp ~/hub/hub/mobile.html ~/hub/mobile.html 2>&1', 10);
-  out.textContent += '→ Restarting hub service…\n';
-  try { await apiRun('systemctl --user restart hub', 5); } catch {}
-  out.textContent += '✓ Done — reloading in 3s…';
-  btn.textContent = '⬆ Pull Latest & Restart';
-  btn.disabled = false;
-  setTimeout(() => window.location.reload(), 3000);
+  out.style.display = 'block'; out.textContent = '→ Requesting update (may need TOTP)…\n';
+  const r = await apiPost('/api/update');
+  out.textContent += (r.output || r.error || '(no output)') + '\n';
+  if (r.ok) {
+    out.textContent += '✓ Done — reloading in 4s…';
+    setTimeout(() => window.location.reload(), 4000);
+  } else {
+    out.textContent += '✗ Update failed — check output above';
+    btn.disabled = false;
+    btn.textContent = '⬆ Pull Latest & Restart';
+  }
+}
+
+async function generateClaudeMd() {
+  const out = document.getElementById('claude-md-out');
+  if (out) out.textContent = 'Generating…';
+  const r = await apiPost('/api/setup/generate-claude-md');
+  if (out) out.textContent = r.ok ? `✓ Written to ${r.path||'~/hub/CLAUDE.md'}` : `✗ ${r.error||'Failed'}`;
 }
 
 // ── SURVEY ────────────────────────────────────────────────────────────────────
@@ -3971,6 +3986,27 @@ async function apiRun(cmd, timeout=30) {
   return r.json().catch(()=>({output:'', error:'Invalid response', exitcode:-1, online:false}));
 }
 
+async function apiPost(endpoint, data={}) {
+  // Generic POST helper with gate token support — mirrors apiRun but for arbitrary endpoints.
+  const gt = getGateToken();
+  const headers = {'Content-Type':'application/json','X-Hub-Token':HUB_TOKEN};
+  if (gt) headers['X-Gate-Token'] = gt;
+  let r;
+  try {
+    r = await fetch(API+endpoint, {method:'POST', headers, body: JSON.stringify(data)});
+  } catch {
+    return {ok:false, error:'Hub server not running'};
+  }
+  if (r.status === 403) {
+    const err = await r.json().catch(()=>({}));
+    if (err.error === 'gate_required') {
+      return new Promise(resolve => showGateModal(() => apiPost(endpoint, data).then(resolve)));
+    }
+    return {ok:false, error:'Access denied'};
+  }
+  return r.json().catch(()=>({ok:false, error:'Invalid response'}));
+}
+
 function showGateModal(onUnlock) {
   const m = document.getElementById('gate-modal');
   m.style.display = 'flex';
@@ -4166,8 +4202,19 @@ async function saveSettings() {
     ssh_user:  document.getElementById('cfg-ssh-user')?.value||'',
     hub_port:  document.getElementById('cfg-port')?.value||'8765',
   };
-  await fetch(API+'/api/config',{method:'POST',headers:{'Content-Type':'application/json','X-Hub-Token':HUB_TOKEN},body:JSON.stringify(cfg)});
-  showToast('Settings saved');
+  const r = await apiPost('/api/config', cfg);
+  showToast(r.ok ? 'Settings saved' : ('Save failed: ' + (r.error||'unknown')));
+}
+
+async function loadConnectionCfg() {
+  // Restore any previously-saved overrides from hub_config into the connection fields.
+  try {
+    const cfg = await fetch(API+'/api/config').then(r=>r.json());
+    if (cfg.local_ip) { const el=document.getElementById('cfg-local-ip'); if(el) el.value=cfg.local_ip; }
+    if (cfg.ts_ip)    { const el=document.getElementById('cfg-ts-ip');    if(el) el.value=cfg.ts_ip; }
+    if (cfg.hub_port) { const el=document.getElementById('cfg-port');      if(el) el.value=cfg.hub_port; }
+    if (cfg.ssh_user) { const el=document.getElementById('cfg-ssh-user'); if(el) el.value=cfg.ssh_user; }
+  } catch {}
 }
 async function loadUsersPanel() {
   const el = document.getElementById('users-list'); if(!el) return;
@@ -4575,18 +4622,20 @@ async function loadRemoteAccess() {
 
 async function remoteTunnelStart() {
   showToast('Starting tunnel… (~20s)');
-  const r = await fetch('/api/tunnel/start', {method:'POST', headers:{'Content-Type':'application/json'}, body:'{}'}).then(x=>x.json());
+  const r = await apiPost('/api/tunnel/start');
   if (r.ok) {
     showToast('Tunnel starting — URL will appear shortly');
     setTimeout(loadRemoteAccess, 6000);
     setTimeout(loadRemoteAccess, 15000);
     setTimeout(loadRemoteAccess, 25000);
-  } else { showToast('Tunnel failed to start'); }
+  } else if (r.error && r.error !== 'gate_required') {
+    showToast('Tunnel failed to start');
+  }
 }
 
 async function remoteTunnelStop() {
   showToast('Stopping tunnel…');
-  await fetch('/api/tunnel/stop', {method:'POST', headers:{'Content-Type':'application/json'}, body:'{}'});
+  await apiPost('/api/tunnel/stop');
   showToast('Tunnel stopped');
   loadRemoteAccess();
 }

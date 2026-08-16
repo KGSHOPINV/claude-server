@@ -618,6 +618,135 @@ def get_manifest():
     }
 
 
+def _substitute_guide_tokens(text):
+    """Replace {{server.*}} and {{hub.*}} template tokens with live values."""
+    si = get_server_info()
+    replacements = {
+        '{{server.hostname}}':    si.get('hostname', ''),
+        '{{server.local_ip}}':    si.get('local_ip', ''),
+        '{{server.tailscale_ip}}':si.get('tailscale_ip', 'none'),
+        '{{server.os}}':          si.get('os', ''),
+        '{{server.home_dir}}':    si.get('home_dir', '/root'),
+        '{{server.ssh_user}}':    si.get('ssh_user', ''),
+        '{{server.cpu_cores}}':   str(si.get('cpu_cores', '')),
+        '{{hub.port}}':           str(PORT),
+        '{{hub.host}}':           SSH_HOST,
+    }
+    for token, val in replacements.items():
+        text = text.replace(token, val)
+    return text
+
+def _build_this_server_doc():
+    """Generate a live 'About this server' doc from current server state."""
+    si = get_server_info()
+    st = _cache.get('status') or {}
+    containers = _cache.get('containers') or []
+    running = [c['name'] for c in containers if c.get('running')]
+    stopped = [c['name'] for c in containers if not c.get('running')]
+
+    ram_gb = ''
+    if st.get('ram_total_mb'):
+        ram_gb = f"{round(st['ram_total_mb'] / 1024, 1)} GB"
+
+    disk_lines = ''
+    for d in st.get('disks', []):
+        disk_lines += f"- `{d['mount']}` — {d['used']} used of {d['total']} ({d['pct']}%)\n"
+    if not disk_lines:
+        disk_lines = f"- `/` — {st.get('disk_used','?')} used of {st.get('disk_total','?')} ({st.get('disk_pct','?')})\n"
+
+    unattached = st.get('unattached_drives', [])
+    unattached_lines = ''
+    for u in unattached:
+        unattached_lines += f"- `/dev/{u['name']}` — {u['size']} (unmounted, raw)\n"
+
+    ts_line = si.get('tailscale_ip', 'none')
+    ts_section = (
+        f"- Tailscale: `{ts_line}`\n"
+        if ts_line and ts_line != 'none' else
+        "- Tailscale: not connected\n"
+    )
+
+    now = datetime.now().strftime('%Y-%m-%d %H:%M')
+
+    doc = f"""# This Server
+
+> Auto-generated snapshot · {now}
+
+---
+
+## Identity
+
+| Field | Value |
+|-------|-------|
+| Hostname | `{si.get('hostname','—')}` |
+| OS | {si.get('os','—')} |
+| SSH User | `{si.get('ssh_user','—')}` |
+| Home Dir | `{si.get('home_dir','—')}` |
+| CPU Cores | {si.get('cpu_cores','—')} |
+| RAM | {ram_gb or '—'} |
+
+---
+
+## Network
+
+- Local IP: `{si.get('local_ip','—')}`
+{ts_section}
+---
+
+## Disk
+
+### Mounted Volumes
+
+{disk_lines or '(no data — run a status refresh)'}
+"""
+
+    if unattached_lines:
+        doc += f"""
+### Unmounted Drives
+
+{unattached_lines}
+> These drives have no filesystem. Run `lsblk` to inspect. See `storage.md` for how to partition and mount them.
+"""
+
+    doc += f"""
+---
+
+## Docker
+
+| Metric | Count |
+|--------|-------|
+| Running containers | {len(running)} |
+| Stopped containers | {len(stopped)} |
+
+"""
+    if running:
+        doc += "**Running:** " + ", ".join(f"`{c}`" for c in running[:20]) + "\n\n"
+    if stopped:
+        doc += "**Stopped:** " + ", ".join(f"`{c}`" for c in stopped[:20]) + "\n\n"
+
+    doc += f"""---
+
+## Hub
+
+- Port: `{PORT}`
+- SSH target: `{SSH_HOST}`
+- Mode: {'local (hub on this machine)' if LOCAL_MODE else 'remote SSH'}
+
+---
+
+## Access Paths
+
+| Method | Address |
+|--------|---------|
+| Local | `http://{si.get('local_ip','?')}:{PORT}` |
+"""
+    ts_ip = si.get('tailscale_ip', 'none')
+    if ts_ip and ts_ip != 'none':
+        doc += f"| Tailscale | `http://{ts_ip}:{PORT}` |\n"
+
+    doc += "\nSee `remote-access.md` for full access topology.\n"
+    return doc
+
 def ai_system_prompt():
     """Build a concise server-aware system prompt from live state."""
     status = _cache.get('status') or {}
@@ -1041,6 +1170,8 @@ class Handler(http.server.BaseHTTPRequestHandler):
         elif p == '/api/docs':
             try:
                 files = []
+                # Synthetic live doc always listed first
+                files.append({'file': 'this-server.md', 'title': 'This Server'})
                 if os.path.isdir(GUIDES_DIR):
                     for f in sorted(os.listdir(GUIDES_DIR)):
                         if f.endswith('.md'):
@@ -1061,10 +1192,17 @@ class Handler(http.server.BaseHTTPRequestHandler):
                         fname = part[5:]
             if not fname or '/' in fname or '\\' in fname or not fname.endswith('.md'):
                 self.send_response(400); self.end_headers(); return
+            # Special synthetic file: this-server.md — generated live from server_info
+            if fname == 'this-server.md':
+                content = _build_this_server_doc()
+                self.send_json({'content': content, 'file': fname})
+                return
             fpath = os.path.join(GUIDES_DIR, fname)
             try:
                 with open(fpath, 'r', encoding='utf-8') as fh:
                     content = fh.read()
+                # Template substitution: replace {{server.*}} and {{hub.*}} tokens with live values
+                content = _substitute_guide_tokens(content)
                 self.send_json({'content': content, 'file': fname})
             except FileNotFoundError:
                 self.send_response(404); self.end_headers()
@@ -1212,6 +1350,10 @@ class Handler(http.server.BaseHTTPRequestHandler):
             if blob is None:
                 self.send_json({'ok': False, 'error': 'No blob'}, 400)
                 return
+            if not gate_check(self.headers, required_level=2):
+                self.send_json({'error': 'gate_required', 'layer': 2,
+                                'message': 'Vault writes require TOTP verification'}, 403)
+                return
             ok = vault_put(blob)
             if ok is True:
                 self.send_json({'ok': True})
@@ -1242,6 +1384,10 @@ class Handler(http.server.BaseHTTPRequestHandler):
             self.send_json({'ok': True})
 
         elif p == '/api/config':
+            if not gate_check(self.headers, required_level=2):
+                self.send_json({'error': 'gate_required', 'layer': 2,
+                                'message': 'Config writes require TOTP verification'}, 403)
+                return
             for k, v in body.items():
                 config_set(k, str(v))
             self.send_json({'ok': True})
@@ -1335,12 +1481,85 @@ class Handler(http.server.BaseHTTPRequestHandler):
             self.send_json({'ok': result.get('exitcode',1)==0, 'output': result.get('output',''), 'error': result.get('error','')})
 
         elif p == '/api/tunnel/start':
+            if not gate_check(self.headers, required_level=2):
+                self.send_json({'error': 'gate_required', 'layer': 2,
+                                'message': 'Tunnel control requires TOTP verification'}, 403)
+                return
             ok = tunnel_start()
             self.send_json({'ok': ok})
 
         elif p == '/api/tunnel/stop':
+            if not gate_check(self.headers, required_level=2):
+                self.send_json({'error': 'gate_required', 'layer': 2,
+                                'message': 'Tunnel control requires TOTP verification'}, 403)
+                return
             ok = tunnel_stop()
             self.send_json({'ok': ok})
+
+        elif p == '/api/update':
+            # git pull + restart hub service
+            if not gate_check(self.headers, required_level=3):
+                self.send_json({'error': 'gate_required', 'layer': 3,
+                                'message': 'Hub update requires TOTP verification'}, 403)
+                return
+            hub_dir = os.path.expanduser('~/hub')
+            lines = []
+            pull = ssh_run(f'cd {hub_dir} && git pull origin master 2>&1', timeout=60)
+            lines.append(pull.get('output', pull.get('error', '(no output)')))
+            restart = ssh_run('systemctl --user restart hub 2>&1', timeout=15)
+            lines.append(restart.get('output', '') or ('restarted' if restart.get('exitcode',1)==0 else restart.get('error','')))
+            self.send_json({'ok': pull.get('exitcode',1)==0, 'output': '\n'.join(lines)})
+
+        elif p == '/api/setup/generate-claude-md':
+            # Write a filled-in CLAUDE.md to the hub directory on the server
+            if not gate_check(self.headers, required_level=3):
+                self.send_json({'error': 'gate_required', 'layer': 3,
+                                'message': 'Generating CLAUDE.md requires TOTP verification'}, 403)
+                return
+            si = get_server_info()
+            ts_ip = si.get('tailscale_ip','none')
+            ts_name_r = ssh_run('tailscale status --self 2>/dev/null | head -1 | awk \'{print $2}\'')
+            ts_name = ts_name_r.get('output','').strip() or 'unknown'
+            home = si.get('home_dir', '/root')
+            user = si.get('ssh_user', '')
+            local_ip = si.get('local_ip','')
+            claude_md = f"""# Claude Server — {si.get('hostname','Server')} Session
+> This workspace connects directly to the home server via SSH.
+> Claude can run commands on the server from this machine.
+
+---
+
+## Connection
+
+| Key | Value |
+|-----|-------|
+| Server IP (local) | {local_ip} |
+| Server IP (Tailscale) | {ts_ip if ts_ip != 'none' else 'not connected'} |
+| SSH User | {user} |
+| SSH Command (local) | `ssh {user}@{local_ip}` |
+| SSH Command (remote) | `ssh {user}@{ts_ip}` |
+| Tailscale name | {ts_name} |
+| OS | {si.get('os','')} |
+| CPU Cores | {si.get('cpu_cores','')} |
+
+## Session Rules
+
+- SSH commands run on the server — always prefix with `ssh {user}@{local_ip} "..."`
+- Always confirm before restarting or stopping services
+- AI stack should stay OFF unless user asks for it
+"""
+            dest = os.path.join(home, 'hub', 'CLAUDE.md')
+            # Write via SSH echo to avoid escaping issues — use Python heredoc via ssh
+            import tempfile, shlex
+            tmp = f'/tmp/_hub_claudemd_{secrets.token_hex(6)}.md'
+            # Write content to a temp file on the server using printf
+            escaped = claude_md.replace("'", "'\\''")
+            r1 = ssh_run(f"printf '%s' '{escaped}' > {tmp}", timeout=10)
+            r2 = ssh_run(f'mv {tmp} {dest}', timeout=5)
+            if r2.get('exitcode',1) == 0:
+                self.send_json({'ok': True, 'path': dest})
+            else:
+                self.send_json({'ok': False, 'error': r2.get('error','Write failed')})
 
         elif p == '/api/users':
             action = body.get('action','')
