@@ -222,7 +222,11 @@ def get_status(force=False):
         '"$(free -m | awk \'/^Mem/{print $3,$2}\')" '
         '"$(df -h / | awk \'NR==2{print $3,$2,$5}\')" '
         '"$(docker ps -q 2>/dev/null | wc -l)" '
-        '"$(cat /proc/loadavg | awk \'{print $1,$2,$3}\')"'
+        '"$(cat /proc/loadavg | awk \'{print $1,$2,$3}\')" '
+        # All real mounted volumes (exclude tmpfs, loop/snap, devtmpfs)
+        '"$(df -h -x tmpfs -x devtmpfs 2>/dev/null | awk \'NR>1 && !/loop/{printf "%s|%s|%s|%s|%s;", $1,$2,$3,$5,$6}\')" '
+        # Unattached raw disks (no mount point) — shows drives not yet partitioned/mounted
+        '"$(lsblk -dn -o NAME,SIZE,TYPE,MOUNTPOINTS 2>/dev/null | awk \'$3=="disk" && $4=="" {printf "%s|%s;", $1,$2}\')"'
     )
 
     if not r['online']:
@@ -232,26 +236,48 @@ def get_status(force=False):
             parts = r['output'].split('---')
             ram = parts[1].strip().split()
             disk = parts[2].strip().split()
+
+            # Parse all mounted real volumes
+            disks = []
+            for entry in (parts[5].strip().split(';') if len(parts) > 5 else []):
+                p = entry.strip().split('|')
+                if len(p) >= 5:
+                    disks.append({
+                        'device': p[0], 'total': p[1], 'used': p[2],
+                        'pct': int(p[3].rstrip('%')) if p[3].rstrip('%').isdigit() else 0,
+                        'mount': p[4],
+                    })
+
+            # Detect unattached drives (no filesystem, no mount — typically raw/unused)
+            unattached = []
+            for entry in (parts[6].strip().split(';') if len(parts) > 6 else []):
+                p = entry.strip().split('|')
+                if len(p) >= 2 and p[0]:
+                    unattached.append({'name': p[0], 'size': p[1]})
+
             data = {
                 'online': True,
                 'uptime': parts[0].strip(),
                 'ram_used_mb': int(ram[0]),
                 'ram_total_mb': int(ram[1]),
+                # Root FS values kept for backward compat with header stat
                 'disk_used': disk[0],
                 'disk_total': disk[1],
                 'disk_pct': disk[2],
                 'containers': int(parts[3].strip()),
                 'load': parts[4].strip(),
                 'fetched_at': datetime.now().strftime('%H:%M:%S'),
+                'disks': disks,
+                'unattached_drives': unattached,
             }
         except Exception as e:
             data = {'online': True, 'parse_error': str(e), 'raw': r['output']}
 
     if data.get('online'):
         si = get_server_info()
-        # Attach ram_total_gb from the status we just parsed
+        # Build server_info copy with ram_total_gb — don't mutate the process-level cache
         if data.get('ram_total_mb'):
-            si = dict(si)  # don't mutate the cached copy
+            si = dict(si)
             si['ram_total_gb'] = round(data['ram_total_mb'] / 1024, 1)
         data['server_info'] = si
         if si.get('cpu_cores'):

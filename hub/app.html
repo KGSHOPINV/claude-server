@@ -1111,7 +1111,10 @@ function applyStatus(ok) {
     const u = (s.ram_used_mb/1024).toFixed(1), t = (s.ram_total_mb/1024).toFixed(0);
     document.getElementById('t-ram').textContent = `${u}/${t}GB`;
   }
-  if (s.disk_pct)  document.getElementById('t-disk').textContent = s.disk_used+'/'+s.disk_total;
+  if (s.disk_pct) {
+    const ud = s.unattached_drives?.length ? ` +${s.unattached_drives.length} unmounted` : '';
+    document.getElementById('t-disk').textContent = s.disk_used+'/'+s.disk_total+ud;
+  }
   if (s.load)      document.getElementById('t-load').textContent = s.load;
   if (s.containers !== undefined) {
     document.getElementById('t-ct').textContent = s.containers;
@@ -2328,10 +2331,11 @@ function renderDash(elId) {
 
     <div class="hd-stats">
       <div class="hd-stat">
-        <div class="hd-stat-lbl">💿 Disk</div>
+        <div class="hd-stat-lbl">💿 Disk <span style="font-size:9px;opacity:.6">(OS vol)</span></div>
         <div class="hd-stat-val ${valClass(diskPct, 70, 85)}">${diskPct ? diskPct + '%' : '—'}</div>
         ${diskPct ? `<div class="sv-bar"><div class="sv-bar-fill ${diskPct>=85?'red':diskPct>=70?'yellow':'green'}" style="width:${diskPct}%"></div></div>` : ''}
         <div class="hd-stat-sub">${diskUsed} used · ${diskTotal} total</div>
+        ${st.unattached_drives?.length ? `<div style="font-size:9px;color:var(--amber);margin-top:3px">⚠ ${st.unattached_drives.map(d=>d.size+' '+d.name).join(', ')} unmounted</div>` : ''}
       </div>
       <div class="hd-stat">
         <div class="hd-stat-lbl">🧠 RAM</div>
@@ -2849,7 +2853,10 @@ function setCfgSection(section) {
           <div class="vs-row"><label>Status</label><span style="color:${st.online?'var(--green)':'var(--red)'};font-size:11px">${st.online?'● Online':'● Offline'}</span></div>
           <div class="vs-row"><label>Uptime</label><code style="font-family:var(--mono);font-size:11px;color:var(--muted)">${st.uptime||'—'}</code></div>
           <div class="vs-row"><label>RAM</label><code style="font-family:var(--mono);font-size:11px;color:var(--muted)">${st.ram_used_mb?(st.ram_used_mb/1024).toFixed(1)+'GB / '+(st.ram_total_mb/1024).toFixed(0)+'GB':'—'}</code></div>
-          <div class="vs-row"><label>Disk</label><code style="font-family:var(--mono);font-size:11px;color:var(--muted)">${st.disk_pct?st.disk_used+' / '+st.disk_total+' ('+st.disk_pct+'%)':'—'}</code></div>
+          <div class="vs-row"><label>Disk</label><div style="font-size:11px;font-family:var(--mono);color:var(--muted)">
+            ${(st.disks||[]).length ? st.disks.map(d=>`<div>${d.used}/${d.total} (${d.pct}%) <span style="opacity:.6">${d.mount}</span></div>`).join('') : (st.disk_pct ? st.disk_used+' / '+st.disk_total+' ('+st.disk_pct+'%)' : '—')}
+            ${(st.unattached_drives||[]).map(d=>`<div style="color:var(--amber)">⚠ ${d.size} /dev/${d.name} — not mounted</div>`).join('')}
+          </div></div>
           <div class="vs-row"><label>Load</label><code style="font-family:var(--mono);font-size:11px;color:var(--muted)">${st.load||'—'}${st.cpu_cores?' ('+st.cpu_cores+' cores)':''}</code></div>
           <div class="vs-row"><label>Containers</label><code style="font-family:var(--mono);font-size:11px;color:var(--muted)">${st.containers!==undefined?st.containers:' —'} running</code></div>
           <div class="vs-row"><label>OS</label><code style="font-family:var(--mono);font-size:11px;color:var(--muted)">${S.server_info?.os||'—'} · ${S.server_info?.hostname||'—'}</code></div>
@@ -2916,13 +2923,14 @@ async function runSurvey(key) {
   btn.disabled = true; btn.textContent = '…';
   body.innerHTML = '<div class="sv-loading">⏳ Running checks…</div>';
 
-  const [ctrs, disk, mem, load, maint, hub] = await Promise.all([
+  const [ctrs, disk, mem, load, maint, hub, blk] = await Promise.all([
     apiRun("docker ps --format '{{.Names}}|{{.Status}}|{{.RunningFor}}'", 15),
     apiRun("df -h -x tmpfs -x devtmpfs -x overlay -x squashfs 2>/dev/null | grep -vE '(loop|udev|boot/efi|/sys/|/proc/|security|pstore|bpf|efivars)' | tail -n +2", 5),
     apiRun("free -h | grep ^Mem", 5),
     apiRun("uptime", 5),
     apiRun("journalctl --user -u hub-maintenance.service --since '72 hours ago' --no-pager -q 2>/dev/null | grep -i 'finished\\|completed\\|error\\|start' | tail -3 || echo 'No recent run found'", 10),
     apiRun("systemctl --user status hub --no-pager | head -3", 5),
+    apiRun("lsblk -dn -o NAME,SIZE,TYPE,MOUNTPOINTS 2>/dev/null | awk '$3==\"disk\" && $4==\"\" {print $1\"|\"$2}'", 5),
   ]);
 
   btn.disabled = false; btn.textContent = '↻ Refresh';
@@ -2940,6 +2948,11 @@ async function runSurvey(key) {
   });
   const nUp   = containers.filter(c => c.up).length;
   const nDown = containers.filter(c => !c.up).length;
+
+  // Unattached / unmounted drives
+  const unattachedDrives = (blk?.output||'').trim().split('\n').filter(Boolean).map(line => {
+    const p = line.split('|'); return p.length >= 2 ? {name: p[0], size: p[1]} : null;
+  }).filter(Boolean);
 
   // Parse all real disk filesystems (one per line)
   const diskLines = (disk.output||'').trim().split('\n').filter(Boolean).map(line => {
@@ -2966,6 +2979,7 @@ async function runSurvey(key) {
   if (nDown > 0)      alerts.push({ level:'crit', msg: `${nDown} container${nDown>1?'s':''} not running: ${containers.filter(c=>!c.up).map(c=>c.name).join(', ')}` });
   diskLines.filter(d=>d.pct>=85).forEach(d => alerts.push({ level:'crit', msg: `${d.mount} at ${d.pct}% (${d.used}/${d.size}) — run: docker system prune -f` }));
   diskLines.filter(d=>d.pct>=70&&d.pct<85).forEach(d => alerts.push({ level:'warn', msg: `${d.mount} at ${d.pct}% (${d.used}/${d.size}) — getting full` }));
+  unattachedDrives.forEach(d => alerts.push({ level:'warn', msg: `Drive /dev/${d.name} (${d.size}) is not mounted — raw disk, no filesystem` }));
   if (loadPct >= 80)  alerts.push({ level:'warn', msg: `High CPU load: ${loadVal.toFixed(2)} avg (${loadPct}% of ${_cores} cores)` });
 
   const overall = nDown > 0 || diskPct >= 85 ? 'crit' : alerts.length > 0 ? 'warn' : 'good';
