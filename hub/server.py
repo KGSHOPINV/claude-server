@@ -30,7 +30,7 @@ BASE_DIR  = os.path.dirname(os.path.abspath(__file__))
 DB_PATH   = os.environ.get('HUB_DB',     os.path.join(BASE_DIR, '..', 'db', 'server.db'))
 APP_PATH    = os.path.join(BASE_DIR, 'app.html')
 MOBILE_PATH = os.path.join(BASE_DIR, 'mobile.html')
-GUIDES_DIR= os.environ.get('HUB_GUIDES', os.path.join(BASE_DIR, '..', 'guides'))
+GUIDES_DIR= os.environ.get('HUB_GUIDES', os.path.join(BASE_DIR, 'guides'))
 
 # LOCAL_MODE=1 → run commands directly (no SSH); used when hub runs ON the server
 LOCAL_MODE = os.environ.get('HUB_LOCAL', '0') == '1'
