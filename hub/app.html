@@ -642,43 +642,99 @@ body.desk-mode #desk-exit { display:flex; align-items:center; gap:6px; }
 
 /* ── SURVEY VIEW ────────────────────────────────────────────────── */
 /* ── PORT MONITOR ───────────────────────────────── */
-.view-ports { padding:14px; overflow-y:auto; height:100%; }
-.pm-hdr { display:flex; align-items:center; justify-content:space-between; margin-bottom:14px; padding-bottom:10px; border-bottom:1px solid var(--border); flex-wrap:wrap; gap:8px; }
-.pm-hdr-left { display:flex; align-items:center; gap:10px; }
-.pm-title { font-weight:700; font-size:13px; display:flex; align-items:center; gap:7px; }
-.pm-ts { font-size:10px; color:var(--muted); font-family:var(--mono); }
-.pm-alerts { margin-bottom:14px; display:flex; flex-direction:column; gap:4px; }
-.pm-alert { display:flex; align-items:center; gap:10px; padding:8px 12px; border-radius:6px; font-size:11px; }
-.pm-alert.appeared { background:rgba(63,185,80,.08); border:1px solid rgba(63,185,80,.2); }
-.pm-alert.disappeared { background:rgba(248,81,73,.08); border:1px solid rgba(248,81,73,.2); }
-.pm-alert-port { font-family:var(--mono); font-weight:700; min-width:48px; }
+.view-ports { display:flex; flex-direction:column; height:100%; overflow:hidden; }
+
+/* top header bar */
+.pm-topbar { display:flex; align-items:center; justify-content:space-between; padding:8px 14px; border-bottom:1px solid var(--border); flex-shrink:0; gap:8px; flex-wrap:wrap; }
+.pm-topbar-left { display:flex; align-items:center; gap:12px; }
+.pm-title { font-weight:700; font-size:12px; letter-spacing:.3px; }
+.pm-ts { font-size:10px; color:var(--muted2); font-family:var(--mono); }
+.pm-topbar-right { display:flex; gap:6px; align-items:center; }
+
+/* stat tiles */
+.pm-stats { display:flex; gap:6px; flex-shrink:0; }
+.pm-stat { display:flex; flex-direction:column; align-items:center; padding:4px 12px; background:var(--panel2); border:1px solid var(--border); border-radius:5px; min-width:56px; }
+.pm-stat-val { font-family:var(--mono); font-weight:700; font-size:15px; line-height:1.2; }
+.pm-stat-lbl { font-size:9px; color:var(--muted2); letter-spacing:.3px; text-transform:uppercase; }
+.pm-stat.alert .pm-stat-val { color:var(--yellow); }
+
+/* body: side-nav + main */
+.pm-body { display:flex; flex:1; min-height:0; overflow:hidden; }
+
+/* side nav — lane list */
+.pm-sidenav { width:140px; flex-shrink:0; border-right:1px solid var(--border); overflow-y:auto; padding:6px 0; }
+.pm-sn-item { display:flex; align-items:center; justify-content:space-between; padding:5px 10px; cursor:pointer; border-radius:0; font-size:11px; transition:background var(--t); gap:6px; }
+.pm-sn-item:hover { background:var(--panel2); }
+.pm-sn-item.active { background:var(--acdim); }
+.pm-sn-dot { width:6px; height:6px; border-radius:50%; flex-shrink:0; }
+.pm-sn-name { flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-size:11px; }
+.pm-sn-count { font-family:var(--mono); font-size:10px; color:var(--muted2); flex-shrink:0; }
+.pm-sn-sep { height:1px; background:var(--border); margin:4px 8px; }
+
+/* main content area */
+.pm-main { flex:1; display:flex; flex-direction:column; min-width:0; overflow:hidden; }
+
+/* tab strip */
+.pm-tabs { display:flex; border-bottom:1px solid var(--border); flex-shrink:0; padding:0 10px; gap:2px; }
+.pm-tab { padding:6px 12px; font-size:11px; cursor:pointer; color:var(--muted); border-bottom:2px solid transparent; transition:color var(--t); margin-bottom:-1px; }
+.pm-tab:hover { color:var(--text); }
+.pm-tab.active { color:var(--accent); border-bottom-color:var(--accent); font-weight:600; }
+
+/* tab content area — scrolls inside */
+.pm-content { flex:1; overflow-y:auto; padding:12px 14px; }
+
+/* Overview tab */
+.pm-overview-grid { display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-bottom:14px; }
+.pm-ov-section { background:var(--panel); border:1px solid var(--border); border-radius:7px; padding:10px 12px; }
+.pm-ov-hdr { font-size:10px; font-weight:700; letter-spacing:.5px; text-transform:uppercase; color:var(--muted); margin-bottom:8px; }
+.pm-density-row { display:flex; align-items:center; gap:8px; padding:3px 0; font-size:11px; }
+.pm-density-name { width:100px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; color:var(--muted); font-size:10px; flex-shrink:0; }
+.pm-density-bar { flex:1; height:5px; background:var(--panel2); border-radius:3px; overflow:hidden; }
+.pm-density-fill { height:100%; border-radius:3px; transition:width .4s; }
+.pm-density-count { width:24px; text-align:right; font-family:var(--mono); font-size:10px; color:var(--muted2); flex-shrink:0; }
+
+/* Alerts */
+.pm-alert { display:flex; align-items:center; gap:8px; padding:6px 10px; border-radius:5px; font-size:11px; margin-bottom:4px; }
+.pm-alert.appeared { background:rgba(63,185,80,.07); border:1px solid rgba(63,185,80,.18); }
+.pm-alert.disappeared { background:rgba(248,81,73,.07); border:1px solid rgba(248,81,73,.18); }
+.pm-alert-port { font-family:var(--mono); font-weight:700; min-width:44px; }
 .pm-alert.appeared .pm-alert-port { color:var(--green); }
 .pm-alert.disappeared .pm-alert-port { color:var(--red); }
-.pm-alert-label { flex:1; }
+.pm-alert-label { flex:1; color:var(--muted); }
 .pm-alert-ts { color:var(--muted2); font-size:10px; white-space:nowrap; }
 .pm-ack-btn { background:none; border:1px solid var(--border2); border-radius:3px; color:var(--muted2); font-size:10px; padding:1px 6px; cursor:pointer; }
 .pm-ack-btn:hover { color:var(--text); border-color:var(--accent); }
-.pm-lanes { display:grid; grid-template-columns:repeat(auto-fill,minmax(220px,1fr)); gap:8px; margin-bottom:16px; }
+
+/* By Lane tab */
+.pm-lane-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(200px,1fr)); gap:8px; }
 .pm-lane { background:var(--panel); border:1px solid var(--border); border-radius:7px; overflow:hidden; }
-.pm-lane-hdr { padding:8px 11px; display:flex; align-items:center; justify-content:space-between; border-bottom:1px solid var(--border); }
-.pm-lane-name { font-size:11px; font-weight:700; letter-spacing:.3px; }
+.pm-lane-topbar { height:3px; }
+.pm-lane-hdr { padding:7px 10px; display:flex; align-items:center; justify-content:space-between; border-bottom:1px solid var(--border); }
+.pm-lane-name { font-size:11px; font-weight:700; }
 .pm-lane-count { font-size:10px; color:var(--muted); font-family:var(--mono); }
-.pm-lane-bar { height:2px; }
-.pm-port-row { display:flex; align-items:center; gap:8px; padding:5px 11px; font-size:11px; border-bottom:1px solid var(--border); }
+.pm-port-row { display:flex; align-items:center; gap:7px; padding:4px 10px; font-size:11px; border-bottom:1px solid var(--border); }
 .pm-port-row:last-child { border-bottom:none; }
-.pm-port-num { font-family:var(--mono); font-weight:600; min-width:44px; color:var(--text); }
-.pm-port-svc { flex:1; color:var(--muted); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
-.pm-port-dot { width:7px; height:7px; border-radius:50%; flex-shrink:0; }
+.pm-port-dot { width:6px; height:6px; border-radius:50%; flex-shrink:0; }
 .pm-port-dot.up { background:var(--green); }
 .pm-port-dot.local { background:var(--muted2); }
-.pm-unknown-hdr { margin-top:14px; margin-bottom:8px; font-size:10px; font-weight:700; letter-spacing:.5px; text-transform:uppercase; color:var(--yellow); display:flex; align-items:center; gap:6px; }
-.pm-range-section { margin-top:14px; }
-.pm-range-hdr { font-size:10px; font-weight:700; letter-spacing:.5px; text-transform:uppercase; color:var(--muted); margin-bottom:8px; }
-.pm-range-row { display:flex; align-items:center; gap:10px; padding:5px 0; font-size:11px; }
-.pm-range-name { width:130px; color:var(--muted); flex-shrink:0; }
-.pm-range-bar { flex:1; height:6px; background:var(--panel2); border-radius:3px; overflow:hidden; position:relative; }
-.pm-range-fill { height:100%; border-radius:3px; background:var(--accent); transition:width .4s; }
-.pm-range-label { width:80px; text-align:right; font-family:var(--mono); font-size:10px; color:var(--muted2); flex-shrink:0; }
+.pm-port-num { font-family:var(--mono); font-weight:600; min-width:40px; color:var(--text); font-size:11px; }
+.pm-port-svc { flex:1; color:var(--muted); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-size:10px; }
+
+/* Table tab */
+.pm-table-wrap { overflow-x:auto; }
+.pm-table { width:100%; border-collapse:collapse; font-size:11px; }
+.pm-table th { text-align:left; padding:5px 10px; font-size:10px; font-weight:600; letter-spacing:.4px; text-transform:uppercase; color:var(--muted2); border-bottom:1px solid var(--border); position:sticky; top:0; background:var(--bg); cursor:pointer; white-space:nowrap; }
+.pm-table th:hover { color:var(--text); }
+.pm-table td { padding:5px 10px; border-bottom:1px solid var(--border); vertical-align:middle; }
+.pm-table tr:hover td { background:var(--panel2); }
+.pm-table .td-port { font-family:var(--mono); font-weight:700; color:var(--text); }
+.pm-table .td-svc { color:var(--text); }
+.pm-table .td-lane { font-size:10px; }
+.pm-table .td-proc { font-family:var(--mono); font-size:10px; color:var(--muted); }
+.pm-table .td-ctr { font-family:var(--mono); font-size:10px; color:var(--muted2); }
+.pm-table .td-badge { display:inline-block; padding:1px 5px; border-radius:3px; font-size:9px; font-weight:600; }
+.pm-table .td-badge.pub { background:rgba(63,185,80,.12); color:var(--green); }
+.pm-table .td-badge.loc { background:var(--panel2); color:var(--muted2); }
 /* ── SURVEY ──────────────────────────────────────── */
 .view-survey { padding:12px 14px; overflow-y:auto; height:100%; }
 .sv-hdr { display:flex; align-items:center; justify-content:space-between; margin-bottom:14px; padding-bottom:10px; border-bottom:1px solid var(--border); }
@@ -4554,169 +4610,311 @@ const LANE_COLORS = {
   yellow:'var(--yellow)', purple:'#a57af6', muted:'var(--muted2)', red:'var(--red)'
 };
 
+// Per-view state: active lane filter, active tab
+const _pmState = {}; // key → {lane: null|name, tab: 'overview'|'lanes'|'history'|'table', sortCol, sortAsc}
+
 async function loadPortsView(key) {
   const root = document.getElementById('vports-' + key);
   if (!root) return;
 
-  async function fetchAndRender(force=false) {
-    root.innerHTML = '<div style="padding:20px;color:var(--muted);font-size:11px">Scanning ports…</div>';
-    const url = API + '/api/ports' + (force ? '?force=1' : '');
-    let d;
-    try {
-      d = await fetch(url, {headers:{'X-Hub-Token':HUB_TOKEN}}).then(r=>r.json());
-    } catch(e) {
-      root.innerHTML = '<div style="padding:20px;color:var(--red);font-size:11px">Failed to load port data.</div>';
-      return;
-    }
+  if (!_pmState[key]) _pmState[key] = {lane: null, tab: 'overview', sortCol: 'port', sortAsc: true};
 
-    const ports   = d.ports   || [];
-    const events  = d.events  || [];
-    const lanes   = d.lanes   || [];
-    const scanned = d.scanned_at ? new Date(d.scanned_at).toLocaleTimeString() : '—';
+  // ── fetch ──────────────────────────────────────────────────────────────────
+  let d;
+  try {
+    d = await fetch(API+'/api/ports', {headers:{'X-Hub-Token':HUB_TOKEN}}).then(r=>r.json());
+  } catch {
+    root.innerHTML = '<div style="padding:20px;color:var(--red);font-size:11px">Failed to load port data.</div>';
+    return;
+  }
 
-    // ── build by-lane maps ──────────────────────────────────────────────────
-    const laneMap = {};
-    lanes.forEach(l => { laneMap[l.name] = []; });
-    laneMap['Other'] = [];
-    ports.forEach(p => {
-      const ln = p.lane || 'Other';
-      if (!laneMap[ln]) laneMap[ln] = [];
-      laneMap[ln].push(p);
+  const ports   = d.ports   || [];
+  const events  = d.events  || [];
+  const lanes   = d.lanes   || [];
+  const scanned = d.scanned_at ? new Date(d.scanned_at).toLocaleTimeString() : '—';
+
+  // ── build lane map ─────────────────────────────────────────────────────────
+  const laneColorMap = {};
+  const laneMap = {};
+  lanes.forEach(l => { laneMap[l.name] = []; laneColorMap[l.name] = LANE_COLORS[l.color] || 'var(--accent)'; });
+  laneMap['Other'] = []; laneColorMap['Other'] = 'var(--yellow)';
+  ports.forEach(p => { const ln = p.lane||'Other'; if (!laneMap[ln]) laneMap[ln]=[]; laneMap[ln].push(p); });
+
+  const allLaneNames = [...lanes.map(l=>l.name), 'Other'].filter(n => laneMap[n]?.length);
+  const pub  = ports.filter(p=>!p.local_only).length;
+  const loc  = ports.filter(p=>p.local_only).length;
+
+  // ── stat tiles ─────────────────────────────────────────────────────────────
+  const statsHtml = `
+    <div class="pm-stats">
+      <div class="pm-stat"><span class="pm-stat-val">${ports.length}</span><span class="pm-stat-lbl">Total</span></div>
+      <div class="pm-stat"><span class="pm-stat-val" style="color:var(--green)">${pub}</span><span class="pm-stat-lbl">Public</span></div>
+      <div class="pm-stat"><span class="pm-stat-val" style="color:var(--muted2)">${loc}</span><span class="pm-stat-lbl">Local</span></div>
+      ${events.length ? `<div class="pm-stat alert"><span class="pm-stat-val">${events.length}</span><span class="pm-stat-lbl">Alerts</span></div>` : ''}
+    </div>`;
+
+  // ── side nav ───────────────────────────────────────────────────────────────
+  function renderSidenav() {
+    const active = _pmState[key].lane;
+    let html = `<div class="pm-sn-item${!active?' active':''}" onclick="_pmSetLane('${key}',null)">
+      <span class="pm-sn-dot" style="background:var(--accent)"></span>
+      <span class="pm-sn-name">All lanes</span>
+      <span class="pm-sn-count">${ports.length}</span>
+    </div><div class="pm-sn-sep"></div>`;
+    allLaneNames.forEach(name => {
+      const cnt   = laneMap[name]?.length || 0;
+      const color = laneColorMap[name];
+      const act   = active === name;
+      html += `<div class="pm-sn-item${act?' active':''}" onclick="_pmSetLane('${key}','${name}')">
+        <span class="pm-sn-dot" style="background:${color}"></span>
+        <span class="pm-sn-name">${name}</span>
+        <span class="pm-sn-count">${cnt}</span>
+      </div>`;
     });
+    const el = root.querySelector('.pm-sidenav');
+    if (el) el.innerHTML = html;
+  }
 
-    // ── lane color lookup ───────────────────────────────────────────────────
-    const laneColorMap = {};
-    lanes.forEach(l => { laneColorMap[l.name] = LANE_COLORS[l.color] || 'var(--accent)'; });
+  // ── tab bar ────────────────────────────────────────────────────────────────
+  function renderTabbar() {
+    const t = _pmState[key].tab;
+    const tabs = [['overview','Overview'],['lanes','By Lane'],['history','History'],['table','Table']];
+    return tabs.map(([id,lbl])=>
+      `<div class="pm-tab${t===id?' active':''}" onclick="_pmSetTab('${key}','${id}')">${lbl}</div>`
+    ).join('');
+  }
 
-    // ── alerts section ──────────────────────────────────────────────────────
-    let alertsHtml = '';
-    if (events.length) {
-      const alertRows = events.map(ev => {
-        const cls   = ev.event === 'appeared' ? 'appeared' : 'disappeared';
-        const icon  = ev.event === 'appeared' ? '↑' : '↓';
-        const label = ev.container ? ev.container : (ev.process || 'unknown process');
-        const ts    = ev.ts ? new Date(ev.ts).toLocaleTimeString() : '';
-        return `<div class="pm-alert ${cls}" data-id="${ev.id}">
-          <span class="pm-alert-port">${icon} :${ev.port}</span>
-          <span class="pm-alert-label">${label} ${ev.event}</span>
-          <span class="pm-alert-ts">${ts}</span>
-          <button class="pm-ack-btn" onclick="ackPortEvent(${ev.id}, this)">dismiss</button>
-        </div>`;
-      }).join('');
-      alertsHtml = `<div class="pm-alerts">${alertRows}</div>`;
-    }
+  // ── filtered port list ─────────────────────────────────────────────────────
+  function filteredPorts() {
+    const lane = _pmState[key].lane;
+    if (!lane) return ports;
+    return laneMap[lane] || [];
+  }
 
-    // ── lane cards ──────────────────────────────────────────────────────────
-    let laneCardsHtml = '';
-    lanes.forEach(ln => {
-      const lPorts = laneMap[ln.name] || [];
-      if (!lPorts.length) return;
-      const color = LANE_COLORS[ln.color] || 'var(--accent)';
-      const rows  = lPorts.map(p => {
-        const dotCls = p.local_only ? 'local' : 'up';
-        const svc    = p.service || p.container || p.process || '?';
-        const badge  = p.container ? ` <span style="font-size:9px;color:var(--muted2);font-family:var(--mono)">[${p.container}]</span>` : '';
-        return `<div class="pm-port-row">
-          <span class="pm-port-dot ${dotCls}"></span>
-          <span class="pm-port-num">${p.port}</span>
-          <span class="pm-port-svc" title="${p.process||''}">${svc}${badge}</span>
-          ${p.local_only ? '<span style="font-size:9px;color:var(--muted2)">local</span>' : ''}
-        </div>`;
-      }).join('');
-      laneCardsHtml += `<div class="pm-lane">
-        <div class="pm-lane-bar" style="background:${color}"></div>
-        <div class="pm-lane-hdr">
-          <span class="pm-lane-name" style="color:${color}">${ln.name}</span>
-          <span class="pm-lane-count">${lPorts.length} port${lPorts.length!==1?'s':''}</span>
-        </div>
-        ${rows}
+  // ── Overview tab ───────────────────────────────────────────────────────────
+  function renderOverview() {
+    // density bars
+    let densityRows = '';
+    allLaneNames.forEach(name => {
+      const lp    = laneMap[name] || [];
+      const pub_n = lp.filter(p=>!p.local_only).length;
+      if (!pub_n) return;
+      const color = laneColorMap[name];
+      const pct   = Math.max(4, Math.round((pub_n / Math.max(pub, 1)) * 100));
+      densityRows += `<div class="pm-density-row">
+        <span class="pm-density-name" style="color:${color}">${name}</span>
+        <span class="pm-density-bar"><span class="pm-density-fill" style="width:${pct}%;background:${color}"></span></span>
+        <span class="pm-density-count">${pub_n}</span>
       </div>`;
     });
 
-    // ── unknown/other ───────────────────────────────────────────────────────
-    const otherPorts = laneMap['Other'] || [];
-    let otherHtml = '';
-    if (otherPorts.length) {
-      const rows = otherPorts.map(p => {
-        const svc = p.service || p.container || p.process || '?';
-        return `<div class="pm-port-row">
-          <span class="pm-port-dot" style="background:var(--yellow)"></span>
-          <span class="pm-port-num">${p.port}</span>
-          <span class="pm-port-svc">${svc}</span>
-        </div>`;
-      }).join('');
-      otherHtml = `<div class="pm-unknown-hdr">⚠ Uncategorized ports (${otherPorts.length})</div>
-        <div class="pm-lane" style="border-color:var(--yellow)">${rows}</div>`;
-    }
+    // recent events (last 8)
+    const evRows = events.slice(0,8).map(ev => {
+      const cls  = ev.event==='appeared'?'appeared':'disappeared';
+      const icon = ev.event==='appeared'?'↑':'↓';
+      const lbl  = ev.container||(ev.process||'?');
+      const ts   = ev.ts ? new Date(ev.ts).toLocaleTimeString() : '';
+      return `<div class="pm-alert ${cls}">
+        <span class="pm-alert-port">${icon} :${ev.port}</span>
+        <span class="pm-alert-label">${lbl} ${ev.event}</span>
+        <span class="pm-alert-ts">${ts}</span>
+        <button class="pm-ack-btn" onclick="ackPortEvent(${ev.id},this)">×</button>
+      </div>`;
+    }).join('') || '<div style="font-size:11px;color:var(--muted2)">No recent changes</div>';
 
-    // ── range density bars ──────────────────────────────────────────────────
-    const portSet = new Set(ports.filter(p=>!p.local_only).map(p=>p.port));
-    let rangeHtml = '';
-    lanes.forEach(ln => {
-      if (!ln.ranges || !ln.ranges.length) return;
-      ln.ranges.forEach(([lo, hi]) => {
-        if (lo === hi) return; // single-port lanes skip the bar
-        const total = hi - lo + 1;
-        const used  = ports.filter(p => p.port >= lo && p.port <= hi && !p.local_only).length;
-        if (!used) return;
-        const pct   = Math.max(2, Math.round((used / total) * 100));
-        const color = LANE_COLORS[ln.color] || 'var(--accent)';
-        rangeHtml += `<div class="pm-range-row">
-          <span class="pm-range-name">${ln.name} <span style="font-size:9px;color:var(--muted2)">${lo}–${hi}</span></span>
-          <span class="pm-range-bar"><span class="pm-range-fill" style="width:${pct}%;background:${color}"></span></span>
-          <span class="pm-range-label">${used} / ${total}</span>
-        </div>`;
-      });
-    });
-
-    // ── assemble ────────────────────────────────────────────────────────────
-    root.innerHTML = `
-      <div class="pm-hdr">
-        <div class="pm-hdr-left">
-          <span class="pm-title">🔌 Port Landscape</span>
-          <span class="pm-ts">last scan ${scanned}</span>
-        </div>
-        <div style="display:flex;gap:8px;align-items:center">
-          ${events.length ? `<button class="btn-sm" onclick="ackAllPortEvents()">dismiss all</button>` : ''}
-          <button class="btn-sm" onclick="rescanPorts('${key}')">⟳ rescan</button>
-        </div>
+    return `<div class="pm-overview-grid">
+      <div class="pm-ov-section">
+        <div class="pm-ov-hdr">Lane density — public ports</div>
+        ${densityRows || '<span style="font-size:11px;color:var(--muted2)">—</span>'}
       </div>
-      ${alertsHtml}
-      <div class="pm-lanes">${laneCardsHtml}</div>
-      ${otherHtml}
-      ${rangeHtml ? `<div class="pm-range-section"><div class="pm-range-hdr">Range density</div>${rangeHtml}</div>` : ''}
-    `;
+      <div class="pm-ov-section">
+        <div class="pm-ov-hdr" style="display:flex;justify-content:space-between">
+          <span>Recent changes</span>
+          ${events.length>1?`<button class="pm-ack-btn" onclick="ackAllPortEvents()">dismiss all</button>`:''}
+        </div>
+        ${evRows}
+      </div>
+    </div>`;
   }
 
-  await fetchAndRender(false);
+  // ── By Lane tab ────────────────────────────────────────────────────────────
+  function renderLanes() {
+    const fp = filteredPorts();
+    const visLanes = _pmState[key].lane ? [_pmState[key].lane] : allLaneNames;
+    let html = '<div class="pm-lane-grid">';
+    visLanes.forEach(name => {
+      const lp    = (laneMap[name]||[]).filter(p => !_pmState[key].lane || true);
+      if (!lp.length) return;
+      const color = laneColorMap[name];
+      const rows  = lp.map(p => {
+        const svc    = p.service||p.container||p.process||'?';
+        const dotCls = p.local_only?'local':'up';
+        return `<div class="pm-port-row">
+          <span class="pm-port-dot ${dotCls}"></span>
+          <span class="pm-port-num">${p.port}</span>
+          <span class="pm-port-svc" title="${p.process||''}">${svc}</span>
+        </div>`;
+      }).join('');
+      html += `<div class="pm-lane">
+        <div class="pm-lane-topbar" style="background:${color}"></div>
+        <div class="pm-lane-hdr">
+          <span class="pm-lane-name" style="color:${color}">${name}</span>
+          <span class="pm-lane-count">${lp.length}</span>
+        </div>${rows}
+      </div>`;
+    });
+    html += '</div>';
+    return html;
+  }
+
+  // ── History tab ────────────────────────────────────────────────────────────
+  function renderHistory() {
+    if (!events.length) return '<div style="padding:20px;font-size:11px;color:var(--muted2)">No port change events recorded yet.</div>';
+    return `<div style="display:flex;justify-content:flex-end;margin-bottom:8px">
+      <button class="btn-sm" onclick="ackAllPortEvents()">dismiss all</button>
+    </div>` + events.map(ev => {
+      const cls  = ev.event==='appeared'?'appeared':'disappeared';
+      const icon = ev.event==='appeared'?'↑':'↓';
+      const lbl  = ev.container||(ev.process||'unknown');
+      const ts   = ev.ts ? new Date(ev.ts).toLocaleString() : '';
+      return `<div class="pm-alert ${cls}">
+        <span class="pm-alert-port">${icon} :${ev.port}</span>
+        <span class="pm-alert-label">${lbl} — ${ev.event}</span>
+        <span class="pm-alert-ts">${ts}</span>
+        <button class="pm-ack-btn" onclick="ackPortEvent(${ev.id},this)">dismiss</button>
+      </div>`;
+    }).join('');
+  }
+
+  // ── Table tab ──────────────────────────────────────────────────────────────
+  function renderTable() {
+    const fp  = filteredPorts();
+    const st  = _pmState[key];
+    const col = st.sortCol, asc = st.sortAsc;
+    const sorted = [...fp].sort((a,b) => {
+      const av = a[col]||'', bv = b[col]||'';
+      const r  = typeof av==='number' ? av-bv : String(av).localeCompare(String(bv));
+      return asc ? r : -r;
+    });
+    const thSort = (c,lbl) => {
+      const arrow = col===c ? (asc?' ↑':' ↓') : '';
+      return `<th onclick="_pmSort('${key}','${c}')">${lbl}${arrow}</th>`;
+    };
+    const rows = sorted.map(p => {
+      const svc = p.service||p.container||p.process||'—';
+      const prx = p.process||'—';
+      const ctr = p.container||'—';
+      const vis = p.local_only
+        ? '<span class="td-badge loc">local</span>'
+        : '<span class="td-badge pub">public</span>';
+      const laneColor = laneColorMap[p.lane||'Other'];
+      return `<tr>
+        <td class="td-port">${p.port}</td>
+        <td class="td-svc">${svc}</td>
+        <td class="td-lane"><span style="color:${laneColor};font-size:10px">${p.lane||'Other'}</span></td>
+        <td class="td-proc">${prx}</td>
+        <td class="td-ctr">${ctr}</td>
+        <td>${vis}</td>
+      </tr>`;
+    }).join('');
+    return `<div class="pm-table-wrap"><table class="pm-table">
+      <thead><tr>${thSort('port','Port')}${thSort('service','Service')}${thSort('lane','Lane')}${thSort('process','Process')}${thSort('container','Container')}<th>Scope</th></tr></thead>
+      <tbody>${rows}</tbody>
+    </table></div>`;
+  }
+
+  // ── render content area ────────────────────────────────────────────────────
+  function renderContent() {
+    const t = _pmState[key].tab;
+    const el = root.querySelector('.pm-content');
+    if (!el) return;
+    if      (t === 'overview') el.innerHTML = renderOverview();
+    else if (t === 'lanes')    el.innerHTML = renderLanes();
+    else if (t === 'history')  el.innerHTML = renderHistory();
+    else if (t === 'table')    el.innerHTML = renderTable();
+  }
+
+  // ── full render (first load or rescan) ────────────────────────────────────
+  root.innerHTML = `
+    <div class="pm-topbar">
+      <div class="pm-topbar-left">
+        <span class="pm-title">🔌 Port Landscape</span>
+        <span class="pm-ts">scanned ${scanned}</span>
+        ${statsHtml}
+      </div>
+      <div class="pm-topbar-right">
+        <button class="btn-sm" onclick="rescanPorts('${key}')">⟳ Rescan</button>
+      </div>
+    </div>
+    <div class="pm-body">
+      <div class="pm-sidenav"></div>
+      <div class="pm-main">
+        <div class="pm-tabs">${renderTabbar()}</div>
+        <div class="pm-content"></div>
+      </div>
+    </div>`;
+
+  renderSidenav();
+  renderContent();
+
+  // stash render functions so tab/lane switches can call them without re-fetching
+  _pmState[key]._render = { renderSidenav, renderContent, renderTabbar };
 }
 
-// rescan button calls this global
-window.rescanPorts = async function(key) {
+// globals called by inline onclick handlers
+window._pmSetLane = function(key, lane) {
+  if (!_pmState[key]) return;
+  _pmState[key].lane = lane;
+  const st = _pmState[key]._render;
+  if (!st) return;
+  // update sidenav active state
   const root = document.getElementById('vports-' + key);
   if (!root) return;
-  root.innerHTML = '<div style="padding:20px;color:var(--muted);font-size:11px">Rescanning…</div>';
-  try {
-    await fetch(API+'/api/ports?force=1', {headers:{'X-Hub-Token':HUB_TOKEN}});
-  } catch {}
+  root.querySelectorAll('.pm-sn-item').forEach(el => el.classList.remove('active'));
+  // re-render sidenav + content
+  st.renderSidenav();
+  st.renderContent();
+};
+
+window._pmSetTab = function(key, tab) {
+  if (!_pmState[key]) return;
+  _pmState[key].tab = tab;
+  const root = document.getElementById('vports-' + key);
+  if (!root) return;
+  // update tab strip
+  root.querySelectorAll('.pm-tab').forEach(el => el.classList.toggle('active', el.textContent.toLowerCase().startsWith(tab==='overview'?'ov':tab==='lanes'?'by':tab==='history'?'hi':'ta')));
+  const st = _pmState[key]._render;
+  if (st) { root.querySelector('.pm-tabs').innerHTML = st.renderTabbar(); st.renderContent(); }
+};
+
+window._pmSort = function(key, col) {
+  if (!_pmState[key]) return;
+  const s = _pmState[key];
+  s.sortAsc = s.sortCol === col ? !s.sortAsc : true;
+  s.sortCol = col;
+  const st = s._render;
+  if (st) st.renderContent();
+};
+
+window.rescanPorts = async function(key) {
+  const root = document.getElementById('vports-' + key);
+  if (root) root.querySelector('.pm-ts') && (root.querySelector('.pm-ts').textContent = 'rescanning…');
+  try { await fetch(API+'/api/ports?force=1', {headers:{'X-Hub-Token':HUB_TOKEN}}); } catch {}
   await loadPortsView(key);
 };
 
 async function ackPortEvent(id, btn) {
   btn.disabled = true; btn.textContent = '…';
   await fetch(API+'/api/ports/ack', {
-    method:'POST',
-    headers:{'Content-Type':'application/json','X-Hub-Token':HUB_TOKEN},
+    method:'POST', headers:{'Content-Type':'application/json','X-Hub-Token':HUB_TOKEN},
     body: JSON.stringify({ids:[id]})
   });
-  const row = btn.closest('.pm-alert');
-  if (row) row.remove();
+  btn.closest('.pm-alert')?.remove();
 }
 
 async function ackAllPortEvents() {
   await fetch(API+'/api/ports/ack', {
-    method:'POST',
-    headers:{'Content-Type':'application/json','X-Hub-Token':HUB_TOKEN},
+    method:'POST', headers:{'Content-Type':'application/json','X-Hub-Token':HUB_TOKEN},
     body: JSON.stringify({all:true})
   });
   document.querySelectorAll('.pm-alert').forEach(el=>el.remove());
