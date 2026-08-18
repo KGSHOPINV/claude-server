@@ -260,9 +260,14 @@ body.desk-mode #desk-exit { display:flex; align-items:center; gap:6px; }
 
 /* ── VIEW CONTENTS ──────────────────────────────── */
 /* Iframe */
-.view-iframe { width:100%; height:100%; border:none; }
+.view-iframe { width:100%; border:none; display:block; }
 .iframe-err { display:flex; flex-direction:column; align-items:center; justify-content:center; height:100%; gap:10px; color:var(--muted); }
 .iframe-err h3 { color:var(--text); }
+.if-bar { display:flex; align-items:center; justify-content:space-between; padding:3px 10px; background:var(--panel2); border-bottom:1px solid var(--border); flex-shrink:0; gap:8px; }
+.if-bar-title { font-size:11px; color:var(--muted); font-weight:500; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; flex:1; }
+.if-bar-acts { display:flex; gap:4px; flex-shrink:0; }
+.if-bar-btn { padding:2px 8px; border-radius:3px; border:1px solid var(--border2); background:none; color:var(--muted2); font-size:10px; cursor:pointer; text-decoration:none; font-family:var(--ui); transition:color var(--t),border-color var(--t); }
+.if-bar-btn:hover { color:var(--text); border-color:var(--accent); }
 
 /* Dashboard */
 .view-dash { padding:14px; overflow-y:auto; height:100%; }
@@ -1344,7 +1349,7 @@ function refreshCategoryNav() {
   let html = '';
 
   // Register an action and return its onclick string
-  const reg = (fn) => { const i = _navAct.push(fn) - 1; return `_navAct[${i}]()`; };
+  const reg = (fn) => { const i = _navAct.push(fn) - 1; return `_navAct[${i}](event)`; };
 
   const starBtn = (bk) => {
     const fav = isFav(bk.label);
@@ -1380,7 +1385,7 @@ function refreshCategoryNav() {
         const url = `${s.https?'https':'http'}://${SRV}:${s.port}`;
         const badge = !inst ? 'off' : s.running ? 'up' : s.no_ui ? 'na' : '';
         const badgeText = !inst ? 'N/A' : s.running ? 'up' : s.no_ui ? 'no UI' : '?';
-        const ci = inst && !s.no_ui ? reg(() => openIframeWs(s.name, s.port, url)) : reg(()=>{});
+        const ci = inst && !s.no_ui ? reg((e) => openIframeWs(s.name, s.port, url, {newWs: e?.ctrlKey||e?.metaKey})) : reg(()=>{});
         const sb = inst && !s.no_ui ? starBtn({icon:'🌐', label:s.name, type:'iframe', extra:{port:s.port, url, viewType:'iframe'}}) : '';
         html += `<div class="sec-item" onclick="${ci}">
           <span class="sec-item-icon">${s.https?'🔒':'🌐'}</span>
@@ -1479,11 +1484,36 @@ function openView(viewType, config={}) {
   createWorkspace({ title: titles[viewType]||viewType, icon: icons[viewType]||'⊞', viewType, viewConfig: config });
 }
 
-function openIframeWs(name, port, url) {
-  const id_key = 'iframe-' + port;
+function openIframeWs(name, port, url, opts={}) {
+  // Dedup: already open in another workspace → switch to it
   const existing = S.workspaces.find(ws => ws.panes.some(p=>p.viewType==='iframe' && p.viewConfig.port===port));
   if (existing) { activateWorkspace(existing.id); return; }
-  createWorkspace({ title: name, icon: '🌐', viewType: 'iframe', viewConfig: {url: `${API}/proxy/${port}/`, directUrl: url, port, title: name} });
+
+  const cfg = {url, port, title: name};
+
+  if (opts.newWs) {
+    // Explicit new-workspace request (e.g. Ctrl+click)
+    createWorkspace({ title: name, icon: '🌐', viewType: 'iframe', viewConfig: cfg });
+    return;
+  }
+
+  // Navigate current active workspace (browser-tab behaviour)
+  const curWs = S.workspaces.find(w => w.id === S.activeWs);
+  if (curWs) {
+    const pane = curWs.panes.find(p => p.id === curWs.activePaneId) || curWs.panes[0];
+    if (pane) {
+      curWs.title = name; curWs.icon = '🌐';
+      const tabTitle = document.querySelector(`.ws-tab[data-ws="${curWs.id}"] .ws-tab-title`);
+      const tabIcon  = document.querySelector(`.ws-tab[data-ws="${curWs.id}"] .ws-tab-icon`);
+      if (tabTitle) tabTitle.textContent = name;
+      if (tabIcon)  tabIcon.textContent  = '🌐';
+      setPaneView(curWs.id, pane.id, 'iframe', cfg);
+      return;
+    }
+  }
+
+  // No active workspace at all — create a new one
+  createWorkspace({ title: name, icon: '🌐', viewType: 'iframe', viewConfig: cfg });
 }
 
 function openDocWs(file, title) {
@@ -1655,7 +1685,7 @@ function openPicker(wsId, paneId, btn) {
   ).join('');
   const svcsHtml = S.services.filter(s=>s.installed!==false&&!s.noui).slice(0,8).map(s => {
     const url = `${s.https?'https':'http'}://${SRV}:${s.port}`;
-    return `<div class="pick-item" onclick="setPaneView('${wsId}','${paneId}','iframe',{url:'${API}/proxy/${s.port}/',directUrl:'${url}',port:${s.port},title:'${s.name}'})">🌐 ${s.name}</div>`;
+    return `<div class="pick-item" onclick="setPaneView('${wsId}','${paneId}','iframe',{url:'${url}',port:${s.port},title:'${s.name}'})">🌐 ${s.name}</div>`;
   }).join('');
   const otherWs = S.workspaces.filter(w=>w.id!==wsId);
   const wsHtml = otherWs.length ? otherWs.map(w =>
@@ -1914,7 +1944,19 @@ function mountPaneContent(wsId, paneId, viewType, viewConfig, body) {
       break;
     case 'iframe':
       if (viewConfig.url) {
-        body.innerHTML = `<iframe class="view-iframe" src="${viewConfig.url}" sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-pointer-lock"></iframe>`;
+        const _ifUrl = viewConfig.url;
+        const _ifTitle = viewConfig.title || '';
+        body.style.display = 'flex';
+        body.style.flexDirection = 'column';
+        body.innerHTML = `
+          <div class="if-bar">
+            <span class="if-bar-title">${_ifTitle}</span>
+            <div class="if-bar-acts">
+              <a class="if-bar-btn" href="${_ifUrl}" target="_blank" title="Open in new browser tab">↗ Open</a>
+              <button class="if-bar-btn" onclick="(function(){const ws=S.workspaces.find(w=>w.id===S.activeWs);if(ws){const p=ws.panes.find(q=>q.id===ws.activePaneId)||ws.panes[0];if(p)setPaneView(ws.id,p.id,'blank',{})}})()" title="Close service">✕</button>
+            </div>
+          </div>
+          <iframe class="view-iframe" src="${_ifUrl}" style="flex:1;min-height:0"></iframe>`;
       } else {
         body.innerHTML = `<div class="iframe-err"><h3>No URL</h3><p>Pick a service from the view menu above.</p></div>`;
       }
@@ -2300,7 +2342,7 @@ async function drawMapPane(key) {
     const ctrHtml = s.ctrs.length
       ? s.ctrs.map(c=>`<div class="stack-ctr"><span style="width:5px;height:5px;border-radius:50%;background:${c.running?acc:'#2a2a2a'};flex-shrink:0"></span><span style="font-size:9px;font-family:var(--mono);color:${c.running?'#c9d1d9':'#3a3a3a'};overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:110px">${c.name}</span></div>`).join('')
       : `<div style="font-size:9px;color:#2a2a2a;font-style:italic;padding:1px 0">not deployed</div>`;
-    const clickFn = s.port ? `onclick="openIframeWs('${s.label}',${s.port},'http://${SRV}:${s.port}')"` : '';
+    const clickFn = s.port ? `onclick="openIframeWs('${s.label}',${s.port},'http://${SRV}:${s.port}',{newWs:event.ctrlKey||event.metaKey})"` : '';
     return `<div class="stack-card${s.port?'':' no-click'}" ${clickFn} style="border-color:${rc}44;background:${MAP_GROUP_BG[s.group]||'#111'}">
       <div style="display:flex;align-items:center;gap:5px;margin-bottom:4px">
         <span style="width:7px;height:7px;border-radius:50%;background:${rc};flex-shrink:0"></span>
@@ -2420,7 +2462,7 @@ function renderDash(elId) {
               const dotCls = sv.running === true ? 'svc-up' : sv.running === false ? 'svc-dn' : 'svc-na';
               const url    = (sv.https ? 'https' : 'http') + '://' + SRV + ':' + sv.port;
               return `<div class="hd-svc ${dotCls}${hasUI ? ' clickable' : ''}"
-                  ${hasUI ? `onclick="openIframeWs('${escH(sv.name)}',${sv.port},'${url}')"` : ''}
+                  ${hasUI ? `onclick="openIframeWs('${escH(sv.name)}',${sv.port},'${url}',{newWs:event.ctrlKey||event.metaKey})"` : ''}
                   title="${escH(sv.desc || sv.name)}">
                 <div class="hd-sdot"></div>
                 <div class="hd-svc-info">
