@@ -509,6 +509,8 @@ body.desk-mode #desk-exit { display:flex; align-items:center; gap:6px; }
 .btn:hover { border-color:var(--accent); }
 .btn.p { background:var(--acdim); border-color:var(--accent); color:var(--accent); }
 .btn.d { background:var(--rdim); border-color:var(--red); color:var(--red); }
+.btn-sm { padding:2px 8px; border-radius:var(--r); border:1px solid var(--border2); background:var(--panel2); color:var(--muted); font-size:10px; cursor:pointer; font-family:var(--ui); transition:border-color var(--t), color var(--t); }
+.btn-sm:hover { border-color:var(--accent); color:var(--text); }
 .badge { display:inline-block; padding:1px 6px; border-radius:8px; font-size:9px; font-weight:600; }
 .badge.up  { background:var(--gdim); color:var(--green); }
 .badge.dn  { background:var(--rdim); color:var(--red); }
@@ -634,6 +636,45 @@ body.desk-mode #desk-exit { display:flex; align-items:center; gap:6px; }
 .cfg-tab-pane.hidden { display:none; }
 
 /* ── SURVEY VIEW ────────────────────────────────────────────────── */
+/* ── PORT MONITOR ───────────────────────────────── */
+.view-ports { padding:14px; overflow-y:auto; height:100%; }
+.pm-hdr { display:flex; align-items:center; justify-content:space-between; margin-bottom:14px; padding-bottom:10px; border-bottom:1px solid var(--border); flex-wrap:wrap; gap:8px; }
+.pm-hdr-left { display:flex; align-items:center; gap:10px; }
+.pm-title { font-weight:700; font-size:13px; display:flex; align-items:center; gap:7px; }
+.pm-ts { font-size:10px; color:var(--muted); font-family:var(--mono); }
+.pm-alerts { margin-bottom:14px; display:flex; flex-direction:column; gap:4px; }
+.pm-alert { display:flex; align-items:center; gap:10px; padding:8px 12px; border-radius:6px; font-size:11px; }
+.pm-alert.appeared { background:rgba(63,185,80,.08); border:1px solid rgba(63,185,80,.2); }
+.pm-alert.disappeared { background:rgba(248,81,73,.08); border:1px solid rgba(248,81,73,.2); }
+.pm-alert-port { font-family:var(--mono); font-weight:700; min-width:48px; }
+.pm-alert.appeared .pm-alert-port { color:var(--green); }
+.pm-alert.disappeared .pm-alert-port { color:var(--red); }
+.pm-alert-label { flex:1; }
+.pm-alert-ts { color:var(--muted2); font-size:10px; white-space:nowrap; }
+.pm-ack-btn { background:none; border:1px solid var(--border2); border-radius:3px; color:var(--muted2); font-size:10px; padding:1px 6px; cursor:pointer; }
+.pm-ack-btn:hover { color:var(--text); border-color:var(--accent); }
+.pm-lanes { display:grid; grid-template-columns:repeat(auto-fill,minmax(220px,1fr)); gap:8px; margin-bottom:16px; }
+.pm-lane { background:var(--panel); border:1px solid var(--border); border-radius:7px; overflow:hidden; }
+.pm-lane-hdr { padding:8px 11px; display:flex; align-items:center; justify-content:space-between; border-bottom:1px solid var(--border); }
+.pm-lane-name { font-size:11px; font-weight:700; letter-spacing:.3px; }
+.pm-lane-count { font-size:10px; color:var(--muted); font-family:var(--mono); }
+.pm-lane-bar { height:2px; }
+.pm-port-row { display:flex; align-items:center; gap:8px; padding:5px 11px; font-size:11px; border-bottom:1px solid var(--border); }
+.pm-port-row:last-child { border-bottom:none; }
+.pm-port-num { font-family:var(--mono); font-weight:600; min-width:44px; color:var(--text); }
+.pm-port-svc { flex:1; color:var(--muted); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.pm-port-dot { width:7px; height:7px; border-radius:50%; flex-shrink:0; }
+.pm-port-dot.up { background:var(--green); }
+.pm-port-dot.local { background:var(--muted2); }
+.pm-unknown-hdr { margin-top:14px; margin-bottom:8px; font-size:10px; font-weight:700; letter-spacing:.5px; text-transform:uppercase; color:var(--yellow); display:flex; align-items:center; gap:6px; }
+.pm-range-section { margin-top:14px; }
+.pm-range-hdr { font-size:10px; font-weight:700; letter-spacing:.5px; text-transform:uppercase; color:var(--muted); margin-bottom:8px; }
+.pm-range-row { display:flex; align-items:center; gap:10px; padding:5px 0; font-size:11px; }
+.pm-range-name { width:130px; color:var(--muted); flex-shrink:0; }
+.pm-range-bar { flex:1; height:6px; background:var(--panel2); border-radius:3px; overflow:hidden; position:relative; }
+.pm-range-fill { height:100%; border-radius:3px; background:var(--accent); transition:width .4s; }
+.pm-range-label { width:80px; text-align:right; font-family:var(--mono); font-size:10px; color:var(--muted2); flex-shrink:0; }
+/* ── SURVEY ──────────────────────────────────────── */
 .view-survey { padding:12px 14px; overflow-y:auto; height:100%; }
 .sv-hdr { display:flex; align-items:center; justify-content:space-between; margin-bottom:14px; padding-bottom:10px; border-bottom:1px solid var(--border); }
 .sv-hdr-title { font-weight:700; font-size:13px; display:flex; align-items:center; gap:7px; }
@@ -1204,6 +1245,9 @@ const CATEGORIES = {
         {icon:'💾', label:'Storage',   action:()=>openView('storage')},
         {icon:'📁', label:'Files',     action:()=>openView('files')},
       ]},
+      { label:'Landscape', items:[
+        {icon:'🔌', label:'Ports',     action:()=>openView('ports')},
+      ]},
     ]
   },
 
@@ -1407,8 +1451,8 @@ function createWorkspace({ title, icon='⊞', pinned=false, viewType='dashboard'
 }
 
 function openView(viewType, config={}) {
-  const titles = { dashboard:'Dashboard', terminal:'Terminal', logs:'Logs', docs:'Docs', map:'Infra Map', vault:'Vault', issues:'Issues', network:'Network', chat:'AI Chat', settings:'Settings', storage:'Storage', files:'Files', journal:'Journal', survey:'Survey', guide:'Guide', tasks:'Task Docket', runbooks:'Runbooks', browser:'Browser' };
-  const icons  = { dashboard:'⊞', terminal:'⌨', logs:'📋', docs:'📚', map:'🗺', vault:'🔐', issues:'⚑', network:'🌐', chat:'🤖', settings:'⚙', storage:'💾', files:'📁', journal:'📓', survey:'🔍', guide:'🏠', tasks:'📋', runbooks:'▶', browser:'🌐' };
+  const titles = { dashboard:'Dashboard', terminal:'Terminal', logs:'Logs', docs:'Docs', map:'Infra Map', vault:'Vault', issues:'Issues', network:'Network', chat:'AI Chat', settings:'Settings', storage:'Storage', files:'Files', journal:'Journal', survey:'Survey', guide:'Guide', tasks:'Task Docket', runbooks:'Runbooks', browser:'Browser', ports:'Port Landscape' };
+  const icons  = { dashboard:'⊞', terminal:'⌨', logs:'📋', docs:'📚', map:'🗺', vault:'🔐', issues:'⚑', network:'🌐', chat:'🤖', settings:'⚙', storage:'💾', files:'📁', journal:'📓', survey:'🔍', guide:'🏠', tasks:'📋', runbooks:'▶', browser:'🌐', ports:'🔌' };
 
   // Already open somewhere? → switch to that tab (dedup)
   const existing = S.workspaces.find(ws => ws.panes.some(p => p.viewType === viewType));
@@ -1877,6 +1921,10 @@ function mountPaneContent(wsId, paneId, viewType, viewConfig, body) {
       break;
     case 'guide':
       renderGuideView(body);
+      break;
+    case 'ports':
+      body.innerHTML = `<div class="view-ports" id="vports-${key}"><div style="padding:20px;color:var(--muted);font-size:11px">Loading port landscape…</div></div>`;
+      loadPortsView(key);
       break;
     case 'remote':
       renderRemoteView(body);
@@ -4458,6 +4506,181 @@ const GUIDE_STACK = [
   { icon:'📖', name:'Wiki.js',       desc:'Knowledge base · port 3002' },
 ];
 
+// ── PORT LANDSCAPE VIEW ─────────────────────────────────────────────────────
+const LANE_COLORS = {
+  accent:'var(--accent)', blue:'#4f8ef7', teal:'#2db5a0', green:'var(--green)',
+  yellow:'var(--yellow)', purple:'#a57af6', muted:'var(--muted2)', red:'var(--red)'
+};
+
+async function loadPortsView(key) {
+  const root = document.getElementById('vports-' + key);
+  if (!root) return;
+
+  async function fetchAndRender(force=false) {
+    root.innerHTML = '<div style="padding:20px;color:var(--muted);font-size:11px">Scanning ports…</div>';
+    const url = API + '/api/ports' + (force ? '?force=1' : '');
+    let d;
+    try {
+      d = await fetch(url, {headers:{'X-Hub-Token':HUB_TOKEN}}).then(r=>r.json());
+    } catch(e) {
+      root.innerHTML = '<div style="padding:20px;color:var(--red);font-size:11px">Failed to load port data.</div>';
+      return;
+    }
+
+    const ports   = d.ports   || [];
+    const events  = d.events  || [];
+    const lanes   = d.lanes   || [];
+    const scanned = d.scanned_at ? new Date(d.scanned_at).toLocaleTimeString() : '—';
+
+    // ── build by-lane maps ──────────────────────────────────────────────────
+    const laneMap = {};
+    lanes.forEach(l => { laneMap[l.name] = []; });
+    laneMap['Other'] = [];
+    ports.forEach(p => {
+      const ln = p.lane || 'Other';
+      if (!laneMap[ln]) laneMap[ln] = [];
+      laneMap[ln].push(p);
+    });
+
+    // ── lane color lookup ───────────────────────────────────────────────────
+    const laneColorMap = {};
+    lanes.forEach(l => { laneColorMap[l.name] = LANE_COLORS[l.color] || 'var(--accent)'; });
+
+    // ── alerts section ──────────────────────────────────────────────────────
+    let alertsHtml = '';
+    if (events.length) {
+      const alertRows = events.map(ev => {
+        const cls   = ev.event === 'appeared' ? 'appeared' : 'disappeared';
+        const icon  = ev.event === 'appeared' ? '↑' : '↓';
+        const label = ev.container ? ev.container : (ev.process || 'unknown process');
+        const ts    = ev.ts ? new Date(ev.ts).toLocaleTimeString() : '';
+        return `<div class="pm-alert ${cls}" data-id="${ev.id}">
+          <span class="pm-alert-port">${icon} :${ev.port}</span>
+          <span class="pm-alert-label">${label} ${ev.event}</span>
+          <span class="pm-alert-ts">${ts}</span>
+          <button class="pm-ack-btn" onclick="ackPortEvent(${ev.id}, this)">dismiss</button>
+        </div>`;
+      }).join('');
+      alertsHtml = `<div class="pm-alerts">${alertRows}</div>`;
+    }
+
+    // ── lane cards ──────────────────────────────────────────────────────────
+    let laneCardsHtml = '';
+    lanes.forEach(ln => {
+      const lPorts = laneMap[ln.name] || [];
+      if (!lPorts.length) return;
+      const color = LANE_COLORS[ln.color] || 'var(--accent)';
+      const rows  = lPorts.map(p => {
+        const dotCls = p.local_only ? 'local' : 'up';
+        const svc    = p.service || p.container || p.process || '?';
+        const badge  = p.container ? ` <span style="font-size:9px;color:var(--muted2);font-family:var(--mono)">[${p.container}]</span>` : '';
+        return `<div class="pm-port-row">
+          <span class="pm-port-dot ${dotCls}"></span>
+          <span class="pm-port-num">${p.port}</span>
+          <span class="pm-port-svc" title="${p.process||''}">${svc}${badge}</span>
+          ${p.local_only ? '<span style="font-size:9px;color:var(--muted2)">local</span>' : ''}
+        </div>`;
+      }).join('');
+      laneCardsHtml += `<div class="pm-lane">
+        <div class="pm-lane-bar" style="background:${color}"></div>
+        <div class="pm-lane-hdr">
+          <span class="pm-lane-name" style="color:${color}">${ln.name}</span>
+          <span class="pm-lane-count">${lPorts.length} port${lPorts.length!==1?'s':''}</span>
+        </div>
+        ${rows}
+      </div>`;
+    });
+
+    // ── unknown/other ───────────────────────────────────────────────────────
+    const otherPorts = laneMap['Other'] || [];
+    let otherHtml = '';
+    if (otherPorts.length) {
+      const rows = otherPorts.map(p => {
+        const svc = p.service || p.container || p.process || '?';
+        return `<div class="pm-port-row">
+          <span class="pm-port-dot" style="background:var(--yellow)"></span>
+          <span class="pm-port-num">${p.port}</span>
+          <span class="pm-port-svc">${svc}</span>
+        </div>`;
+      }).join('');
+      otherHtml = `<div class="pm-unknown-hdr">⚠ Uncategorized ports (${otherPorts.length})</div>
+        <div class="pm-lane" style="border-color:var(--yellow)">${rows}</div>`;
+    }
+
+    // ── range density bars ──────────────────────────────────────────────────
+    const portSet = new Set(ports.filter(p=>!p.local_only).map(p=>p.port));
+    let rangeHtml = '';
+    lanes.forEach(ln => {
+      if (!ln.ranges || !ln.ranges.length) return;
+      ln.ranges.forEach(([lo, hi]) => {
+        if (lo === hi) return; // single-port lanes skip the bar
+        const total = hi - lo + 1;
+        const used  = ports.filter(p => p.port >= lo && p.port <= hi && !p.local_only).length;
+        if (!used) return;
+        const pct   = Math.max(2, Math.round((used / total) * 100));
+        const color = LANE_COLORS[ln.color] || 'var(--accent)';
+        rangeHtml += `<div class="pm-range-row">
+          <span class="pm-range-name">${ln.name} <span style="font-size:9px;color:var(--muted2)">${lo}–${hi}</span></span>
+          <span class="pm-range-bar"><span class="pm-range-fill" style="width:${pct}%;background:${color}"></span></span>
+          <span class="pm-range-label">${used} / ${total}</span>
+        </div>`;
+      });
+    });
+
+    // ── assemble ────────────────────────────────────────────────────────────
+    root.innerHTML = `
+      <div class="pm-hdr">
+        <div class="pm-hdr-left">
+          <span class="pm-title">🔌 Port Landscape</span>
+          <span class="pm-ts">last scan ${scanned}</span>
+        </div>
+        <div style="display:flex;gap:8px;align-items:center">
+          ${events.length ? `<button class="btn-sm" onclick="ackAllPortEvents()">dismiss all</button>` : ''}
+          <button class="btn-sm" onclick="rescanPorts('${key}')">⟳ rescan</button>
+        </div>
+      </div>
+      ${alertsHtml}
+      <div class="pm-lanes">${laneCardsHtml}</div>
+      ${otherHtml}
+      ${rangeHtml ? `<div class="pm-range-section"><div class="pm-range-hdr">Range density</div>${rangeHtml}</div>` : ''}
+    `;
+  }
+
+  await fetchAndRender(false);
+}
+
+// rescan button calls this global
+window.rescanPorts = async function(key) {
+  const root = document.getElementById('vports-' + key);
+  if (!root) return;
+  root.innerHTML = '<div style="padding:20px;color:var(--muted);font-size:11px">Rescanning…</div>';
+  try {
+    await fetch(API+'/api/ports?force=1', {headers:{'X-Hub-Token':HUB_TOKEN}});
+  } catch {}
+  await loadPortsView(key);
+};
+
+async function ackPortEvent(id, btn) {
+  btn.disabled = true; btn.textContent = '…';
+  await fetch(API+'/api/ports/ack', {
+    method:'POST',
+    headers:{'Content-Type':'application/json','X-Hub-Token':HUB_TOKEN},
+    body: JSON.stringify({ids:[id]})
+  });
+  const row = btn.closest('.pm-alert');
+  if (row) row.remove();
+}
+
+async function ackAllPortEvents() {
+  await fetch(API+'/api/ports/ack', {
+    method:'POST',
+    headers:{'Content-Type':'application/json','X-Hub-Token':HUB_TOKEN},
+    body: JSON.stringify({all:true})
+  });
+  document.querySelectorAll('.pm-alert').forEach(el=>el.remove());
+}
+
+// ── GUIDE VIEW ───────────────────────────────────────────────────────────────
 function renderGuideView(body) {
   const runningNames = (S.services||[]).filter(s=>s.running).map(s=>s.name);
   const total = S.services ? S.services.filter(s=>s.installed!==false).length : 0;

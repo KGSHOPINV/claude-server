@@ -350,6 +350,163 @@ def build_services(containers):
         result.append(svc)
     return result
 
+# ── Port lanes ─────────────────────────────────────────────────────────────────
+
+PORT_LANES = [
+    {'name': 'Hub',            'color': 'accent',  'ranges': [(8765, 8765)]},
+    {'name': 'System',         'color': 'muted',   'ranges': [(1, 1023)]},
+    {'name': 'Infrastructure', 'color': 'blue',    'ranges': [(3000, 3099), (80, 81), (443, 443)]},
+    {'name': 'Monitoring',     'color': 'teal',    'ranges': [(19000, 19999), (8085, 8085), (8090, 8090)]},
+    {'name': 'Automation',     'color': 'green',   'ranges': [(5600, 5699), (5678, 5678)]},
+    {'name': 'Database',       'color': 'yellow',  'ranges': [(5400, 5499), (6300, 6399), (6379, 6379)]},
+    {'name': 'Admin',          'color': 'muted',   'ranges': [(9090, 9090), (9400, 9499), (9443, 9443)]},
+    {'name': 'Storage',        'color': 'yellow',  'ranges': [(9000, 9089), (9091, 9099)]},
+    {'name': 'AI',             'color': 'purple',  'ranges': [(11000, 11999)]},
+    {'name': 'Tools',          'color': 'blue',    'ranges': [(8000, 8999)]},
+    {'name': 'Supabase Stack', 'color': 'teal',    'ranges': [(10000, 10999)]},
+]
+
+# Flat port → service name registry for quick lookup
+_PORT_NAMES = {}
+for _s in SERVICES:
+    _PORT_NAMES[_s['port']] = _s['name']
+_PORT_NAMES[22]  = 'SSH'
+_PORT_NAMES[80]  = 'HTTP (NPM)'
+_PORT_NAMES[443] = 'HTTPS (NPM)'
+
+def _port_lane(port):
+    """Return the lane name for a port number."""
+    for lane in PORT_LANES:
+        for lo, hi in lane['ranges']:
+            if lo <= port <= hi:
+                return lane['name']
+    return 'Other'
+
+def scan_ports():
+    """Scan all listening TCP ports. Returns (ports_list, docker_port_map)."""
+    # Get all listening TCP ports with process info
+    r = ssh_run("ss -tlnp4 2>/dev/null | tail -n +2", timeout=10)
+    ports = []
+    seen = set()
+    for line in r.get('output', '').splitlines():
+        parts = line.split()
+        if len(parts) < 4:
+            continue
+        addr_port = parts[3]
+        process_info = parts[5] if len(parts) > 5 else ''
+        if ':' not in addr_port:
+            continue
+        addr, port_str = addr_port.rsplit(':', 1)
+        try:
+            port = int(port_str)
+        except ValueError:
+            continue
+        if port in seen:
+            continue
+        seen.add(port)
+        proc, pid = '', None
+        m = re.search(r'\("([^"]+)",pid=(\d+)', process_info)
+        if m:
+            proc = m.group(1)
+            try:
+                pid = int(m.group(2))
+            except ValueError:
+                pass
+        # Filter out loopback-only listeners (127.x.x.x) for cleaner display
+        is_local = addr.startswith('127.') or addr == '::1'
+        ports.append({
+            'port':     port,
+            'addr':     addr,
+            'process':  proc,
+            'pid':      pid,
+            'local_only': is_local,
+        })
+
+    # Get Docker container → ports mapping
+    r2 = ssh_run("docker ps --format '{{.Names}}|{{.Ports}}' 2>/dev/null", timeout=10)
+    docker_ports = {}  # port_num -> container_name
+    for line in r2.get('output', '').splitlines():
+        if '|' not in line:
+            continue
+        cname, ports_str = line.split('|', 1)
+        for m in re.finditer(r'(?:0\.0\.0\.0|\[::\]):(\d+)->', ports_str):
+            try:
+                docker_ports[int(m.group(1))] = cname
+            except ValueError:
+                pass
+
+    # Enrich: add container name + service name + lane
+    for p in ports:
+        pn = p['port']
+        p['container'] = docker_ports.get(pn, '')
+        # Process name heuristic for hub itself
+        if pn == PORT and p['process'] in ('python3', 'python', ''):
+            p['container'] = 'server-hub'
+        p['service']   = _PORT_NAMES.get(pn, p['container'].replace('keynox-', '') if p['container'] else '')
+        p['lane']      = _port_lane(pn)
+
+    ports.sort(key=lambda x: x['port'])
+    return ports, docker_ports
+
+# ── Port background scanner ────────────────────────────────────────────────────
+
+_port_cache       = {'ports': [], 'events': [], 'ts': ''}
+_port_cache_lock  = threading.Lock()
+
+def _do_port_snapshot():
+    """Scan ports, detect changes, persist to DB."""
+    ports, _ = scan_ports()
+    now = datetime.now().isoformat()
+    with _port_cache_lock:
+        _port_cache['ports'] = ports
+        _port_cache['ts'] = now
+
+    conn = db_conn()
+    prev_row = conn.execute("SELECT data FROM port_snapshots ORDER BY id DESC LIMIT 1").fetchone()
+    prev_set = set()
+    if prev_row:
+        try:
+            prev_set = {p['port'] for p in json.loads(prev_row['data'])}
+        except Exception:
+            pass
+
+    curr_set = {p['port'] for p in ports if not p.get('local_only')}
+
+    if prev_row:
+        for port in sorted(curr_set - prev_set):
+            p = next((x for x in ports if x['port'] == port), {})
+            conn.execute(
+                "INSERT INTO port_events(ts,event,port,process,container) VALUES(?,?,?,?,?)",
+                (now, 'appeared', port, p.get('process',''), p.get('container',''))
+            )
+        for port in sorted(prev_set - curr_set):
+            conn.execute(
+                "INSERT INTO port_events(ts,event,port,process,container) VALUES(?,?,?,?,?)",
+                (now, 'disappeared', port, '', '')
+            )
+
+    conn.execute("INSERT INTO port_snapshots(ts,data) VALUES(?,?)", (now, json.dumps(ports)))
+    # Keep 96 snapshots (8h at 5min intervals)
+    conn.execute("DELETE FROM port_snapshots WHERE id NOT IN (SELECT id FROM port_snapshots ORDER BY id DESC LIMIT 96)")
+    conn.commit()
+
+    # Cache recent events
+    rows = conn.execute(
+        "SELECT * FROM port_events WHERE acknowledged=0 ORDER BY id DESC LIMIT 50"
+    ).fetchall()
+    conn.close()
+    with _port_cache_lock:
+        _port_cache['events'] = [dict(r) for r in rows]
+
+def _port_scan_loop():
+    time.sleep(10)  # Give hub a moment to fully start up before first scan
+    while True:
+        try:
+            _do_port_snapshot()
+        except Exception:
+            pass
+        time.sleep(300)  # Scan every 5 minutes
+
 # ── SQLite helpers ─────────────────────────────────────────────────────────────
 
 def db_conn():
@@ -375,7 +532,7 @@ def get_setup_status():
         {'id': '01', 'label': 'System packages',   'done': cmd_ok('command -v git && command -v curl && command -v ufw')},
         {'id': '02', 'label': 'Docker',             'done': cmd_ok('docker info >/dev/null 2>&1')},
         {'id': '03', 'label': 'Nginx Proxy Mgr',   'done': cmd_ok('docker ps --filter name=npm --format "{{.Names}}" | grep -q npm')},
-        {'id': '04', 'label': 'Cloudflare Tunnel',  'done': cmd_ok('docker ps --filter name=cloudflared --format "{{.Names}}" | grep -q cloudflared')},
+        {'id': '04', 'label': 'Cloudflare Tunnel',  'done': cmd_ok('docker ps --filter name=server-hub-tunnel --format "{{.Names}}" | grep -q server-hub-tunnel')},
         {'id': '05', 'label': 'Portainer',          'done': cmd_ok('docker ps --filter name=portainer --format "{{.Names}}" | grep -q portainer')},
         {'id': '06', 'label': 'Monitoring',         'done': cmd_ok('docker ps --filter name=uptime-kuma --format "{{.Names}}" | grep -q uptime-kuma')},
         {'id': '07', 'label': 'Claude CLI',         'done': cmd_ok('command -v claude')},
@@ -459,6 +616,20 @@ def db_ensure_tables():
             type TEXT NOT NULL,
             body TEXT NOT NULL,
             user TEXT DEFAULT ''
+        )""")
+        conn.execute("""CREATE TABLE IF NOT EXISTS port_snapshots (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            ts TEXT NOT NULL,
+            data TEXT NOT NULL
+        )""")
+        conn.execute("""CREATE TABLE IF NOT EXISTS port_events (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            ts TEXT NOT NULL,
+            event TEXT NOT NULL,
+            port INTEGER NOT NULL,
+            process TEXT DEFAULT '',
+            container TEXT DEFAULT '',
+            acknowledged INTEGER DEFAULT 0
         )""")
         # Seed default admin if no users exist
         row = conn.execute("SELECT COUNT(*) as c FROM users").fetchone()
@@ -979,12 +1150,12 @@ _tunnel_lock_t = threading.Lock()
 _tunnel_thread = None
 
 def _tunnel_watcher():
-    """Background thread: poll cloudflared logs to extract the public URL."""
+    """Background thread: poll server-hub-tunnel logs to extract the public URL."""
     global _tunnel_url
     while True:
         try:
             r = subprocess.run(
-                ['docker', 'logs', '--tail', '80', 'cloudflared'],
+                ['docker', 'logs', '--tail', '80', 'server-hub-tunnel'],
                 capture_output=True, text=True, timeout=6
             )
             m = re.search(r'https://[a-z0-9\-]+\.trycloudflare\.com', r.stdout + r.stderr)
@@ -997,7 +1168,7 @@ def _tunnel_watcher():
 def tunnel_status():
     try:
         r = subprocess.run(
-            ['docker', 'inspect', '--format', '{{.State.Status}}', 'cloudflared'],
+            ['docker', 'inspect', '--format', '{{.State.Status}}', 'server-hub-tunnel'],
             capture_output=True, text=True, timeout=5
         )
         running = r.stdout.strip() == 'running'
@@ -1010,10 +1181,10 @@ def tunnel_status():
 def tunnel_start():
     global _tunnel_url, _tunnel_thread
     try:
-        subprocess.run(['docker', 'rm', '-f', 'cloudflared'], capture_output=True, timeout=8)
+        subprocess.run(['docker', 'rm', '-f', 'server-hub-tunnel'], capture_output=True, timeout=8)
         r = subprocess.run(
-            ['docker', 'run', '-d', '--name', 'cloudflared', '--network', 'host',
-             'cloudflare/cloudflared:latest', 'tunnel', '--url', f'http://localhost:{PORT}'],
+            ['docker', 'run', '-d', '--name', 'server-hub-tunnel', '--network', 'host',
+             'cloudflare/server-hub-tunnel:latest', 'tunnel', '--url', f'http://localhost:{PORT}'],
             capture_output=True, text=True, timeout=30
         )
         if r.returncode == 0:
@@ -1030,8 +1201,8 @@ def tunnel_start():
 def tunnel_stop():
     global _tunnel_url
     try:
-        subprocess.run(['docker', 'stop', 'cloudflared'], capture_output=True, timeout=15)
-        subprocess.run(['docker', 'rm', 'cloudflared'], capture_output=True, timeout=10)
+        subprocess.run(['docker', 'stop', 'server-hub-tunnel'], capture_output=True, timeout=15)
+        subprocess.run(['docker', 'rm', 'server-hub-tunnel'], capture_output=True, timeout=10)
         with _tunnel_lock_t:
             _tunnel_url = ''
         return True
@@ -1213,6 +1384,31 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 self.send_json({'ok': True, 'user': sess['user']})
             else:
                 self.send_json({'ok': False}, 401)
+
+        elif p == '/api/ports':
+            force = 'force' in self.path
+            if force:
+                try:
+                    _do_port_snapshot()
+                except Exception:
+                    pass
+            with _port_cache_lock:
+                ports  = list(_port_cache['ports'])
+                events = list(_port_cache['events'])
+                ts     = _port_cache['ts']
+            # If cache is empty (first startup before thread runs), do a quick scan now
+            if not ports:
+                try:
+                    ports, _ = scan_ports()
+                    ts = datetime.now().isoformat()
+                except Exception:
+                    pass
+            self.send_json({
+                'ports':      ports,
+                'events':     events,
+                'lanes':      PORT_LANES,
+                'scanned_at': ts,
+            })
 
         elif p == '/api/my-ip':
             # Return the connecting client's IP address (useful for fail2ban unban)
@@ -1496,6 +1692,26 @@ class Handler(http.server.BaseHTTPRequestHandler):
             ok = tunnel_stop()
             self.send_json({'ok': ok})
 
+        elif p == '/api/ports/ack':
+            # Acknowledge port events (dismiss alerts)
+            event_ids = body.get('ids', [])
+            ack_all   = body.get('all', False)
+            conn = db_conn()
+            if ack_all:
+                conn.execute("UPDATE port_events SET acknowledged=1")
+            elif event_ids:
+                placeholders = ','.join('?' * len(event_ids))
+                conn.execute(f"UPDATE port_events SET acknowledged=1 WHERE id IN ({placeholders})", event_ids)
+            conn.commit()
+            conn.close()
+            # Refresh events cache
+            conn = db_conn()
+            rows = conn.execute("SELECT * FROM port_events WHERE acknowledged=0 ORDER BY id DESC LIMIT 50").fetchall()
+            conn.close()
+            with _port_cache_lock:
+                _port_cache['events'] = [dict(r) for r in rows]
+            self.send_json({'ok': True})
+
         elif p == '/api/update':
             # git pull + restart hub service
             if not gate_check(self.headers, required_level=3):
@@ -1616,6 +1832,9 @@ class Handler(http.server.BaseHTTPRequestHandler):
 
 if __name__ == '__main__':
     db_ensure_tables()
+    # Start background port scanner
+    _scan_thread = threading.Thread(target=_port_scan_loop, daemon=True)
+    _scan_thread.start()
     print(f'\n  Server Hub API  —  http://localhost:{PORT}')
     print(f'  SSH: {SSH_HOST}  |  DB: {DB_PATH}\n')
     class ThreadedServer(socketserver.ThreadingMixIn, http.server.HTTPServer):
