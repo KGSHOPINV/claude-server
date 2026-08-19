@@ -774,6 +774,46 @@ body.desk-mode #desk-exit { display:flex; align-items:center; gap:6px; }
 .sv-alert.warn { background:var(--ydim); border:1px solid rgba(210,153,34,.2); color:var(--yellow); }
 .sv-alert.crit { background:var(--rdim); border:1px solid rgba(248,81,73,.2); color:var(--red); }
 
+/* ── PLATFORM VIEW ─────────────────────────────────── */
+.view-platform { display:flex; flex-direction:column; height:100%; overflow-y:auto; padding:18px; gap:14px; box-sizing:border-box; }
+.pf-header { display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:8px; }
+.pf-hdr-left { display:flex; align-items:center; gap:10px; }
+.pf-title { font-size:13px; font-weight:700; letter-spacing:.2px; }
+.pf-mode { font-size:9px; font-weight:600; letter-spacing:.5px; text-transform:uppercase; background:var(--panel2); border:1px solid var(--border); border-radius:4px; padding:2px 7px; color:var(--muted2); }
+.pf-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(300px,1fr)); gap:12px; }
+.pf-card { background:var(--panel); border:1px solid var(--border); border-radius:10px; padding:15px; display:flex; flex-direction:column; gap:10px; }
+.pf-card-hdr { display:flex; align-items:center; justify-content:space-between; gap:8px; }
+.pf-card-name { display:flex; align-items:center; gap:7px; font-size:12px; font-weight:700; }
+.pf-card-icon { font-size:17px; line-height:1; }
+.pf-card-status { display:flex; align-items:center; gap:4px; font-size:10px; color:var(--muted); font-family:var(--mono); }
+.pf-dot { width:6px; height:6px; border-radius:50%; flex-shrink:0; }
+.pf-dot-live { background:var(--green); box-shadow:0 0 4px var(--green); }
+.pf-dot-warn { background:var(--yellow); }
+.pf-dot-off { background:var(--muted2); }
+.pf-desc { font-size:11px; color:var(--muted); line-height:1.5; }
+.pf-tags { display:flex; flex-wrap:wrap; gap:4px; }
+.pf-tag { font-size:9px; background:var(--panel2); border:1px solid var(--border); border-radius:3px; padding:1px 6px; color:var(--muted); font-family:var(--mono); }
+.pf-divider { height:1px; background:var(--border); }
+.pf-rows { display:flex; flex-direction:column; gap:5px; }
+.pf-row { display:flex; align-items:center; justify-content:space-between; font-size:11px; }
+.pf-row-label { color:var(--muted); }
+.pf-row-value { font-family:var(--mono); color:var(--text); font-size:10px; }
+.pf-row-value.dim { color:var(--muted2); font-style:italic; }
+.pf-actions { display:flex; gap:6px; flex-wrap:wrap; }
+.pf-instances { display:flex; flex-direction:column; gap:4px; }
+.pf-inst-row { display:flex; align-items:center; gap:7px; font-size:11px; padding:5px 8px; background:var(--panel2); border-radius:5px; }
+.pf-inst-name { font-weight:600; }
+.pf-inst-port { font-family:var(--mono); color:var(--muted); font-size:10px; }
+.pf-none { font-size:10px; color:var(--muted2); font-style:italic; padding:4px 0; }
+.pf-ecosystem { background:var(--panel); border:1px solid var(--border); border-radius:10px; padding:13px 15px; }
+.pf-eco-label { font-size:9px; font-weight:700; letter-spacing:.6px; text-transform:uppercase; color:var(--muted2); margin-bottom:9px; }
+.pf-eco-nodes { display:flex; flex-wrap:wrap; align-items:center; gap:4px; }
+.pf-eco-node { display:flex; align-items:center; gap:5px; padding:4px 9px; background:var(--panel2); border:1px solid var(--border); border-radius:6px; font-size:11px; }
+.pf-eco-node.live { border-color:var(--accent); background:var(--acdim); }
+.pf-eco-arrow { color:var(--muted2); font-size:11px; padding:0 1px; }
+.pf-notice { display:flex; align-items:flex-start; gap:8px; padding:9px 12px; background:var(--acdim); border:1px solid rgba(88,166,255,.15); border-radius:6px; font-size:11px; color:var(--muted); }
+.pf-notice-icon { font-size:13px; flex-shrink:0; }
+
 /* ── HOME DASHBOARD ────────────────────────────────── */
 .view-dash { padding:12px 14px; overflow-y:auto; height:100%; }
 .hd-header { display:flex; align-items:center; gap:8px; padding:8px 12px; border-radius:7px; margin-bottom:10px; font-size:11px; background:var(--panel); border:1px solid var(--border); }
@@ -1000,6 +1040,11 @@ body.desk-mode #desk-exit { display:flex; align-items:center; gap:6px; }
     </button>
     <button class="cat-item" data-cat="docs" onclick="setCategory('docs')" title="Docs — guides and hub reference">
       <span class="cat-icon">📚</span><span class="cat-label">Docs</span>
+    </button>
+    <div class="cat-sep"></div>
+    <!-- PLATFORM ECOSYSTEM -->
+    <button class="cat-item" data-cat="platform" onclick="setCategory('platform')" title="Platform — FlareVault, Metaforge, ecosystem tools">
+      <span class="cat-icon">🔮</span><span class="cat-label">Pltfrm</span>
     </button>
     <div class="cat-sep"></div>
     <!-- META -->
@@ -1385,6 +1430,25 @@ const CATEGORIES = {
     ]
   },
 
+  // ── PLATFORM — ecosystem tooling layer ───────────────────────────────────
+  // FlareVault: port authority + topology map + CF protocol layer.
+  // Metaforge: self-aware database substrate. Assumed until live.
+  platform: {
+    title: 'Platform',
+    sections: [
+      { label:'FlareVault', items:[
+        {icon:'🔒', label:'Vault & Topology',   action:()=>openView('platform')},
+        {icon:'🗺',  label:'Port Topology',      action:()=>openView('platform')},
+        {icon:'☁',  label:'CF Protocol Layer',  action:()=>openView('platform')},
+      ]},
+      { label:'Metaforge', items:[
+        {icon:'⚗',  label:'Data Substrate',     action:()=>openView('platform')},
+        {icon:'🚀', label:'Deploy Instance',     action:()=>openView('platform')},
+        {icon:'🔌', label:'MCP Endpoint',        action:()=>openView('platform')},
+      ]},
+    ]
+  },
+
 };
 
 function setCategory(cat) {
@@ -1512,8 +1576,8 @@ function createWorkspace({ title, icon='⊞', pinned=false, viewType='dashboard'
 }
 
 function openView(viewType, config={}) {
-  const titles = { dashboard:'Dashboard', terminal:'Terminal', logs:'Logs', docs:'Docs', map:'Infra Map', vault:'Vault', issues:'Issues', network:'Network', chat:'AI Chat', settings:'Settings', storage:'Storage', files:'Files', journal:'Journal', survey:'Survey', guide:'Guide', tasks:'Task Docket', runbooks:'Runbooks', browser:'Browser', ports:'Port Landscape' };
-  const icons  = { dashboard:'⊞', terminal:'⌨', logs:'📋', docs:'📚', map:'🗺', vault:'🔐', issues:'⚑', network:'🌐', chat:'🤖', settings:'⚙', storage:'💾', files:'📁', journal:'📓', survey:'🔍', guide:'🏠', tasks:'📋', runbooks:'▶', browser:'🌐', ports:'🔌' };
+  const titles = { dashboard:'Dashboard', terminal:'Terminal', logs:'Logs', docs:'Docs', map:'Infra Map', vault:'Vault', issues:'Issues', network:'Network', chat:'AI Chat', settings:'Settings', storage:'Storage', files:'Files', journal:'Journal', survey:'Survey', guide:'Guide', tasks:'Task Docket', runbooks:'Runbooks', browser:'Browser', ports:'Port Landscape', platform:'Platform' };
+  const icons  = { dashboard:'⊞', terminal:'⌨', logs:'📋', docs:'📚', map:'🗺', vault:'🔐', issues:'⚑', network:'🌐', chat:'🤖', settings:'⚙', storage:'💾', files:'📁', journal:'📓', survey:'🔍', guide:'🏠', tasks:'📋', runbooks:'▶', browser:'🌐', ports:'🔌', platform:'🔮' };
 
   // Already open somewhere? → switch to that tab (dedup)
   const existing = S.workspaces.find(ws => ws.panes.some(p => p.viewType === viewType));
@@ -2026,6 +2090,10 @@ function mountPaneContent(wsId, paneId, viewType, viewConfig, body) {
       break;
     case 'remote':
       renderRemoteView(body);
+      break;
+    case 'platform':
+      body.innerHTML = `<div class="view-platform" id="vpf-${key}"><div style="padding:20px;color:var(--muted);font-size:11px">Loading platform…</div></div>`;
+      renderPlatformView(key);
       break;
     case 'tasks':
       renderTasksView(body);
@@ -5000,6 +5068,223 @@ function renderGuideView(body) {
   // Register click actions after innerHTML is set
   window._guideAct = GUIDE_FEATURES.map(f=>f.action);
 }
+
+// ── PLATFORM VIEW ─────────────────────────────────────────────────────────────
+async function renderPlatformView(key) {
+  const root = document.getElementById('vpf-' + key);
+  if (!root) return;
+
+  // ── 1. vigil-node presence — check port data for :7777 ──────────────────
+  let vigilLive = false;
+  let vigilPort = null;
+  try {
+    const pd = await fetch(API+'/api/ports', {headers:{'X-Hub-Token':HUB_TOKEN}}).then(r=>r.json());
+    vigilPort = (pd.ports||[]).find(p => p.port===7777);
+    vigilLive = !!vigilPort;
+  } catch {}
+
+  // ── 2. metaforge instances — scan service list and docker ps ────────────
+  const svcs    = S.services || [];
+  const mfSvcs  = svcs.filter(s => {
+    const n = (s.name||'').toLowerCase();
+    return n.includes('metaforge') || n.includes('mforge') || n.startsWith('mf-');
+  });
+  // also check running containers name from docker ps via /api/run
+  let mfExtra = [];
+  try {
+    const r = await fetch(API+'/api/run', {
+      method:'POST',
+      headers:{'Content-Type':'application/json','X-Hub-Token':HUB_TOKEN},
+      body: JSON.stringify({cmd:"docker ps --format '{{.Names}}\t{{.Ports}}\t{{.Status}}' | grep -i metaforge || echo ''"})
+    });
+    if (r.ok) {
+      const d = await r.json();
+      const lines = (d.output||'').trim().split('\n').filter(l=>l&&!l.startsWith('TOTP'));
+      mfExtra = lines.map(l => {
+        const parts = l.split('\t');
+        return {name: parts[0]||'', ports: parts[1]||'', status: parts[2]||''};
+      }).filter(x=>x.name);
+    }
+  } catch {}
+
+  const allMf = [...mfSvcs.map(s=>({name:s.name, ports:s.port?`:${s.port}`:'', status:s.running?'running':'stopped'})), ...mfExtra];
+  // dedup by name
+  const seenMf = new Set();
+  const mfInstances = allMf.filter(m => { if (seenMf.has(m.name)) return false; seenMf.add(m.name); return true; });
+
+  // ── render ───────────────────────────────────────────────────────────────
+  const escH = s => (s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+
+  const vigilStatus = vigilLive
+    ? `<span class="pf-dot pf-dot-live"></span> vigil-node live · port 7777`
+    : `<span class="pf-dot pf-dot-off"></span> not detected`;
+
+  const mfStatus = mfInstances.length > 0
+    ? `<span class="pf-dot pf-dot-live"></span> ${mfInstances.length} instance${mfInstances.length!==1?'s':''} found`
+    : `<span class="pf-dot pf-dot-off"></span> no instances`;
+
+  const mfInstancesHtml = mfInstances.length > 0
+    ? mfInstances.map(m => `
+        <div class="pf-inst-row">
+          <span class="pf-dot ${m.status==='running'?'pf-dot-live':'pf-dot-off'}"></span>
+          <span class="pf-inst-name">${escH(m.name)}</span>
+          <span class="pf-inst-port">${escH(m.ports)}</span>
+          <span style="font-size:10px;color:var(--muted);margin-left:auto">${escH(m.status)}</span>
+        </div>`).join('')
+    : `<div class="pf-none">No Metaforge containers detected on this server</div>`;
+
+  root.innerHTML = `
+    <div class="pf-header">
+      <div class="pf-hdr-left">
+        <span style="font-size:20px">🔮</span>
+        <span class="pf-title">Platform Tools</span>
+        <span class="pf-mode">standalone mode</span>
+      </div>
+      <button class="btn btn-sm" onclick="renderPlatformView('${key}')">↺ Refresh</button>
+    </div>
+
+    <div class="pf-notice">
+      <span class="pf-notice-icon">ℹ</span>
+      <span>Hub is running in standalone mode. FlareVault provides the port authority + topology layer when connected.
+      Metaforge can be deployed from this panel. Both integrate when live — hub honors what they report.</span>
+    </div>
+
+    <div class="pf-grid">
+
+      <!-- ── FLAREVAULT ─────────────────────────────────── -->
+      <div class="pf-card">
+        <div class="pf-card-hdr">
+          <div class="pf-card-name"><span class="pf-card-icon">🔒</span> FlareVault</div>
+          <div class="pf-card-status">${vigilStatus}</div>
+        </div>
+        <div class="pf-desc">
+          Portable encrypted vault + Cloudflare protocol layer + living topology map.
+          Runs from USB or any machine with Python 3.11+. Nothing cloud-dependent to unlock it.
+        </div>
+        <div class="pf-tags">
+          <span class="pf-tag">AES-GCM vault</span>
+          <span class="pf-tag">CF tunnel</span>
+          <span class="pf-tag">topology map</span>
+          <span class="pf-tag">vigil-node</span>
+        </div>
+        <div class="pf-divider"></div>
+        <div class="pf-rows">
+          <div class="pf-row">
+            <span class="pf-row-label">Connection</span>
+            <span class="pf-row-value dim">not connected</span>
+          </div>
+          <div class="pf-row">
+            <span class="pf-row-label">vigil-node</span>
+            <span class="pf-row-value">${vigilLive?`7777 · ${escH(vigilPort?.service||'vigil-node')}`:'— not running'}</span>
+          </div>
+          <div class="pf-row">
+            <span class="pf-row-label">Port registry</span>
+            <span class="pf-row-value dim">FlareVault owns this when live</span>
+          </div>
+          <div class="pf-row">
+            <span class="pf-row-label">CF state</span>
+            <span class="pf-row-value dim">LOCAL → SERVER → TUNNEL → LIVE</span>
+          </div>
+        </div>
+        <div class="pf-divider"></div>
+        <div style="font-size:10px;color:var(--muted);font-weight:600;margin-bottom:3px;letter-spacing:.3px;text-transform:uppercase">Three port layers</div>
+        <div class="pf-rows">
+          <div class="pf-row">
+            <span class="pf-row-label">Docker internal</span>
+            <span class="pf-row-value dim">set by the app · never changes</span>
+          </div>
+          <div class="pf-row">
+            <span class="pf-row-label">Proxy (Traefik)</span>
+            <span class="pf-row-value dim">domain/path → Docker port</span>
+          </div>
+          <div class="pf-row">
+            <span class="pf-row-label">Node port bands</span>
+            <span class="pf-row-value dim">dedicated range per project · FV owns registry</span>
+          </div>
+        </div>
+        <div class="pf-actions">
+          <button class="btn btn-sm" onclick="openView('ports')" title="Open Port Landscape">📡 Port Landscape</button>
+          <a class="btn btn-sm" href="https://github.com/KGSHOPINV/flarevault" target="_blank" style="text-decoration:none">GitHub ↗</a>
+        </div>
+      </div>
+
+      <!-- ── METAFORGE ──────────────────────────────────── -->
+      <div class="pf-card">
+        <div class="pf-card-hdr">
+          <div class="pf-card-name"><span class="pf-card-icon">⚗</span> Metaforge</div>
+          <div class="pf-card-status">${mfStatus}</div>
+        </div>
+        <div class="pf-desc">
+          Universal system-building framework. Self-aware database.
+          One Postgres instance that knows everything about itself — 86 meta tables across 4 schemas.
+        </div>
+        <div class="pf-tags">
+          <span class="pf-tag">86 tables</span>
+          <span class="pf-tag">Postgres</span>
+          <span class="pf-tag">Redis</span>
+          <span class="pf-tag">SurrealDB</span>
+          <span class="pf-tag">multi-deploy</span>
+        </div>
+        <div class="pf-divider"></div>
+        <div class="pf-rows">
+          <div class="pf-row">
+            <span class="pf-row-label">Instances on server</span>
+            <span class="pf-row-value">${mfInstances.length > 0 ? mfInstances.length : '0'}</span>
+          </div>
+          <div class="pf-row">
+            <span class="pf-row-label">Deploy mode</span>
+            <span class="pf-row-value dim">multi-tenant · isolated · substrate</span>
+          </div>
+          <div class="pf-row">
+            <span class="pf-row-label">MCP endpoint</span>
+            <span class="pf-row-value dim">— planned</span>
+          </div>
+          <div class="pf-row">
+            <span class="pf-row-label">Wizard</span>
+            <span class="pf-row-value dim">python wizard/init.py</span>
+          </div>
+        </div>
+        <div class="pf-divider"></div>
+        <div style="font-size:10px;color:var(--muted);font-weight:600;margin-bottom:5px;letter-spacing:.3px;text-transform:uppercase">Instances</div>
+        <div class="pf-instances">${mfInstancesHtml}</div>
+        <div class="pf-actions">
+          <button class="btn btn-sm" title="Clone and run wizard/init.py — coming soon" onclick="alert('Deploy wizard coming soon. Clone github.com/KGSHOPINV/metaforge and run: python wizard/init.py')">🚀 Deploy Instance</button>
+          <a class="btn btn-sm" href="https://github.com/KGSHOPINV/metaforge" target="_blank" style="text-decoration:none">GitHub ↗</a>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- ── ECOSYSTEM OVERVIEW ───────────────────────────── -->
+    <div class="pf-ecosystem">
+      <div class="pf-eco-label">Ecosystem</div>
+      <div class="pf-eco-nodes">
+        <div class="pf-eco-node live">
+          <span class="pf-dot pf-dot-live"></span>
+          <span>Hub</span>
+          <span style="font-size:9px;color:var(--muted)">windshield</span>
+        </div>
+        <span class="pf-eco-arrow">→</span>
+        <div class="pf-eco-node">
+          <span class="pf-dot pf-dot-off"></span>
+          <span>FlareVault</span>
+          <span style="font-size:9px;color:var(--muted)">port authority + topology</span>
+        </div>
+        <span class="pf-eco-arrow">→</span>
+        <div class="pf-eco-node ${mfInstances.length>0?'live':''}">
+          <span class="pf-dot ${mfInstances.length>0?'pf-dot-live':'pf-dot-off'}"></span>
+          <span>Metaforge</span>
+          <span style="font-size:9px;color:var(--muted)">data substrate</span>
+        </div>
+        <span class="pf-eco-arrow">→</span>
+        <div class="pf-eco-node">
+          <span class="pf-dot pf-dot-off"></span>
+          <span>server-kit</span>
+          <span style="font-size:9px;color:var(--muted)">install catalog</span>
+        </div>
+      </div>
+    </div>
+  `;};
 
 // ── TASKS / DOCKET VIEW ────────────────────────────────────────────────────────
 const TASK_DOCKET = [
