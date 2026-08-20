@@ -1579,28 +1579,32 @@ function openView(viewType, config={}) {
   const titles = { dashboard:'Dashboard', terminal:'Terminal', logs:'Logs', docs:'Docs', map:'Infra Map', vault:'Vault', issues:'Issues', network:'Network', chat:'AI Chat', settings:'Settings', storage:'Storage', files:'Files', journal:'Journal', survey:'Survey', guide:'Guide', tasks:'Task Docket', runbooks:'Runbooks', browser:'Browser', ports:'Port Landscape', platform:'Platform' };
   const icons  = { dashboard:'⊞', terminal:'⌨', logs:'📋', docs:'📚', map:'🗺', vault:'🔐', issues:'⚑', network:'🌐', chat:'🤖', settings:'⚙', storage:'💾', files:'📁', journal:'📓', survey:'🔍', guide:'🏠', tasks:'📋', runbooks:'▶', browser:'🌐', ports:'🔌', platform:'🔮' };
 
-  // Already open somewhere? → switch to that tab (dedup)
-  const existing = S.workspaces.find(ws => ws.panes.some(p => p.viewType === viewType));
-  if (existing) { activateWorkspace(existing.id); return; }
-
-  // Active workspace exists and isn't pinned? → load in current tab (Chrome behaviour)
-  const activeWs = S.workspaces.find(w => w.id === S.activeWs);
-  if (activeWs && !activeWs.pinned) {
-    const pane = activeWs.panes[0];
-    if (pane) {
-      pane.viewType   = viewType;
-      pane.viewConfig = config;
-      activeWs.title  = titles[viewType] || viewType;
-      activeWs.icon   = icons[viewType]  || '⊞';
-      // Update the ws-bar tab label
-      const tabLabel = document.querySelector(`.ws-tab[data-ws="${activeWs.id}"] .ws-tab-label`);
-      if (tabLabel) tabLabel.textContent = (icons[viewType]||'') + ' ' + (titles[viewType]||viewType);
-      reRenderWorkspace(activeWs.id);
-      return;
+  const _navigateWs = (ws) => {
+    const pane = ws.panes[0];
+    if (!pane) return;
+    pane.viewType   = viewType;
+    pane.viewConfig = config;
+    ws.title = titles[viewType] || viewType;
+    ws.icon  = icons[viewType]  || '⊞';
+    // Fix: update both title and icon spans (not the non-existent .ws-tab-label)
+    const tabEl = document.querySelector(`.ws-tab[data-ws="${ws.id}"]`);
+    if (tabEl) {
+      const t = tabEl.querySelector('.ws-tab-title');
+      const i = tabEl.querySelector('.ws-tab-icon');
+      if (t) t.textContent = ws.title;
+      if (i) i.textContent = ws.icon;
     }
-  }
+    reRenderWorkspace(ws.id);
+  };
 
-  // No tab open yet → create the first one
+  // Already open in the CURRENT tab? → no-op (already there)
+  const activeWs = S.workspaces.find(w => w.id === S.activeWs);
+  if (activeWs && activeWs.panes.some(p => p.viewType === viewType)) return;
+
+  // Active tab exists and isn't pinned? → navigate in place (browser behaviour)
+  if (activeWs && !activeWs.pinned) { _navigateWs(activeWs); return; }
+
+  // No active tab yet → create the first one
   createWorkspace({ title: titles[viewType]||viewType, icon: icons[viewType]||'⊞', viewType, viewConfig: config });
 }
 
@@ -1637,8 +1641,27 @@ function openIframeWs(name, port, url, opts={}) {
 }
 
 function openDocWs(file, title) {
-  const existing = S.workspaces.find(ws => ws.panes.some(p=>p.viewType==='docs' && p.viewConfig.file===file));
-  if (existing) { activateWorkspace(existing.id); return; }
+  // Already open in current tab? no-op
+  const activeWs = S.workspaces.find(w => w.id === S.activeWs);
+  if (activeWs && activeWs.panes.some(p => p.viewType==='docs' && p.viewConfig.file===file)) return;
+
+  // Navigate current tab if one exists
+  if (activeWs && !activeWs.pinned) {
+    const pane = activeWs.panes[0];
+    if (pane) {
+      pane.viewType = 'docs'; pane.viewConfig = {file};
+      activeWs.title = title; activeWs.icon = '📄';
+      const tabEl = document.querySelector(`.ws-tab[data-ws="${activeWs.id}"]`);
+      if (tabEl) {
+        const t = tabEl.querySelector('.ws-tab-title');
+        const i = tabEl.querySelector('.ws-tab-icon');
+        if (t) t.textContent = title;
+        if (i) i.textContent = '📄';
+      }
+      reRenderWorkspace(activeWs.id);
+      return;
+    }
+  }
   createWorkspace({ title, icon: '📄', viewType: 'docs', viewConfig: {file} });
 }
 
