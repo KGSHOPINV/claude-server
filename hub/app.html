@@ -814,6 +814,52 @@ body.desk-mode #desk-exit { display:flex; align-items:center; gap:6px; }
 .pf-notice { display:flex; align-items:flex-start; gap:8px; padding:9px 12px; background:var(--acdim); border:1px solid rgba(88,166,255,.15); border-radius:6px; font-size:11px; color:var(--muted); }
 .pf-notice-icon { font-size:13px; flex-shrink:0; }
 
+/* ── ACTIVITY LOG ────────────────────────────────── */
+.view-activity { display:flex; flex-direction:column; height:100%; overflow:hidden; }
+.act-bar { display:flex; align-items:center; gap:8px; padding:7px 10px; border-bottom:1px solid var(--border); flex-shrink:0; }
+.act-note-bar { display:flex; gap:6px; padding:6px 10px; border-bottom:1px solid var(--border); flex-shrink:0; }
+.act-row { display:flex; align-items:flex-start; gap:8px; padding:5px 10px; border-bottom:1px solid var(--border); font-size:11px; }
+.act-row:hover { background:var(--panel2); }
+.act-ico { font-size:14px; flex-shrink:0; width:18px; text-align:center; line-height:1.6; }
+.act-body { flex:1; min-width:0; }
+.act-action { color:var(--fg); line-height:1.4; word-break:break-word; }
+.act-detail { color:var(--muted); font-size:10px; font-family:var(--mono); margin-top:1px; }
+.act-meta { display:flex; flex-direction:column; align-items:flex-end; gap:2px; flex-shrink:0; }
+.act-src { font-size:9px; background:var(--panel2); border:1px solid var(--border); border-radius:3px; padding:1px 5px; color:var(--muted); font-family:var(--mono); }
+.act-ts { font-size:9px; color:var(--muted2); font-family:var(--mono); }
+.act-lvl { font-size:9px; font-family:var(--mono); }
+
+/* ── SERVER RECEIPT ────────────────────────────────── */
+.view-receipt { overflow-y:auto; height:100%; }
+.receipt-wrap { padding:14px; display:flex; flex-direction:column; gap:14px; }
+.receipt-header { display:flex; align-items:center; gap:10px; padding:10px 14px; background:var(--panel); border:1px solid var(--border); border-radius:8px; }
+.receipt-title { font-size:13px; font-weight:700; }
+.receipt-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(240px,1fr)); gap:10px; }
+.rec-card { background:var(--panel); border:1px solid var(--border); border-radius:8px; padding:12px 14px; }
+.rec-card-title { font-size:9px; font-weight:700; letter-spacing:.6px; text-transform:uppercase; color:var(--muted2); margin-bottom:8px; }
+.rec-row { display:flex; justify-content:space-between; gap:8px; font-size:11px; padding:2px 0; }
+.rec-label { color:var(--muted); }
+.rec-val { font-family:var(--mono); font-size:10px; text-align:right; }
+.rec-link { font-family:var(--mono); font-size:10px; color:var(--accent); text-decoration:none; }
+.rec-link:hover { text-decoration:underline; }
+.rec-section-title { font-size:9px; font-weight:700; letter-spacing:.6px; text-transform:uppercase; color:var(--muted2); padding:4px 0 3px; border-bottom:1px solid var(--border); }
+.rec-table-wrap { overflow-x:auto; }
+.rec-table { width:100%; border-collapse:collapse; font-size:11px; }
+.rec-table th { text-align:left; padding:4px 8px; color:var(--muted); font-size:9px; font-weight:600; letter-spacing:.4px; text-transform:uppercase; border-bottom:1px solid var(--border); }
+.rec-table td { padding:4px 8px; border-bottom:1px solid var(--border); vertical-align:top; }
+.rec-table tr:hover td { background:var(--panel2); }
+
+/* ── AI CHAT ────────────────────────────────── */
+.view-aichat { display:flex; flex-direction:column; height:100%; overflow:hidden; }
+.aic-msgs { flex:1; overflow-y:auto; padding:10px; display:flex; flex-direction:column; gap:6px; }
+.aic-row { display:flex; gap:8px; align-items:flex-end; padding:8px 10px; border-top:1px solid var(--border); flex-shrink:0; }
+.aic-bubble { display:flex; gap:7px; align-items:flex-start; padding:6px 10px; border-radius:8px; font-size:11px; line-height:1.5; max-width:90%; }
+.aic-sys { background:var(--panel2); border:1px solid var(--border); color:var(--muted); align-self:center; width:100%; max-width:100%; border-radius:6px; }
+.aic-usr { background:var(--acdim); border:1px solid rgba(88,166,255,.15); align-self:flex-end; }
+.aic-ai  { background:var(--panel); border:1px solid var(--border); align-self:flex-start; }
+.aic-role { font-size:8px; font-weight:700; letter-spacing:.6px; text-transform:uppercase; color:var(--muted2); flex-shrink:0; padding-top:2px; min-width:24px; }
+.aic-text { color:var(--fg); white-space:pre-wrap; word-break:break-word; }
+
 /* ── HOME DASHBOARD ────────────────────────────────── */
 .view-dash { padding:12px 14px; overflow-y:auto; height:100%; }
 .hd-header { display:flex; align-items:center; gap:8px; padding:8px 12px; border-radius:7px; margin-bottom:10px; font-size:11px; background:var(--panel); border:1px solid var(--border); }
@@ -1373,6 +1419,11 @@ const CATEGORIES = {
         {icon:'📋', label:'Task Docket',  action:()=>openView('tasks')},
         {icon:'⚑',  label:'Issues',       action:()=>openView('issues')},
         {icon:'📓', label:'Journal',      action:()=>openView('journal')},
+      ]},
+      { label:'Intelligence', items:[
+        {icon:'📜', label:'Activity Log', action:()=>openView('activity')},
+        {icon:'🧾', label:'Server Receipt', action:()=>openView('receipt')},
+        {icon:'🤖', label:'Hub AI Chat',  action:()=>openView('aichat')},
       ]},
     ]
   },
@@ -2121,6 +2172,52 @@ function mountPaneContent(wsId, paneId, viewType, viewConfig, body) {
     case 'tasks':
       renderTasksView(body);
       break;
+
+    case 'activity':
+      body.innerHTML = `<div class="view-activity" id="vact-${key}">
+        <div class="act-bar">
+          <span style="font-size:11px;color:var(--muted);font-weight:600;letter-spacing:.06em">ACTIVITY LOG</span>
+          <div style="display:flex;gap:6px;align-items:center;margin-left:auto">
+            <select id="act-cat-${key}" class="vs-inp" style="font-size:11px;padding:2px 6px" onchange="loadActivity('${key}')">
+              <option value="">All</option>
+              <option value="container">Docker</option>
+              <option value="note">Notes</option>
+              <option value="startup">Startup</option>
+              <option value="general">General</option>
+            </select>
+            <button class="btn" style="padding:2px 10px;font-size:11px" onclick="loadActivity('${key}')">↻ Refresh</button>
+          </div>
+        </div>
+        <div class="act-note-bar">
+          <input id="act-inp-${key}" class="vs-inp" placeholder="Add a note…" style="flex:1;font-size:11px"
+            onkeydown="if(event.key==='Enter')addActivityNote('${key}')">
+          <button class="btn p" style="padding:2px 10px;font-size:11px" onclick="addActivityNote('${key}')">Note</button>
+        </div>
+        <div id="act-list-${key}" style="overflow-y:auto;flex:1;padding:4px 0"></div>
+      </div>`;
+      loadActivity(key);
+      break;
+
+    case 'receipt':
+      body.innerHTML = `<div class="view-receipt" id="vrec-${key}"><div style="padding:20px;color:var(--muted);font-size:11px">Building server receipt…</div></div>`;
+      loadReceipt(key);
+      break;
+
+    case 'aichat':
+      body.innerHTML = `<div class="view-aichat" id="vaic-${key}">
+        <div class="aic-msgs" id="aic-msgs-${key}"></div>
+        <div class="aic-row">
+          <textarea id="aic-inp-${key}" class="vs-inp" placeholder="Ask about the server… (Shift+Enter = newline)" rows="2" style="flex:1;resize:none;font-size:12px"></textarea>
+          <button class="btn p" style="align-self:flex-end" onclick="sendAiChat('${key}')">Send</button>
+        </div>
+      </div>`;
+      (() => {
+        const ai = document.getElementById(`aic-inp-${key}`);
+        if (ai) ai.addEventListener('keydown', e => { if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();sendAiChat(key);} });
+        aicMsg(key,'system','🤖 Connected to hub AI. Ask about services, containers, disk, alerts — anything server-related.');
+      })();
+      break;
+
     default:
       body.innerHTML = `<div style="display:flex;flex-direction:column;align-items:center;justify-content:center;height:100%;gap:14px;color:var(--muted)">
         <div style="font-size:36px">○</div>
@@ -4672,6 +4769,9 @@ const GUIDE_FEATURES = [
   { icon:'📁', name:'Files',          desc:'Browse the server filesystem — list, inspect any path on the server.', tags:['tools'], action:()=>openView('files') },
   { icon:'💾', name:'Storage',        desc:'Disk usage, Docker volumes, key directory sizes.', tags:['monitoring'], action:()=>openView('storage') },
   { icon:'📓', name:'Journal',        desc:'Persistent activity log — every action timestamped.', tags:['ops'], action:()=>openView('journal') },
+  { icon:'📜', name:'Activity Log',   desc:'Docker events, hub startups, notes — unified server event stream.', tags:['ops','monitoring'], action:()=>openView('activity') },
+  { icon:'🧾', name:'Server Receipt', desc:'Full snapshot: hostname, IPs, OS, disk, containers, sync status.', tags:['monitoring','ops'], action:()=>openView('receipt') },
+  { icon:'🤖', name:'Hub AI Chat',    desc:'Hub-native AI — ask about your server with full context auto-loaded.', tags:['ai'], action:()=>openView('aichat') },
   { icon:'📚', name:'Docs',           desc:'Markdown guides synced from ~/guides/ on the server.', tags:['docs'], action:()=>setCategory('docs') },
   { icon:'🤖', name:'AI Chat',        desc:'Talk to Ollama models via Open WebUI — CPU-based, toggle on-demand.', tags:['ai'], action:()=>openView('chat') },
   { icon:'⚑',  name:'Issues',         desc:'Tracked known issues — per-service bug log from issues/ folder.', tags:['ops'], action:()=>openView('issues') },
@@ -5441,6 +5541,197 @@ function renderTasksView(body) {
         </div>`;
     }).join('')}
   </div>`;
+}
+
+// ── SERVER INTELLIGENCE LAYER ─────────────────────────────────────────────────
+
+// Activity Log
+async function loadActivity(key) {
+  const cat = document.getElementById(`act-cat-${key}`)?.value || '';
+  const list = document.getElementById(`act-list-${key}`);
+  if (!list) return;
+  list.innerHTML = `<div style="padding:8px 16px;color:var(--muted);font-size:11px">Loading…</div>`;
+  try {
+    const r = await fetch(`/api/activity?limit=200${cat ? '&category='+cat : ''}`);
+    const d = await r.json();
+    if (!d.events || d.events.length === 0) {
+      list.innerHTML = `<div style="padding:20px;color:var(--muted);font-size:11px;text-align:center">No events yet.</div>`;
+      return;
+    }
+    const LEVEL_COLOR = { info:'var(--muted)', warn:'#f59e0b', error:'#ef4444', debug:'var(--muted2)' };
+    const CAT_ICON = { container:'🐋', startup:'🚀', note:'📝', general:'⚙', image:'📦' };
+    list.innerHTML = d.events.map(ev => {
+      const lvlClr = LEVEL_COLOR[ev.level] || 'var(--muted)';
+      const catIco = CAT_ICON[ev.category] || '•';
+      const ts = ev.ts ? ev.ts.replace('T',' ') : '';
+      return `<div class="act-row">
+        <span class="act-ico">${catIco}</span>
+        <div class="act-body">
+          <div class="act-action">${ev.action}</div>
+          ${ev.detail ? `<div class="act-detail">${ev.detail}</div>` : ''}
+        </div>
+        <div class="act-meta">
+          <span class="act-src">${ev.source}</span>
+          <span class="act-ts">${ts}</span>
+          <span class="act-lvl" style="color:${lvlClr}">${ev.level}</span>
+        </div>
+      </div>`;
+    }).join('');
+  } catch(e) {
+    list.innerHTML = `<div style="padding:20px;color:#ef4444;font-size:11px">Failed to load: ${e.message}</div>`;
+  }
+}
+
+async function addActivityNote(key) {
+  const inp = document.getElementById(`act-inp-${key}`);
+  if (!inp || !inp.value.trim()) return;
+  const note = inp.value.trim();
+  inp.value = '';
+  try {
+    await fetch('/api/activity', {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({ action: note, source: 'user', category: 'note', level: 'info' })
+    });
+    loadActivity(key);
+  } catch(e) { showToast('Note failed: ' + e.message); }
+}
+
+// Server Receipt
+async function loadReceipt(key) {
+  const el = document.getElementById(`vrec-${key}`);
+  if (!el) return;
+  try {
+    const r = await fetch('/api/receipt');
+    const d = await r.json();
+    const syncBadge = d.sync_issues?.length
+      ? `<span style="background:#ef4444;color:#fff;border-radius:4px;padding:1px 7px;font-size:10px">${d.sync_issues.length} issue${d.sync_issues.length>1?'s':''}</span>`
+      : `<span style="background:#22c55e;color:#fff;border-radius:4px;padding:1px 7px;font-size:10px">All good</span>`;
+
+    el.innerHTML = `<div class="receipt-wrap">
+      <div class="receipt-header">
+        <span class="receipt-title">🖥 Server Receipt</span>
+        <span style="font-size:10px;color:var(--muted)">Generated ${d.generated}</span>
+        <button class="btn" style="padding:2px 10px;font-size:11px;margin-left:auto" onclick="loadReceipt('${key}')">↻ Refresh</button>
+      </div>
+
+      <div class="receipt-grid">
+        <div class="rec-card">
+          <div class="rec-card-title">Identity</div>
+          <div class="rec-row"><span class="rec-label">Hostname</span><span class="rec-val mono">${d.hostname}</span></div>
+          <div class="rec-row"><span class="rec-label">LAN IP</span><span class="rec-val mono">${d.lan_ip}</span></div>
+          ${d.tailscale ? `<div class="rec-row"><span class="rec-label">Tailscale</span><span class="rec-val mono">${d.tailscale}</span></div>` : ''}
+          <div class="rec-row"><span class="rec-label">Hub URL</span><a class="rec-link" href="${d.hub_url}" target="_blank">${d.hub_url}</a></div>
+        </div>
+
+        <div class="rec-card">
+          <div class="rec-card-title">System</div>
+          <div class="rec-row"><span class="rec-label">OS</span><span class="rec-val">${d.os}</span></div>
+          <div class="rec-row"><span class="rec-label">Uptime</span><span class="rec-val">${d.uptime}</span></div>
+          <div class="rec-row"><span class="rec-label">RAM used</span><span class="rec-val">${d.ram.used} / ${d.ram.total}</span></div>
+          <div class="rec-row"><span class="rec-label">Containers</span><span class="rec-val">${d.container_count} running ${syncBadge}</span></div>
+        </div>
+      </div>
+
+      <div class="rec-section-title">💾 Disk</div>
+      <div class="rec-table-wrap"><table class="rec-table">
+        <tr><th>Mount</th><th>Size</th><th>Used</th><th>%</th></tr>
+        ${(d.disks||[]).map(dk => {
+          const pct = parseInt(dk.pct)||0;
+          const clr = pct>92?'#ef4444':pct>85?'#f59e0b':'#22c55e';
+          return `<tr><td class="mono">${dk.mount}</td><td>${dk.size}</td><td>${dk.used}</td>
+            <td><span style="color:${clr};font-weight:600">${dk.pct}</span></td></tr>`;
+        }).join('')}
+      </table></div>
+
+      <div class="rec-section-title">🐋 Containers</div>
+      <div class="rec-table-wrap"><table class="rec-table">
+        <tr><th>Name</th><th>Status</th><th>Ports</th></tr>
+        ${(d.containers||[]).map(c => {
+          const up = c.status.toLowerCase().startsWith('up');
+          return `<tr>
+            <td class="mono">${c.name}</td>
+            <td style="color:${up?'#22c55e':'#ef4444'}">${c.status}</td>
+            <td class="mono" style="font-size:10px">${c.ports}</td>
+          </tr>`;
+        }).join('')}
+      </table></div>
+
+      ${d.sync_issues?.length ? `
+      <div class="rec-section-title">⚠ Sync Issues</div>
+      <div class="rec-table-wrap"><table class="rec-table">
+        <tr><th>Service</th><th>Port</th><th>Issue</th></tr>
+        ${d.sync_issues.map(i=>`<tr>
+          <td>${i.service}</td><td class="mono">${i.port}</td>
+          <td style="color:#f59e0b">${i.issue}</td>
+        </tr>`).join('')}
+      </table></div>` : ''}
+
+      <div class="rec-section-title">📜 Recent Activity (last 20)</div>
+      <div style="display:flex;flex-direction:column;gap:3px;padding:4px 0">
+        ${(d.recent_activity||[]).map(ev=>`
+          <div style="display:flex;gap:8px;font-size:11px;padding:3px 0;border-bottom:1px solid var(--border)">
+            <span style="color:var(--muted);flex-shrink:0;min-width:140px">${(ev.ts||'').replace('T',' ')}</span>
+            <span style="color:var(--fg);flex:1">${ev.action}</span>
+            <span style="color:var(--muted2)">${ev.source}</span>
+          </div>`).join('')}
+      </div>
+    </div>`;
+  } catch(e) {
+    el.innerHTML = `<div style="padding:20px;color:#ef4444;font-size:12px">Failed: ${e.message}</div>`;
+  }
+}
+
+// AI Chat (hub-native, talks to the /api/run + /api/receipt combo, or direct AI route)
+const _aicHistory = {};
+function aicMsg(key, role, text) {
+  const el = document.getElementById(`aic-msgs-${key}`);
+  if (!el) return;
+  if (!_aicHistory[key]) _aicHistory[key] = [];
+  _aicHistory[key].push({ role, text, ts: new Date().toISOString() });
+  const BUBBLE = {
+    system: `<div class="aic-bubble aic-sys"><span class="aic-role">SYS</span><span class="aic-text">${text}</span></div>`,
+    user:   `<div class="aic-bubble aic-usr"><span class="aic-role">YOU</span><span class="aic-text">${text}</span></div>`,
+    ai:     `<div class="aic-bubble aic-ai"><span class="aic-role">AI</span><span class="aic-text">${text}</span></div>`,
+  };
+  el.insertAdjacentHTML('beforeend', BUBBLE[role] || BUBBLE.ai);
+  el.scrollTop = el.scrollHeight;
+}
+
+async function sendAiChat(key) {
+  const inp = document.getElementById(`aic-inp-${key}`);
+  if (!inp || !inp.value.trim()) return;
+  const q = inp.value.trim();
+  inp.value = '';
+  aicMsg(key, 'user', q);
+
+  // Build context from receipt
+  let ctx = '';
+  try {
+    const r = await fetch('/api/receipt');
+    const d = await r.json();
+    ctx = `Server: ${d.hostname} | LAN: ${d.lan_ip}${d.tailscale?' | TS: '+d.tailscale:''} | OS: ${d.os} | Uptime: ${d.uptime} | RAM: ${d.ram.used}/${d.ram.total} | Containers: ${d.container_count}`;
+    if (d.sync_issues?.length) ctx += ` | Issues: ${d.sync_issues.map(i=>i.service+'='+i.issue).join(', ')}`;
+  } catch(_) {}
+
+  // Call hub AI endpoint
+  try {
+    const r = await fetch('/api/ai/chat', {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({ message: q, context: ctx, history: (_aicHistory[key]||[]).slice(-10) })
+    });
+    const d = await r.json();
+    if (d.ok && d.reply) {
+      aicMsg(key, 'ai', d.reply);
+    } else if (d.error === 'no_ai_configured') {
+      aicMsg(key, 'ai', '⚠ No AI provider configured. Add an API key in Settings → AI Config, or start Ollama on the server.');
+    } else {
+      aicMsg(key, 'ai', '⚠ ' + (d.error || 'No response'));
+    }
+  } catch(e) {
+    aicMsg(key, 'ai', '⚠ Request failed: ' + e.message);
+  }
 }
 
 // ── MOBILE NAV ────────────────────────────────────────────────────────────────

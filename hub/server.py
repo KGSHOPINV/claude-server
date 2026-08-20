@@ -831,6 +831,15 @@ def db_ensure_tables():
             container TEXT DEFAULT '',
             acknowledged INTEGER DEFAULT 0
         )""")
+        conn.execute("""CREATE TABLE IF NOT EXISTS activity_log (
+            id      INTEGER PRIMARY KEY AUTOINCREMENT,
+            ts      TEXT NOT NULL,
+            source  TEXT NOT NULL DEFAULT 'system',
+            category TEXT NOT NULL DEFAULT 'general',
+            action  TEXT NOT NULL,
+            detail  TEXT DEFAULT '',
+            level   TEXT NOT NULL DEFAULT 'info'
+        )""")
         # Seed default admin if no users exist
         row = conn.execute("SELECT COUNT(*) as c FROM users").fetchone()
         if row['c'] == 0:
@@ -841,6 +850,231 @@ def db_ensure_tables():
         conn.close()
     except Exception as e:
         print(f'  DB init error: {e}')
+
+# ── Activity Logger ───────────────────────────────────────────────────────────
+
+def log_activity(action, source='system', category='general', detail='', level='info'):
+    """Write one line to the activity log. Universal — always safe to call."""
+    try:
+        conn = db_conn()
+        conn.execute(
+            "INSERT INTO activity_log (ts,source,category,action,detail,level) VALUES (?,?,?,?,?,?)",
+            (datetime.now().isoformat(timespec='seconds'), source, category, action, detail, level)
+        )
+        conn.commit()
+        conn.close()
+    except Exception:
+        pass  # never crash the caller
+
+def activity_recent(limit=100, category=None):
+    try:
+        conn = db_conn()
+        if category:
+            rows = conn.execute(
+                "SELECT * FROM activity_log WHERE category=? ORDER BY id DESC LIMIT ?",
+                (category, limit)).fetchall()
+        else:
+            rows = conn.execute(
+                "SELECT * FROM activity_log ORDER BY id DESC LIMIT ?", (limit,)).fetchall()
+        conn.close()
+        return [dict(r) for r in rows]
+    except Exception:
+        return []
+
+# ── Docker Event Watcher ──────────────────────────────────────────────────────
+
+_docker_watcher_running = False
+
+def _docker_event_loop():
+    """Stream docker events and write to activity log. Restarts on failure."""
+    global _docker_watcher_running
+    import shutil
+    if not shutil.which('docker'):
+        return  # Docker not installed — skip silently
+    while True:
+        try:
+            proc = subprocess.Popen(
+                ['docker', 'events', '--format', '{{json .}}'],
+                stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
+                text=True, bufsize=1
+            )
+            _docker_watcher_running = True
+            for line in proc.stdout:
+                line = line.strip()
+                if not line:
+                    continue
+                try:
+                    ev = json.loads(line)
+                    etype  = ev.get('Type', '')
+                    action = ev.get('Action', '')
+                    actor  = ev.get('Actor', {})
+                    name   = actor.get('Attributes', {}).get('name', actor.get('ID', '')[:12])
+                    image  = actor.get('Attributes', {}).get('image', '')
+
+                    if etype == 'container':
+                        if action in ('start', 'die', 'create', 'destroy', 'restart'):
+                            level = 'warn' if action in ('die', 'destroy') else 'info'
+                            log_activity(
+                                action   = f'Container {action}: {name}',
+                                source   = 'docker',
+                                category = 'container',
+                                detail   = image,
+                                level    = level
+                            )
+                            # ntfy for significant events
+                            if action == 'die':
+                                _ntfy_send(f'🔴 Container died: {name}', image or '', 'high', 'whale,rotating_light')
+                            elif action == 'start' and name not in ('watchtower',):
+                                _ntfy_send(f'🟢 Container started: {name}', image or '', 'min', 'whale')
+                    elif etype == 'image' and action == 'pull':
+                        img = actor.get('Attributes', {}).get('name', name)
+                        log_activity(f'Image pulled: {img}', 'docker', 'image', '', 'info')
+                    elif etype == 'network':
+                        pass  # too noisy — skip
+                except Exception:
+                    continue
+            proc.wait()
+        except Exception:
+            pass
+        _docker_watcher_running = False
+        time.sleep(10)  # wait before reconnecting
+
+def _ntfy_send(title, body, priority='default', tags='server'):
+    """Send ntfy push notification. Reads config from ~/.server-alerts.conf or env."""
+    try:
+        conf_path = os.path.expanduser('~/.server-alerts.conf')
+        url = 'http://localhost:7001'
+        topic = os.uname().nodename.lower() if hasattr(os, 'uname') else 'server'
+        token = ''
+        if os.path.exists(conf_path):
+            for line in open(conf_path):
+                line = line.strip()
+                if line.startswith('NTFY_URL='):    url   = line.split('=',1)[1].strip()
+                if line.startswith('NTFY_TOPIC='):  topic = line.split('=',1)[1].strip()
+                if line.startswith('NTFY_TOKEN='):  token = line.split('=',1)[1].strip()
+        headers = {'Title': title, 'Priority': priority, 'Tags': tags}
+        if token: headers['Authorization'] = f'Bearer {token}'
+        req = urllib.request.Request(
+            f'{url}/{topic}', data=body.encode(),
+            headers=headers, method='POST')
+        urllib.request.urlopen(req, timeout=5, context=_ssl_ctx)
+    except Exception:
+        pass
+
+# ── Server Receipt ────────────────────────────────────────────────────────────
+
+def build_receipt():
+    """Full server snapshot — universal, degrades gracefully."""
+    import platform, shutil
+    now = datetime.now().isoformat(timespec='seconds')
+
+    # Hostname + IPs
+    hostname = 'unknown'
+    try: hostname = subprocess.check_output(['hostname'], text=True).strip()
+    except Exception: pass
+
+    lan_ip = ''
+    try:
+        out = subprocess.check_output(['ip','route','get','1.1.1.1'], text=True, stderr=subprocess.DEVNULL)
+        for tok in out.split():
+            if tok.count('.')==3 and not tok.startswith('1.1'):
+                lan_ip = tok; break
+    except Exception: pass
+    if not lan_ip:
+        try: lan_ip = subprocess.check_output(['hostname','-I'], text=True).strip().split()[0]
+        except Exception: pass
+
+    ts_ip = ''
+    try:
+        if shutil.which('tailscale'):
+            ts_ip = subprocess.check_output(['tailscale','ip'], text=True, stderr=subprocess.DEVNULL).strip().split()[0]
+    except Exception: pass
+
+    # OS
+    os_info = platform.system() + ' ' + platform.release()
+    try:
+        with open('/etc/os-release') as f:
+            for line in f:
+                if line.startswith('PRETTY_NAME='):
+                    os_info = line.split('=',1)[1].strip().strip('"'); break
+    except Exception: pass
+
+    # Uptime
+    uptime_str = ''
+    try:
+        with open('/proc/uptime') as f:
+            secs = int(float(f.read().split()[0]))
+        d, secs = divmod(secs, 86400)
+        h, secs = divmod(secs, 3600)
+        m = secs // 60
+        parts = []
+        if d: parts.append(f'{d}d')
+        if h: parts.append(f'{h}h')
+        parts.append(f'{m}m')
+        uptime_str = ' '.join(parts)
+    except Exception: pass
+
+    # RAM
+    ram_total, ram_used = '', ''
+    try:
+        with open('/proc/meminfo') as f:
+            lines = f.read().splitlines()
+        total = next(int(l.split()[1]) for l in lines if l.startswith('MemTotal:'))
+        avail = next(int(l.split()[1]) for l in lines if l.startswith('MemAvailable:'))
+        ram_total = f'{total//1048576}G'
+        ram_used  = f'{(total-avail)//1048576}G'
+    except Exception: pass
+
+    # Disk
+    disks = []
+    try:
+        out = subprocess.check_output(['df','-h','--output=target,size,used,pcent'],
+            text=True, stderr=subprocess.DEVNULL).splitlines()[1:]
+        for line in out:
+            parts = line.split()
+            if len(parts)==4 and not any(x in parts[0] for x in ['docker','overlay','tmpfs','udev','loop']):
+                disks.append({'mount':parts[0],'size':parts[1],'used':parts[2],'pct':parts[3]})
+    except Exception: pass
+
+    # Containers
+    containers = []
+    try:
+        out = subprocess.check_output(
+            ['docker','ps','--format','{{.Names}}\t{{.Status}}\t{{.Ports}}'],
+            text=True, stderr=subprocess.DEVNULL)
+        for line in out.strip().splitlines():
+            parts = line.split('\t')
+            containers.append({'name':parts[0],'status':parts[1],'ports':parts[2] if len(parts)>2 else ''})
+    except Exception: pass
+
+    # Sync status — services expected but not running
+    sync_issues = []
+    running_names = {c['name'].lower() for c in containers}
+    for svc in SERVICES:
+        if svc.get('installed') and not svc.get('no_ui'):
+            nm = svc['name'].lower()
+            if nm not in running_names and not any(nm in r for r in running_names):
+                sync_issues.append({'service': svc['name'], 'port': svc['port'], 'issue': 'not running'})
+
+    # Recent activity
+    recent = activity_recent(20)
+
+    return {
+        'generated': now,
+        'hostname':  hostname,
+        'lan_ip':    lan_ip,
+        'tailscale': ts_ip,
+        'os':        os_info,
+        'uptime':    uptime_str,
+        'ram':       {'total': ram_total, 'used': ram_used},
+        'disks':     disks,
+        'containers': containers,
+        'container_count': len(containers),
+        'sync_issues': sync_issues,
+        'recent_activity': recent,
+        'hub_port': PORT,
+        'hub_url':  f'http://{lan_ip}:{PORT}',
+    }
 
 def config_get(key, default=None):
     try:
@@ -1721,6 +1955,27 @@ class Handler(http.server.BaseHTTPRequestHandler):
             self.end_headers()
             self.wfile.write(body)
 
+        elif p.startswith('/api/activity'):
+            # GET /api/activity?limit=100&category=docker
+            from urllib.parse import parse_qs, urlparse
+            qs = parse_qs(urlparse(p).query)
+            limit = int(qs.get('limit', ['100'])[0])
+            cat   = qs.get('category', [None])[0]
+            self.send_json({'ok': True, 'events': activity_recent(limit, cat)})
+
+        elif p == '/api/receipt':
+            self.send_json(build_receipt())
+
+        elif p == '/api/sync':
+            # Quick sync check — what's expected vs running
+            receipt = build_receipt()
+            self.send_json({
+                'ok': True,
+                'container_count': receipt['container_count'],
+                'sync_issues': receipt['sync_issues'],
+                'generated': receipt['generated'],
+            })
+
         elif p.startswith('/proxy/'):
             # /proxy/3000/some/path?query=string
             remainder = p[7:]  # e.g. "3000/some/path"
@@ -1824,10 +2079,16 @@ class Handler(http.server.BaseHTTPRequestHandler):
             message    = body.get('message', '').strip()
             image_b64  = body.get('image')       # base64 string, no data-URI prefix
             image_type = body.get('image_type', 'image/jpeg')
+            ctx        = body.get('context', '')  # server context string from frontend
             if not message and not image_b64:
                 self.send_json({'error': 'No message or image'}, 400)
                 return
-            result = ai_chat(message or 'Describe this image in the context of my server.', image_b64, image_type)
+            full_msg = message or 'Describe this image in the context of my server.'
+            if ctx:
+                full_msg = f'[Server context: {ctx}]\n\n{full_msg}'
+            result = ai_chat(full_msg, image_b64, image_type)
+            # Also log the chat interaction
+            log_activity(f'AI chat: {message[:80]}', 'user', 'aichat', result.get('provider',''), 'info')
             self.send_json(result)
 
         elif p == '/api/ai/config':
@@ -2049,6 +2310,21 @@ class Handler(http.server.BaseHTTPRequestHandler):
             else:
                 self.send_json({'ok': False, 'error': 'Unknown action'}, 400)
 
+        elif p == '/api/activity':
+            # POST { action, source?, category?, detail?, level? }
+            action = body.get('action', '').strip()
+            if not action:
+                self.send_json({'ok': False, 'error': 'action required'}, 400)
+                return
+            log_activity(
+                action   = action,
+                source   = body.get('source', 'user'),
+                category = body.get('category', 'note'),
+                detail   = body.get('detail', ''),
+                level    = body.get('level', 'info'),
+            )
+            self.send_json({'ok': True})
+
         else:
             self.send_response(404)
             self.end_headers()
@@ -2059,6 +2335,11 @@ if __name__ == '__main__':
     # Start background port scanner
     _scan_thread = threading.Thread(target=_port_scan_loop, daemon=True)
     _scan_thread.start()
+    # Start Docker event watcher
+    _docker_thread = threading.Thread(target=_docker_event_loop, daemon=True)
+    _docker_thread.start()
+    # Log startup
+    log_activity('Hub started', 'hub', 'startup', f'port={PORT}', 'info')
     print(f'\n  Server Hub API  —  http://localhost:{PORT}')
     print(f'  SSH: {SSH_HOST}  |  DB: {DB_PATH}\n')
     class ThreadedServer(socketserver.ThreadingMixIn, http.server.HTTPServer):
