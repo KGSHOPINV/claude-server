@@ -324,8 +324,8 @@ SERVICES = [
     {'name': 'Uptime Kuma', 'port': 3001,  'group': 'Monitoring',     'description': 'Uptime monitoring',     'installed': True},
     {'name': 'Netdata',     'port': 19999, 'group': 'Monitoring',     'description': 'Real-time metrics',     'installed': True},
     {'name': 'Dozzle',      'port': 8090,  'group': 'Monitoring',     'description': 'Container log viewer',  'installed': True},
-    {'name': 'ntfy',        'port': 8085,  'group': 'Notifications',  'description': 'Push notifications',    'installed': True},
-    {'name': 'n8n',         'port': 5678,  'group': 'Tools',          'description': 'Workflow automation',   'installed': True},
+    {'name': 'ntfy',        'port': 7001,  'group': 'Notifications',  'description': 'Push notifications',    'installed': True},
+    {'name': 'n8n',         'port': 7002,  'group': 'Tools',          'description': 'Workflow automation',   'installed': True},
     {'name': 'Supabase',    'port': 8000,  'group': 'Tools',          'description': 'Database platform',     'installed': False},
     {'name': 'Redis',       'port': 6379,  'group': 'Tools',          'description': 'Cache / key-value',     'installed': True,  'no_ui': True},
     {'name': 'SurrealDB',   'port': 8001,  'group': 'Tools',          'description': 'Multi-model / graph DB','installed': True},
@@ -356,8 +356,8 @@ PORT_LANES = [
     {'name': 'Hub',            'color': 'accent',  'ranges': [(7000, 7099)]},
     {'name': 'System',         'color': 'muted',   'ranges': [(1, 1023)]},
     {'name': 'Infrastructure', 'color': 'blue',    'ranges': [(3000, 3099), (80, 81), (443, 443)]},
-    {'name': 'Monitoring',     'color': 'teal',    'ranges': [(19000, 19999), (8085, 8085), (8090, 8090)]},
-    {'name': 'Automation',     'color': 'green',   'ranges': [(5600, 5699), (5678, 5678)]},
+    {'name': 'Monitoring',     'color': 'teal',    'ranges': [(19000, 19999), (8090, 8090)]},
+    {'name': 'Automation',     'color': 'green',   'ranges': [(5600, 5699)]},
     {'name': 'Database',       'color': 'yellow',  'ranges': [(5400, 5499), (6300, 6399), (6379, 6379)]},
     {'name': 'Admin',          'color': 'muted',   'ranges': [(9090, 9090), (9400, 9499), (9443, 9443)]},
     {'name': 'Storage',        'color': 'yellow',  'ranges': [(9000, 9089), (9091, 9099)]},
@@ -370,9 +370,13 @@ PORT_LANES = [
 _PORT_NAMES = {}
 for _s in SERVICES:
     _PORT_NAMES[_s['port']] = _s['name']
-_PORT_NAMES[22]  = 'SSH'
-_PORT_NAMES[80]  = 'HTTP (NPM)'
-_PORT_NAMES[443] = 'HTTPS (NPM)'
+_PORT_NAMES[22]   = 'SSH'
+_PORT_NAMES[80]   = 'HTTP (NPM)'
+_PORT_NAMES[443]  = 'HTTPS (NPM)'
+_PORT_NAMES[7000] = 'Hub'
+_PORT_NAMES[7001] = 'ntfy'
+_PORT_NAMES[7002] = 'n8n'
+_PORT_NAMES[7003] = 'Redis (server)'
 
 def _port_lane(port):
     """Return the lane name for a port number."""
