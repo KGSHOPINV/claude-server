@@ -2,7 +2,7 @@
 """
 Hub local API server.
 Run: python hub/server.py
-Then open: http://localhost:8765
+Then open: http://localhost:7000
 """
 
 import base64
@@ -25,7 +25,7 @@ import urllib.error
 import urllib.request
 from datetime import datetime
 
-PORT      = int(os.environ.get('HUB_PORT', 8765))
+PORT      = int(os.environ.get('HUB_PORT', 7000))
 BASE_DIR  = os.path.dirname(os.path.abspath(__file__))
 DB_PATH   = os.environ.get('HUB_DB',     os.path.join(BASE_DIR, '..', 'db', 'server.db'))
 APP_PATH    = os.path.join(BASE_DIR, 'app.html')
@@ -353,7 +353,7 @@ def build_services(containers):
 # ── Port lanes ─────────────────────────────────────────────────────────────────
 
 PORT_LANES = [
-    {'name': 'Hub',            'color': 'accent',  'ranges': [(8765, 8765)]},
+    {'name': 'Hub',            'color': 'accent',  'ranges': [(7000, 7099)]},
     {'name': 'System',         'color': 'muted',   'ranges': [(1, 1023)]},
     {'name': 'Infrastructure', 'color': 'blue',    'ranges': [(3000, 3099), (80, 81), (443, 443)]},
     {'name': 'Monitoring',     'color': 'teal',    'ranges': [(19000, 19999), (8085, 8085), (8090, 8090)]},
@@ -561,7 +561,7 @@ body{{background:var(--paper);color:var(--ink);font-family:var(--sans);font-size
 </div>
 
 <div class="qref">
-  <span><strong>Hub</strong> · http://{ip}:8765</span>
+  <span><strong>Hub</strong> · http://{ip}:7000</span>
   <span><strong>NPM</strong> · http://{ip}:81</span>
   <span><strong>Portainer</strong> · https://{ip}:9443</span>
   <span><strong>Cockpit</strong> · https://{ip}:9090</span>
@@ -571,7 +571,7 @@ body{{background:var(--paper);color:var(--ink);font-family:var(--sans);font-size
 
 <div class="foot">
   <span>fks-services · {os_} · {ram} GB RAM · Docker stack · Watchtower auto-update</span>
-  <span>http://{ip}:8765/cutsheet &nbsp;·&nbsp; {ts}</span>
+  <span>http://{ip}:7000/cutsheet &nbsp;·&nbsp; {ts}</span>
 </div>
 
 </body>
