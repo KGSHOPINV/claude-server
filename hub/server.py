@@ -976,9 +976,9 @@ def build_receipt():
     lan_ip = ''
     try:
         out = subprocess.check_output(['ip','route','get','1.1.1.1'], text=True, stderr=subprocess.DEVNULL)
-        for tok in out.split():
-            if tok.count('.')==3 and not tok.startswith('1.1'):
-                lan_ip = tok; break
+        toks = out.split()
+        if 'src' in toks:
+            lan_ip = toks[toks.index('src') + 1]
     except Exception: pass
     if not lan_ip:
         try: lan_ip = subprocess.check_output(['hostname','-I'], text=True).strip().split()[0]
