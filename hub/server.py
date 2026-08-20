@@ -382,6 +382,202 @@ def _port_lane(port):
                 return lane['name']
     return 'Other'
 
+def build_cutsheet_html(ports, services, server_info):
+    """Generate a live port cut-sheet as a self-contained HTML page."""
+    from datetime import datetime as _dt
+
+    # Lane colour map: server.py color name → CSS hex
+    LANE_HEX = {
+        'accent': '#58a6ff', 'blue': '#3b82f6', 'teal': '#14b8a6',
+        'green':  '#22c55e', 'yellow': '#eab308', 'purple': '#a855f7',
+        'muted':  '#6b7280', 'red':    '#ef4444',
+    }
+
+    # Build lane → colour lookup
+    lane_color = {l['name']: LANE_HEX.get(l['color'], '#6b7280') for l in PORT_LANES}
+    lane_color['Other'] = '#9ca3af'
+
+    # Group ports by lane
+    by_lane = {}
+    for p in ports:
+        ln = p.get('lane', 'Other')
+        by_lane.setdefault(ln, []).append(p)
+
+    # Ordered lanes (only those with ports, plus any from PORT_LANES that have ports)
+    lane_order = [l['name'] for l in PORT_LANES] + ['Other']
+    lane_order = [l for l in lane_order if l in by_lane]
+
+    # Service lookup: port → {name, desc, running}
+    svc_map = {s['port']: s for s in services}
+
+    ts    = _dt.now().strftime('%Y-%m-%d %H:%M')
+    ip    = server_info.get('local_ip', SERVER_IP)
+    ts_ip = server_info.get('tailscale_ip', '—')
+    os_   = server_info.get('os', 'Linux')
+    ram   = server_info.get('ram_total_gb', '?')
+
+    def flag(port_entry):
+        parts = []
+        if port_entry.get('local_only'):
+            parts.append('<span class="flag f-local">local</span>')
+        else:
+            parts.append('<span class="flag f-pub">pub</span>')
+        if port_entry.get('https'):
+            parts.append('<span class="flag f-https">https</span>')
+        svc = svc_map.get(port_entry['port'])
+        if svc and not svc.get('running', True):
+            parts.append('<span class="flag f-off">off</span>')
+        return ''.join(parts)
+
+    def lane_rows(lane_name):
+        rows_html = []
+        for p in sorted(by_lane.get(lane_name, []), key=lambda x: x['port']):
+            svc  = svc_map.get(p['port'], {})
+            name = p.get('service') or svc.get('name') or '—'
+            desc = svc.get('description') or p.get('process', '')
+            rows_html.append(f"""
+      <div class="port-row">
+        <span class="pnum">{p['port']}</span>
+        <div class="pinfo">
+          <span class="pname">{name}</span>
+          <span class="pdesc">{desc}</span>
+        </div>
+        <div class="pflags">{flag(p)}</div>
+      </div>""")
+        return ''.join(rows_html)
+
+    def lane_range_str(lane_name):
+        for l in PORT_LANES:
+            if l['name'] == lane_name:
+                return ', '.join(f"{lo}–{hi}" if lo != hi else str(lo) for lo, hi in l['ranges'])
+        return ''
+
+    lane_sections = ''
+    for ln in lane_order:
+        color = lane_color.get(ln, '#9ca3af')
+        rng   = lane_range_str(ln)
+        lane_sections += f"""
+  <div class="lane">
+    <div class="lane-hdr">
+      <div class="lane-stripe" style="background:{color}"></div>
+      <span class="lane-name">{ln}</span>
+      <span class="lane-range">{rng}</span>
+    </div>
+    {lane_rows(ln)}
+  </div>"""
+
+    return f"""<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Port Cut Sheet — fks-services</title>
+<style>
+:root{{
+  --paper:#fff;--ink:#111827;--ink2:#374151;--dim:#6b7280;
+  --faint:#f3f4f6;--rule:#e5e7eb;
+  --mono:'SF Mono','Cascadia Code',ui-monospace,monospace;
+  --sans:-apple-system,BlinkMacSystemFont,'Segoe UI',system-ui,sans-serif;
+}}
+@media(prefers-color-scheme:dark){{
+  :root{{--paper:#0d1117;--ink:#f0f6fc;--ink2:#c9d1d9;--dim:#8b949e;--faint:#161b22;--rule:#30363d}}
+}}
+*,*::before,*::after{{box-sizing:border-box;margin:0;padding:0}}
+body{{background:var(--paper);color:var(--ink);font-family:var(--sans);font-size:12px;line-height:1.4;padding:20px 24px;max-width:980px;margin:0 auto}}
+/* header */
+.hdr{{display:flex;align-items:flex-start;justify-content:space-between;padding-bottom:12px;margin-bottom:14px;border-bottom:2px solid var(--ink);flex-wrap:wrap;gap:8px}}
+.hdr-eye{{font-size:9px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:var(--dim)}}
+.hdr-title{{font-size:20px;font-weight:800;letter-spacing:-.5px;margin:2px 0}}
+.hdr-sub{{font-size:10px;color:var(--dim);font-family:var(--mono);margin-top:2px}}
+.hdr-right{{display:flex;flex-direction:column;align-items:flex-end;gap:4px}}
+.badge{{font-size:9px;font-weight:700;letter-spacing:.5px;text-transform:uppercase;padding:2px 7px;border-radius:3px;background:var(--faint);color:var(--dim);border:1px solid var(--rule)}}
+.ts{{font-size:10px;color:var(--dim);font-family:var(--mono)}}
+/* legend */
+.legend{{display:flex;flex-wrap:wrap;gap:5px 12px;padding:7px 10px;background:var(--faint);border:1px solid var(--rule);border-radius:5px;margin-bottom:14px;font-size:10px;color:var(--dim);align-items:center}}
+/* grid */
+.grid{{display:grid;grid-template-columns:1fr 1fr;gap:10px}}
+@media(max-width:620px){{.grid{{grid-template-columns:1fr}}}}
+/* lane */
+.lane{{border:1px solid var(--rule);border-radius:6px;overflow:hidden}}
+.lane-hdr{{display:flex;align-items:center;gap:7px;padding:6px 10px;background:var(--faint);border-bottom:1px solid var(--rule)}}
+.lane-stripe{{width:4px;height:14px;border-radius:2px;flex-shrink:0}}
+.lane-name{{font-size:9px;font-weight:800;letter-spacing:.6px;text-transform:uppercase;color:var(--ink2)}}
+.lane-range{{font-size:9px;color:var(--dim);font-family:var(--mono);margin-left:auto}}
+/* port rows */
+.port-row{{display:grid;grid-template-columns:52px 1fr auto;align-items:center;gap:7px;padding:5px 10px;border-bottom:1px solid var(--rule)}}
+.port-row:last-child{{border-bottom:none}}
+.pnum{{font-family:var(--mono);font-size:12px;font-weight:700;font-variant-numeric:tabular-nums}}
+.pinfo{{display:flex;flex-direction:column;gap:1px;min-width:0}}
+.pname{{font-size:11px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}}
+.pdesc{{font-size:9px;color:var(--dim);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}}
+.pflags{{display:flex;gap:3px;flex-shrink:0}}
+.flag{{font-size:8px;font-weight:700;letter-spacing:.3px;padding:1px 4px;border-radius:2px;text-transform:uppercase}}
+.f-local{{background:var(--faint);color:var(--dim);border:1px solid var(--rule)}}
+.f-pub{{background:#dcfce7;color:#166534;border:1px solid #bbf7d0}}
+.f-https{{background:#fef3c7;color:#92400e;border:1px solid #fde68a}}
+.f-off{{background:var(--faint);color:var(--dim);opacity:.5;border:1px solid var(--rule)}}
+@media(prefers-color-scheme:dark){{
+  .f-pub{{background:#14532d;color:#86efac;border-color:#166534}}
+  .f-https{{background:#451a03;color:#fcd34d;border-color:#78350f}}
+}}
+/* quick ref strip */
+.qref{{display:flex;flex-wrap:wrap;gap:4px 20px;padding:8px 10px;background:var(--faint);border:1px solid var(--rule);border-radius:5px;margin-top:10px;font-size:10px;color:var(--dim)}}
+.qref strong{{color:var(--ink)}}
+/* footer */
+.foot{{margin-top:10px;padding-top:8px;border-top:1px solid var(--rule);display:flex;justify-content:space-between;flex-wrap:wrap;gap:4px;font-size:9px;color:var(--dim)}}
+@media print{{
+  body{{padding:10px 14px}}
+  .port-row:hover{{background:none}}
+  .f-pub{{background:#e6f4ea;color:#1a4731;border-color:#c3e6cb}}
+  .f-https{{background:#fff8e1;color:#6d4c00;border-color:#ffe082}}
+}}
+</style>
+</head>
+<body>
+
+<div class="hdr">
+  <div>
+    <div class="hdr-eye">Port Reference — fks-services</div>
+    <div class="hdr-title">Port Cut Sheet</div>
+    <div class="hdr-sub">{ip} &nbsp;·&nbsp; Tailscale {ts_ip} &nbsp;·&nbsp; {os_}</div>
+  </div>
+  <div class="hdr-right">
+    <span class="badge">{ram} GB RAM</span>
+    <span class="badge">{len(ports)} ports active</span>
+    <span class="ts">Generated {ts}</span>
+  </div>
+</div>
+
+<div class="legend">
+  <strong>Flags:</strong>
+  <span class="flag f-pub">pub</span> LAN accessible &nbsp;
+  <span class="flag f-local">local</span> localhost only &nbsp;
+  <span class="flag f-https">https</span> TLS required &nbsp;
+  <span class="flag f-off">off</span> installed, stopped
+</div>
+
+<div class="grid">
+{lane_sections}
+</div>
+
+<div class="qref">
+  <span><strong>Hub</strong> · http://{ip}:8765</span>
+  <span><strong>NPM</strong> · http://{ip}:81</span>
+  <span><strong>Portainer</strong> · https://{ip}:9443</span>
+  <span><strong>Cockpit</strong> · https://{ip}:9090</span>
+  <span><strong>Netdata</strong> · http://{ip}:19999</span>
+  <span><strong>SSH</strong> · admin1@{ip}</span>
+</div>
+
+<div class="foot">
+  <span>fks-services · {os_} · {ram} GB RAM · Docker stack · Watchtower auto-update</span>
+  <span>http://{ip}:8765/cutsheet &nbsp;·&nbsp; {ts}</span>
+</div>
+
+</body>
+</html>"""
+
+
 def scan_ports():
     """Scan all listening TCP ports. Returns (ports_list, docker_port_map)."""
     # Get all listening TCP ports with process info
@@ -1409,6 +1605,30 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 'lanes':      PORT_LANES,
                 'scanned_at': ts,
             })
+
+        elif p == '/cutsheet':
+            # Live generated port cut sheet — no auth, shareable on LAN
+            with _port_cache_lock:
+                ports = list(_port_cache['ports'])
+                ts    = _port_cache['ts']
+            if not ports:
+                try:
+                    ports, _ = scan_ports()
+                except Exception:
+                    ports = []
+            try:
+                svcs = build_services(get_containers())
+            except Exception:
+                svcs = []
+            si   = get_server_info()
+            html = build_cutsheet_html(ports, svcs, si)
+            enc  = html.encode('utf-8')
+            self.send_response(200)
+            self.send_header('Content-Type', 'text/html; charset=utf-8')
+            self.send_header('Content-Length', str(len(enc)))
+            self.send_header('Cache-Control', 'no-cache')
+            self.end_headers()
+            self.wfile.write(enc)
 
         elif p == '/api/my-ip':
             # Return the connecting client's IP address (useful for fail2ban unban)
