@@ -1439,6 +1439,7 @@ const CATEGORIES = {
       { label:'Gate', items:[
         {icon:'🛡', label:'2FA Setup',      action:()=>openView('settings')},
         {icon:'⚙', label:'Hub Settings',   action:()=>openView('settings')},
+        {icon:'⬆', label:'Update Hub',     action:()=>{ openView('settings'); setTimeout(()=>runHubUpdate(),400); }},
       ]},
     ]
   },
