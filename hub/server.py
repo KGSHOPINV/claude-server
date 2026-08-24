@@ -1076,6 +1076,95 @@ def build_receipt():
         'hub_url':  f'http://{lan_ip}:{PORT}',
     }
 
+
+def build_context():
+    """Server context payload — per Metaforge HANDOFF_SERVERHUB spec.
+    Sent to FlareVault at pairing; refresh every 60s or on significant change."""
+    receipt = build_receipt()
+
+    # RAM in MB from /proc/meminfo
+    ram_total_mb = 0
+    ram_available_mb = 0
+    try:
+        with open("/proc/meminfo") as f:
+            lines = f.read().splitlines()
+        ram_total_mb     = next(int(l.split()[1]) // 1024 for l in lines if l.startswith("MemTotal:"))
+        ram_available_mb = next(int(l.split()[1]) // 1024 for l in lines if l.startswith("MemAvailable:"))
+    except Exception:
+        pass
+
+    # Disk — root FS total/available in GB
+    disk_total_gb = 0
+    disk_available_gb = 0
+    try:
+        out = subprocess.check_output(
+            ["df", "-BG", "--output=size,avail", "/"],
+            text=True, stderr=subprocess.DEVNULL).splitlines()
+        if len(out) > 1:
+            parts = out[1].split()
+            disk_total_gb     = int(parts[0].rstrip("G"))
+            disk_available_gb = int(parts[1].rstrip("G"))
+    except Exception:
+        pass
+
+    # Docker version
+    docker_version = "unknown"
+    try:
+        docker_version = subprocess.check_output(
+            ["docker", "version", "--format", "{{.Server.Version}}"],
+            text=True, stderr=subprocess.DEVNULL).strip() or "unknown"
+    except Exception:
+        pass
+
+    # CPU cores
+    cpu_cores = 0
+    try:
+        cpu_cores = int(subprocess.check_output(["nproc"], text=True).strip())
+    except Exception:
+        pass
+
+    # Running containers in spec shape
+    running_containers = [
+        {"name": c["name"], "image": c.get("image", ""), "ports": c["ports"], "status": c["status"]}
+        for c in receipt.get("containers", [])
+    ]
+
+    # Network interfaces
+    network_interfaces = []
+    if receipt.get("lan_ip"):
+        network_interfaces.append({"name": "lan", "ip": receipt["lan_ip"], "type": "lan"})
+    if receipt.get("tailscale") and receipt["tailscale"] not in ("", "none"):
+        network_interfaces.append({"name": "tailscale", "ip": receipt["tailscale"], "type": "tailscale"})
+
+    # Available port ranges — project space 7100-7899, 20-port blocks, skip bound ports
+    try:
+        with _port_cache_lock:
+            bound = {p["port"] for p in _port_cache["ports"]}
+    except Exception:
+        bound = set()
+    available_port_ranges = []
+    for base in range(7100, 7900, 20):
+        if not any(p in bound for p in range(base, base + 20)):
+            available_port_ranges.append({"start": base, "end": base + 19})
+        if len(available_port_ranges) >= 10:
+            break
+
+    return {
+        "hostname":              receipt.get("hostname", ""),
+        "os":                    receipt.get("os", ""),
+        "cpu_cores":             cpu_cores,
+        "ram_total_mb":          ram_total_mb,
+        "ram_available_mb":      ram_available_mb,
+        "disk_total_gb":         disk_total_gb,
+        "disk_available_gb":     disk_available_gb,
+        "docker_version":        docker_version,
+        "running_containers":    running_containers,
+        "available_port_ranges": available_port_ranges,
+        "network_interfaces":    network_interfaces,
+        "hub_port":              PORT,
+        "generated":             receipt.get("generated", datetime.now().isoformat(timespec="seconds")),
+    }
+
 def config_get(key, default=None):
     try:
         conn = db_conn()
