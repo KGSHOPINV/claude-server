@@ -2065,6 +2065,9 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 'generated': receipt['generated'],
             })
 
+        elif p == '/api/context':
+            self.send_json(build_context())
+
         elif p.startswith('/proxy/'):
             # /proxy/3000/some/path?query=string
             remainder = p[7:]  # e.g. "3000/some/path"
