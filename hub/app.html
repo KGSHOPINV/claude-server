@@ -270,7 +270,7 @@ body.desk-mode #desk-exit { display:flex; align-items:center; gap:6px; }
 .if-bar-btn:hover { color:var(--text); border-color:var(--accent); }
 
 /* Dashboard */
-.view-dash { padding:14px; overflow-y:auto; height:100%; }
+.view-dash { padding:14px; overflow-y:auto; height:100%; box-sizing:border-box; }
 .grp-label { font-size:10px; font-weight:700; letter-spacing:.7px; text-transform:uppercase; color:var(--muted); margin:12px 0 7px; }
 .svc-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(140px,1fr)); gap:6px; }
 .svc-card { background:var(--panel); border:1px solid var(--border); border-radius:var(--r); padding:9px 11px; cursor:pointer; transition:border-color var(--t); position:relative; min-height:66px; }
@@ -356,7 +356,7 @@ body.desk-mode #desk-exit { display:flex; align-items:center; gap:6px; }
 .cp-item-hint { font-size:10px; color:var(--muted2); font-family:var(--mono); flex-shrink:0; }
 
 /* Settings View */
-.view-settings { padding:12px; overflow-y:auto; height:100%; }
+.view-settings { padding:12px; overflow-y:auto; height:100%; box-sizing:border-box; }
 .vs-section { background:var(--panel2); border:1px solid var(--border); border-radius:5px; padding:12px 14px; margin-bottom:10px; }
 .vs-hdr { font-size:10px; font-weight:700; letter-spacing:.5px; text-transform:uppercase; color:var(--muted2); margin-bottom:10px; }
 .vs-row { display:flex; align-items:center; justify-content:space-between; gap:10px; margin-bottom:8px; font-size:12px; }
@@ -367,7 +367,7 @@ body.desk-mode #desk-exit { display:flex; align-items:center; gap:6px; }
 .accent-swatch:hover { border-color:var(--text); }
 
 /* Storage View */
-.view-storage { padding:12px; overflow-y:auto; height:100%; }
+.view-storage { height:100%; box-sizing:border-box; }
 .stor-block { background:var(--panel2); border:1px solid var(--border); border-radius:5px; padding:10px 12px; margin-bottom:8px; }
 .stor-hdr { font-size:10px; font-weight:700; letter-spacing:.5px; text-transform:uppercase; color:var(--muted2); margin-bottom:6px; }
 .stor-pre { font-family:var(--mono); font-size:11px; color:var(--text); white-space:pre; line-height:1.6; }
@@ -430,7 +430,7 @@ body.desk-mode #desk-exit { display:flex; align-items:center; gap:6px; }
 .map-network { margin:8px 12px 12px; padding:5px 12px; border:1px dashed #1c2d44; border-radius:4px; font-size:10px; font-family:var(--mono); color:#1c3450; text-align:center; letter-spacing:.5px; }
 
 /* Vault */
-.view-vault { padding:14px; overflow-y:auto; height:100%; }
+.view-vault { padding:14px; overflow-y:auto; height:100%; box-sizing:border-box; }
 #vlock { max-width:320px; margin:30px auto; }
 #vlock h2 { font-size:18px; font-weight:700; margin-bottom:5px; }
 #vlock p { color:var(--muted); font-size:11px; margin-bottom:14px; }
@@ -479,7 +479,7 @@ body.desk-mode #desk-exit { display:flex; align-items:center; gap:6px; }
 .ve-acts { display:flex; gap:3px; }
 
 /* Issues */
-.view-issues { padding:14px; overflow-y:auto; height:100%; }
+.view-issues { padding:14px; overflow-y:auto; height:100%; box-sizing:border-box; }
 .iss-row { display:flex; gap:8px; align-items:flex-start; padding:8px 0; border-bottom:1px solid var(--border); }
 .iss-dot { width:7px; height:7px; border-radius:50%; margin-top:5px; flex-shrink:0; }
 .iss-dot.open { background:var(--yellow); }
@@ -490,7 +490,7 @@ body.desk-mode #desk-exit { display:flex; align-items:center; gap:6px; }
 .iss-date  { font-size:9px; color:var(--muted2); margin-top:3px; font-family:var(--mono); }
 
 /* Network */
-.view-net { padding:14px; overflow-y:auto; height:100%; display:flex; flex-direction:column; gap:10px; }
+.view-net { padding:14px; overflow-y:auto; height:100%; display:flex; flex-direction:column; gap:10px; box-sizing:border-box; }
 .net-card { background:var(--panel); border:1px solid var(--border); border-radius:var(--r); padding:10px 12px; }
 .net-card h4 { font-size:11px; font-weight:700; letter-spacing:.5px; text-transform:uppercase; color:var(--muted); margin-bottom:8px; }
 .net-pre { font-family:var(--mono); font-size:10.5px; color:#c9d1d9; white-space:pre-wrap; word-break:break-all; }
@@ -597,7 +597,7 @@ body.desk-mode #desk-exit { display:flex; align-items:center; gap:6px; }
   #wsarea { padding-bottom:52px; }
 }
 /* ── GUIDE / CRIBS VIEW ─────────────────────────────────────────────── */
-.guide-wrap { padding:24px; overflow-y:auto; height:100%; }
+.guide-wrap { padding:24px; overflow-y:auto; height:100%; box-sizing:border-box; }
 .guide-hero { text-align:center; padding:32px 0 28px; }
 .guide-hero-icon { font-size:52px; line-height:1; }
 .guide-hero-title { font-size:26px; font-weight:700; color:var(--text); margin:10px 0 4px; }
@@ -736,7 +736,7 @@ body.desk-mode #desk-exit { display:flex; align-items:center; gap:6px; }
 .pm-table .td-badge.pub { background:rgba(63,185,80,.12); color:var(--green); }
 .pm-table .td-badge.loc { background:var(--panel2); color:var(--muted2); }
 /* ── SURVEY ──────────────────────────────────────── */
-.view-survey { padding:12px 14px; overflow-y:auto; height:100%; }
+.view-survey { padding:12px 14px; overflow-y:auto; height:100%; box-sizing:border-box; }
 .sv-hdr { display:flex; align-items:center; justify-content:space-between; margin-bottom:14px; padding-bottom:10px; border-bottom:1px solid var(--border); }
 .sv-hdr-title { font-weight:700; font-size:13px; display:flex; align-items:center; gap:7px; }
 .sv-empty { color:var(--muted); font-size:11px; padding:40px 0; text-align:center; }
@@ -775,7 +775,7 @@ body.desk-mode #desk-exit { display:flex; align-items:center; gap:6px; }
 .sv-alert.crit { background:var(--rdim); border:1px solid rgba(248,81,73,.2); color:var(--red); }
 
 /* ── PLATFORM VIEW ─────────────────────────────────── */
-.view-platform { display:flex; flex-direction:column; height:100%; overflow-y:auto; padding:18px; gap:14px; box-sizing:border-box; }
+.view-platform { display:flex; flex-direction:column; height:100%; overflow-y:auto; padding:14px; gap:12px; box-sizing:border-box; }
 .pf-header { display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:8px; }
 .pf-hdr-left { display:flex; align-items:center; gap:10px; }
 .pf-title { font-size:13px; font-weight:700; letter-spacing:.2px; }
@@ -830,7 +830,7 @@ body.desk-mode #desk-exit { display:flex; align-items:center; gap:6px; }
 .act-lvl { font-size:9px; font-family:var(--mono); }
 
 /* ── SERVER RECEIPT ────────────────────────────────── */
-.view-receipt { overflow-y:auto; height:100%; }
+.view-receipt { overflow-y:auto; height:100%; box-sizing:border-box; }
 .receipt-wrap { padding:14px; display:flex; flex-direction:column; gap:14px; }
 .receipt-header { display:flex; align-items:center; gap:10px; padding:10px 14px; background:var(--panel); border:1px solid var(--border); border-radius:8px; }
 .receipt-title { font-size:13px; font-weight:700; }
@@ -861,7 +861,7 @@ body.desk-mode #desk-exit { display:flex; align-items:center; gap:6px; }
 .aic-text { color:var(--fg); white-space:pre-wrap; word-break:break-word; }
 
 /* ── HOME DASHBOARD ────────────────────────────────── */
-.view-dash { padding:12px 14px; overflow-y:auto; height:100%; }
+.view-dash { padding:12px 14px; overflow-y:auto; height:100%; box-sizing:border-box; }
 .hd-header { display:flex; align-items:center; gap:8px; padding:8px 12px; border-radius:7px; margin-bottom:10px; font-size:11px; background:var(--panel); border:1px solid var(--border); }
 .hd-header.hd-online .hd-odot { background:var(--green); box-shadow:0 0 6px var(--green); }
 .hd-header.hd-offline .hd-odot { background:var(--red); }
@@ -892,6 +892,38 @@ body.desk-mode #desk-exit { display:flex; align-items:center; gap:6px; }
 .hd-svc-name { font-size:11px; font-weight:600; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
 .hd-svc-port { font-size:9px; color:var(--muted); font-family:var(--mono); }
 .hd-err-banner { background:var(--rdim); color:var(--red); border:1px solid rgba(248,81,73,.2); border-radius:7px; padding:10px 14px; font-size:12px; margin-bottom:10px; }
+
+/* ── Storage overview grid ──────────────────────────────────────── */
+.stor-overview-grid { display:grid; grid-template-columns:1fr 1fr; gap:10px; padding:12px; }
+@media(max-width:640px){.stor-overview-grid{grid-template-columns:1fr;}}
+.stor-card { background:var(--panel2,var(--panel)); border:1px solid var(--border); border-radius:7px; padding:12px 14px; display:flex; flex-direction:column; gap:6px; }
+.stor-card-hl { border-color:var(--accent); background:color-mix(in srgb,var(--accent) 5%,transparent); }
+.stor-card-hdr { display:flex; align-items:center; gap:7px; margin-bottom:2px; }
+.stor-card-icon { font-size:16px; line-height:1; flex-shrink:0; }
+.stor-card-label { font-size:12px; font-weight:700; flex:1; }
+.stor-card-badge { font-size:9px; font-weight:700; letter-spacing:.05em; padding:2px 6px; border-radius:10px; }
+.badge-ok  { background:rgba(34,197,94,.12);  color:var(--green,#22c55e); }
+.badge-warn{ background:rgba(234,179,8,.14);   color:var(--yellow,#f59e0b); }
+.badge-err { background:rgba(239,68,68,.14);   color:var(--red,#ef4444); }
+.stor-card-row { display:flex; gap:8px; align-items:baseline; font-size:11px; }
+.stor-card-note { font-size:10px; color:var(--muted); line-height:1.4; margin-top:2px; }
+.warn-note { color:var(--yellow,#f59e0b) !important; }
+.stor-dkr-rows { display:flex; flex-direction:column; gap:3px; }
+.stor-dkr-row { display:grid; grid-template-columns:80px 1fr auto; gap:6px; font-size:11px; align-items:baseline; padding:2px 0; border-bottom:1px solid color-mix(in srgb,var(--border) 40%,transparent); }
+.stor-dkr-row:last-child { border:none; }
+.stor-layer { display:flex; flex-direction:column; gap:6px; }
+.stor-layer-row { display:flex; align-items:flex-start; gap:8px; padding:6px 8px; border-radius:5px; }
+.host-layer   { background:rgba(57,208,196,.06); border:1px solid rgba(57,208,196,.15); }
+.docker-layer { background:rgba(88,166,255,.06); border:1px solid rgba(88,166,255,.15); }
+.stor-layer-dot { width:8px; height:8px; border-radius:50%; background:var(--accent); flex-shrink:0; margin-top:4px; }
+.docker-dot { background:var(--blue,#58a6ff); }
+.stor-layer-body { flex:1; }
+.stor-layer-title { font-size:11px; font-weight:600; margin-bottom:2px; }
+.stor-layer-items { font-size:10px; color:var(--muted); }
+.stor-layer-tag { font-size:9px; font-weight:700; letter-spacing:.05em; padding:2px 5px; border-radius:3px; flex-shrink:0; }
+.host-layer   .stor-layer-tag { background:rgba(57,208,196,.12);  color:var(--accent); }
+.docker-layer .stor-layer-tag { background:rgba(88,166,255,.12);  color:var(--blue,#58a6ff); }
+
 </style>
 <link rel="manifest" href="/manifest.json">
 <meta name="theme-color" content="#58a6ff">
@@ -4649,68 +4681,64 @@ function storRenderOverview(panel, d) {
   const vols = dkr.volumes || {};
   const bc   = dkr.build_cache || {};
   const ctrs = dkr.containers || {};
-
-  // Main disk mounts
-  const mounts = (d.mounts || []).filter(m => m.mount === '/' || m.mount.startsWith('/srv') || m.mount.startsWith('/home') || m.mount.startsWith('/backup'));
-  const mountsHtml = mounts.length ? mounts.map(m => `
-    <div class="stor-mount-row">
-      <div class="stor-mount-info">
-        <span class="stor-mount-path">${m.mount}</span>
-        <span class="stor-mount-src">${m.source}</span>
-      </div>
-      ${storBar(m.pct)}
-      <div class="stor-mount-nums">
-        <span class="stor-used">${m.used_gb}GB used</span>
-        <span class="stor-sep">/</span>
-        <span class="stor-total">${m.total_gb}GB</span>
-        <span class="stor-pct ${m.pct>=90?'crit':m.pct>=75?'warn':''}">${m.pct}%</span>
-      </div>
-    </div>`).join('') : '<div class="tab-empty">No mount data</div>';
-
-  // Docker summary cards
+  const root = (d.mounts || []).find(m => m.mount === '/') || {};
+  const pct = root.pct || 0;
   const reclaimTotal = [imgs.reclaimable, vols.reclaimable, bc.reclaimable]
     .map(r => parseFloat((r||'0').replace(/[^0-9.]/g,'')) || 0)
     .reduce((a,b) => a+b, 0);
-
   panel.innerHTML = `
-    <div class="stor-section">
-      <div class="stor-section-title">Filesystem</div>
-      ${mountsHtml}
-      ${d.unattached?.length ? `<div class="stor-unattached">
-        <span class="badge-warn">Unattached disk detected:</span>
-        ${d.unattached.map(u => `<span class="stor-disk-name">${u.path} (${u.size})</span>`).join(', ')}
-        — not mounted, not in use
+    <div class="stor-overview-grid">
+      <div class="stor-card">
+        <div class="stor-card-hdr">
+          <span class="stor-card-icon">💿</span>
+          <span class="stor-card-label">Root Disk</span>
+          <span class="stor-card-badge ${pct>=90?'badge-err':pct>=80?'badge-warn':'badge-ok'}">${pct}%</span>
+        </div>
+        ${storBar(pct)}
+        <div class="stor-card-row"><span>${root.used_gb||'?'}GB used</span><span class="muted-sm">of ${root.total_gb||'?'}GB</span><span class="muted-sm" style="margin-left:auto">${root.avail_gb||'?'}GB free</span></div>
+        <div class="stor-card-note">All Docker data (images, volumes, cache) lives here at /var/lib/docker</div>
+      </div>
+      <div class="stor-card ${reclaimTotal > 5 ? 'stor-card-hl' : ''}">
+        <div class="stor-card-hdr">
+          <span class="stor-card-icon">🐳</span>
+          <span class="stor-card-label">Docker Storage</span>
+          ${reclaimTotal > 5 ? '<span class="badge-warn">~' + reclaimTotal.toFixed(0) + 'GB reclaimable</span>' : '<span class="badge-ok">clean</span>'}
+        </div>
+        <div class="stor-dkr-rows">
+          <div class="stor-dkr-row"><span>Images</span><span>${imgs.total||'?'} pulled · ${imgs.size||'?'}</span><span class="muted-sm">${imgs.reclaimable||'?'} free</span></div>
+          <div class="stor-dkr-row"><span>Volumes</span><span>${vols.active||'?'} active / ${vols.total||'?'} total</span><span class="muted-sm">${vols.reclaimable||'?'} free</span></div>
+          <div class="stor-dkr-row"><span>Containers</span><span>${ctrs.active||'?'} running</span><span class="muted-sm">${ctrs.size||'?'} logs</span></div>
+          <div class="stor-dkr-row"><span>Build cache</span><span>${bc.size||'?'}</span><span class="muted-sm">${bc.reclaimable||'?'} free</span></div>
+        </div>
+        ${reclaimTotal > 5 ? '<div class="stor-card-note warn-note">Go to Cleanup tab — should free ~' + reclaimTotal.toFixed(0) + 'GB</div>' : ''}
+      </div>
+      ${(d.unattached||[]).length ? `<div class="stor-card stor-card-hl">
+        <div class="stor-card-hdr"><span class="stor-card-icon">💽</span><span class="stor-card-label">Unattached Disk</span><span class="badge-warn">not mounted</span></div>
+        ${d.unattached.map(u => `<div class="stor-card-row"><span class="mono-sm">${u.path}</span><span class="muted-sm">${u.size}</span></div>`).join('')}
+        <div class="stor-card-note warn-note">Raw disk — no filesystem yet. Format it as /backup via Diagnostics tab.</div>
       </div>` : ''}
-    </div>
-    <div class="stor-section">
-      <div class="stor-section-title">Docker Space</div>
-      <div class="stor-dkr-grid">
-        <div class="stor-dkr-card">
-          <div class="stor-dkr-num">${imgs.total || '—'}</div>
-          <div class="stor-dkr-lbl">Images</div>
-          <div class="stor-dkr-sub">${imgs.size || '—'} total · ${imgs.reclaimable || '—'} reclaimable</div>
-        </div>
-        <div class="stor-dkr-card">
-          <div class="stor-dkr-num">${ctrs.active || '—'} / ${ctrs.total || '—'}</div>
-          <div class="stor-dkr-lbl">Containers</div>
-          <div class="stor-dkr-sub">${ctrs.size || '—'} logs · ${ctrs.reclaimable || '—'} reclaimable</div>
-        </div>
-        <div class="stor-dkr-card">
-          <div class="stor-dkr-num">${vols.active || '—'} / ${vols.total || '—'}</div>
-          <div class="stor-dkr-lbl">Volumes</div>
-          <div class="stor-dkr-sub">${vols.size || '—'} total · ${vols.reclaimable || '—'} reclaimable</div>
-        </div>
-        <div class="stor-dkr-card ${reclaimTotal > 5 ? 'highlight' : ''}">
-          <div class="stor-dkr-num">~${reclaimTotal.toFixed(1)}GB</div>
-          <div class="stor-dkr-lbl">Reclaimable</div>
-          <div class="stor-dkr-sub">${reclaimTotal > 5 ? '⚡ Cleanup will free significant space' : 'Not urgent'}</div>
+      <div class="stor-card">
+        <div class="stor-card-hdr"><span class="stor-card-icon">🏗</span><span class="stor-card-label">Server Layers</span></div>
+        <div class="stor-layer">
+          <div class="stor-layer-row host-layer">
+            <span class="stor-layer-dot"></span>
+            <div class="stor-layer-body">
+              <div class="stor-layer-title">Host (runs directly on Ubuntu)</div>
+              <div class="stor-layer-items">ServerHub · Tailscale · UFW · Cockpit</div>
+            </div>
+            <span class="stor-layer-tag">host</span>
+          </div>
+          <div class="stor-layer-row docker-layer">
+            <span class="stor-layer-dot docker-dot"></span>
+            <div class="stor-layer-body">
+              <div class="stor-layer-title">Docker (${ctrs.total||'?'} containers)</div>
+              <div class="stor-layer-items">Supabase · Portainer · n8n · Metaforge · FlareVault · everything else</div>
+            </div>
+            <span class="stor-layer-tag docker-tag">docker</span>
+          </div>
         </div>
       </div>
-    </div>
-    ${d.snap_count ? `<div class="stor-section"><div class="stor-section-title">Other</div>
-      <div class="stor-info-row"><span class="stor-info-label">Snap packages</span><span>${d.snap_count} installed</span></div>
-      ${d.log_size ? `<div class="stor-info-row"><span class="stor-info-label">Log directory</span><span>${d.log_size}</span></div>` : ''}
-    </div>` : ''}`;
+    </div>`;
 }
 
 function storRenderFilesystem(panel, d) {
