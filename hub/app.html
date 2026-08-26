@@ -1396,6 +1396,7 @@ const CATEGORIES = {
       ]},
       { label:'Storage', items:[
         {icon:'💾', label:'Storage',   action:()=>openView('storage')},
+        {icon:'🐳', label:'Docker',    action:()=>openView('dockermgr')},
         {icon:'📁', label:'Files',     action:()=>openView('files')},
       ]},
       { label:'Landscape', items:[
@@ -1629,8 +1630,8 @@ function createWorkspace({ title, icon='⊞', pinned=false, viewType='dashboard'
 }
 
 function openView(viewType, config={}) {
-  const titles = { dashboard:'Dashboard', terminal:'Terminal', logs:'Logs', docs:'Docs', map:'Infra Map', vault:'Vault', issues:'Issues', network:'Network', chat:'AI Chat', settings:'Settings', storage:'Storage', files:'Files', journal:'Journal', survey:'Survey', guide:'Guide', tasks:'Task Docket', runbooks:'Runbooks', browser:'Browser', ports:'Port Landscape', platform:'Platform' };
-  const icons  = { dashboard:'⊞', terminal:'⌨', logs:'📋', docs:'📚', map:'🗺', vault:'🔐', issues:'⚑', network:'🌐', chat:'🤖', settings:'⚙', storage:'💾', files:'📁', journal:'📓', survey:'🔍', guide:'🏠', tasks:'📋', runbooks:'▶', browser:'🌐', ports:'🔌', platform:'🔮' };
+  const titles = { dashboard:'Dashboard', terminal:'Terminal', logs:'Logs', docs:'Docs', map:'Infra Map', vault:'Vault', issues:'Issues', network:'Network', chat:'AI Chat', settings:'Settings', storage:'Storage', dockermgr:'Docker', files:'Files', journal:'Journal', survey:'Survey', guide:'Guide', tasks:'Task Docket', runbooks:'Runbooks', browser:'Browser', ports:'Port Landscape', platform:'Platform' };
+  const icons  = { dashboard:'⊞', terminal:'⌨', logs:'📋', docs:'📚', map:'🗺', vault:'🔐', issues:'⚑', network:'🌐', chat:'🤖', settings:'⚙', storage:'💾', dockermgr:'🐳', files:'📁', journal:'📓', survey:'🔍', guide:'🏠', tasks:'📋', runbooks:'▶', browser:'🌐', ports:'🔌', platform:'🔮' };
 
   const _navigateWs = (ws) => {
     const pane = ws.panes[0];
