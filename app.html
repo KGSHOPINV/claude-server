@@ -814,52 +814,6 @@ body.desk-mode #desk-exit { display:flex; align-items:center; gap:6px; }
 .pf-notice { display:flex; align-items:flex-start; gap:8px; padding:9px 12px; background:var(--acdim); border:1px solid rgba(88,166,255,.15); border-radius:6px; font-size:11px; color:var(--muted); }
 .pf-notice-icon { font-size:13px; flex-shrink:0; }
 
-/* ── ACTIVITY LOG ────────────────────────────────── */
-.view-activity { display:flex; flex-direction:column; height:100%; overflow:hidden; }
-.act-bar { display:flex; align-items:center; gap:8px; padding:7px 10px; border-bottom:1px solid var(--border); flex-shrink:0; }
-.act-note-bar { display:flex; gap:6px; padding:6px 10px; border-bottom:1px solid var(--border); flex-shrink:0; }
-.act-row { display:flex; align-items:flex-start; gap:8px; padding:5px 10px; border-bottom:1px solid var(--border); font-size:11px; }
-.act-row:hover { background:var(--panel2); }
-.act-ico { font-size:14px; flex-shrink:0; width:18px; text-align:center; line-height:1.6; }
-.act-body { flex:1; min-width:0; }
-.act-action { color:var(--fg); line-height:1.4; word-break:break-word; }
-.act-detail { color:var(--muted); font-size:10px; font-family:var(--mono); margin-top:1px; }
-.act-meta { display:flex; flex-direction:column; align-items:flex-end; gap:2px; flex-shrink:0; }
-.act-src { font-size:9px; background:var(--panel2); border:1px solid var(--border); border-radius:3px; padding:1px 5px; color:var(--muted); font-family:var(--mono); }
-.act-ts { font-size:9px; color:var(--muted2); font-family:var(--mono); }
-.act-lvl { font-size:9px; font-family:var(--mono); }
-
-/* ── SERVER RECEIPT ────────────────────────────────── */
-.view-receipt { overflow-y:auto; height:100%; }
-.receipt-wrap { padding:14px; display:flex; flex-direction:column; gap:14px; }
-.receipt-header { display:flex; align-items:center; gap:10px; padding:10px 14px; background:var(--panel); border:1px solid var(--border); border-radius:8px; }
-.receipt-title { font-size:13px; font-weight:700; }
-.receipt-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(240px,1fr)); gap:10px; }
-.rec-card { background:var(--panel); border:1px solid var(--border); border-radius:8px; padding:12px 14px; }
-.rec-card-title { font-size:9px; font-weight:700; letter-spacing:.6px; text-transform:uppercase; color:var(--muted2); margin-bottom:8px; }
-.rec-row { display:flex; justify-content:space-between; gap:8px; font-size:11px; padding:2px 0; }
-.rec-label { color:var(--muted); }
-.rec-val { font-family:var(--mono); font-size:10px; text-align:right; }
-.rec-link { font-family:var(--mono); font-size:10px; color:var(--accent); text-decoration:none; }
-.rec-link:hover { text-decoration:underline; }
-.rec-section-title { font-size:9px; font-weight:700; letter-spacing:.6px; text-transform:uppercase; color:var(--muted2); padding:4px 0 3px; border-bottom:1px solid var(--border); }
-.rec-table-wrap { overflow-x:auto; }
-.rec-table { width:100%; border-collapse:collapse; font-size:11px; }
-.rec-table th { text-align:left; padding:4px 8px; color:var(--muted); font-size:9px; font-weight:600; letter-spacing:.4px; text-transform:uppercase; border-bottom:1px solid var(--border); }
-.rec-table td { padding:4px 8px; border-bottom:1px solid var(--border); vertical-align:top; }
-.rec-table tr:hover td { background:var(--panel2); }
-
-/* ── AI CHAT ────────────────────────────────── */
-.view-aichat { display:flex; flex-direction:column; height:100%; overflow:hidden; }
-.aic-msgs { flex:1; overflow-y:auto; padding:10px; display:flex; flex-direction:column; gap:6px; }
-.aic-row { display:flex; gap:8px; align-items:flex-end; padding:8px 10px; border-top:1px solid var(--border); flex-shrink:0; }
-.aic-bubble { display:flex; gap:7px; align-items:flex-start; padding:6px 10px; border-radius:8px; font-size:11px; line-height:1.5; max-width:90%; }
-.aic-sys { background:var(--panel2); border:1px solid var(--border); color:var(--muted); align-self:center; width:100%; max-width:100%; border-radius:6px; }
-.aic-usr { background:var(--acdim); border:1px solid rgba(88,166,255,.15); align-self:flex-end; }
-.aic-ai  { background:var(--panel); border:1px solid var(--border); align-self:flex-start; }
-.aic-role { font-size:8px; font-weight:700; letter-spacing:.6px; text-transform:uppercase; color:var(--muted2); flex-shrink:0; padding-top:2px; min-width:24px; }
-.aic-text { color:var(--fg); white-space:pre-wrap; word-break:break-word; }
-
 /* ── HOME DASHBOARD ────────────────────────────────── */
 .view-dash { padding:12px 14px; overflow-y:auto; height:100%; }
 .hd-header { display:flex; align-items:center; gap:8px; padding:8px 12px; border-radius:7px; margin-bottom:10px; font-size:11px; background:var(--panel); border:1px solid var(--border); }
@@ -1037,7 +991,6 @@ body.desk-mode #desk-exit { display:flex; align-items:center; gap:6px; }
   <button class="mob-nav-btn" onclick="mobNav('dashboard')" data-mob="dashboard"><span class="mni">⊞</span>Dash</button>
   <button class="mob-nav-btn" onclick="mobNav('terminal')"  data-mob="terminal" ><span class="mni">⌨</span>Shell</button>
   <button class="mob-nav-btn" onclick="mobNav('storage')"   data-mob="storage"  ><span class="mni">💾</span>Storage</button>
-  <button class="mob-nav-btn" onclick="mobNav('dockermgr')" data-mob="dockermgr"><span class="mni">🐳</span>Docker</button>
   <button class="mob-nav-btn" onclick="mobNav('runbooks')"  data-mob="runbooks" ><span class="mni">▶</span>Run</button>
   <button class="mob-nav-btn" onclick="openCmdPal()"                             ><span class="mni">🔍</span>Search</button>
   <button class="mob-nav-btn" onclick="mobNav('settings')"  data-mob="settings" ><span class="mni">⚙</span>More</button>
@@ -1421,11 +1374,6 @@ const CATEGORIES = {
         {icon:'⚑',  label:'Issues',       action:()=>openView('issues')},
         {icon:'📓', label:'Journal',      action:()=>openView('journal')},
       ]},
-      { label:'Intelligence', items:[
-        {icon:'📜', label:'Activity Log', action:()=>openView('activity')},
-        {icon:'🧾', label:'Server Receipt', action:()=>openView('receipt')},
-        {icon:'🤖', label:'Hub AI Chat',  action:()=>openView('aichat')},
-      ]},
     ]
   },
 
@@ -1440,7 +1388,6 @@ const CATEGORIES = {
       { label:'Gate', items:[
         {icon:'🛡', label:'2FA Setup',      action:()=>openView('settings')},
         {icon:'⚙', label:'Hub Settings',   action:()=>openView('settings')},
-        {icon:'⬆', label:'Update Hub',     action:()=>{ openView('settings'); setTimeout(()=>runHubUpdate(),400); }},
       ]},
     ]
   },
@@ -1632,32 +1579,28 @@ function openView(viewType, config={}) {
   const titles = { dashboard:'Dashboard', terminal:'Terminal', logs:'Logs', docs:'Docs', map:'Infra Map', vault:'Vault', issues:'Issues', network:'Network', chat:'AI Chat', settings:'Settings', storage:'Storage', files:'Files', journal:'Journal', survey:'Survey', guide:'Guide', tasks:'Task Docket', runbooks:'Runbooks', browser:'Browser', ports:'Port Landscape', platform:'Platform' };
   const icons  = { dashboard:'⊞', terminal:'⌨', logs:'📋', docs:'📚', map:'🗺', vault:'🔐', issues:'⚑', network:'🌐', chat:'🤖', settings:'⚙', storage:'💾', files:'📁', journal:'📓', survey:'🔍', guide:'🏠', tasks:'📋', runbooks:'▶', browser:'🌐', ports:'🔌', platform:'🔮' };
 
-  const _navigateWs = (ws) => {
-    const pane = ws.panes[0];
-    if (!pane) return;
-    pane.viewType   = viewType;
-    pane.viewConfig = config;
-    ws.title = titles[viewType] || viewType;
-    ws.icon  = icons[viewType]  || '⊞';
-    // Fix: update both title and icon spans (not the non-existent .ws-tab-label)
-    const tabEl = document.querySelector(`.ws-tab[data-ws="${ws.id}"]`);
-    if (tabEl) {
-      const t = tabEl.querySelector('.ws-tab-title');
-      const i = tabEl.querySelector('.ws-tab-icon');
-      if (t) t.textContent = ws.title;
-      if (i) i.textContent = ws.icon;
-    }
-    reRenderWorkspace(ws.id);
-  };
+  // Already open somewhere? → switch to that tab (dedup)
+  const existing = S.workspaces.find(ws => ws.panes.some(p => p.viewType === viewType));
+  if (existing) { activateWorkspace(existing.id); return; }
 
-  // Already open in the CURRENT tab? → no-op (already there)
+  // Active workspace exists and isn't pinned? → load in current tab (Chrome behaviour)
   const activeWs = S.workspaces.find(w => w.id === S.activeWs);
-  if (activeWs && activeWs.panes.some(p => p.viewType === viewType)) return;
+  if (activeWs && !activeWs.pinned) {
+    const pane = activeWs.panes[0];
+    if (pane) {
+      pane.viewType   = viewType;
+      pane.viewConfig = config;
+      activeWs.title  = titles[viewType] || viewType;
+      activeWs.icon   = icons[viewType]  || '⊞';
+      // Update the ws-bar tab label
+      const tabLabel = document.querySelector(`.ws-tab[data-ws="${activeWs.id}"] .ws-tab-label`);
+      if (tabLabel) tabLabel.textContent = (icons[viewType]||'') + ' ' + (titles[viewType]||viewType);
+      reRenderWorkspace(activeWs.id);
+      return;
+    }
+  }
 
-  // Active tab exists and isn't pinned? → navigate in place (browser behaviour)
-  if (activeWs && !activeWs.pinned) { _navigateWs(activeWs); return; }
-
-  // No active tab yet → create the first one
+  // No tab open yet → create the first one
   createWorkspace({ title: titles[viewType]||viewType, icon: icons[viewType]||'⊞', viewType, viewConfig: config });
 }
 
@@ -1694,27 +1637,8 @@ function openIframeWs(name, port, url, opts={}) {
 }
 
 function openDocWs(file, title) {
-  // Already open in current tab? no-op
-  const activeWs = S.workspaces.find(w => w.id === S.activeWs);
-  if (activeWs && activeWs.panes.some(p => p.viewType==='docs' && p.viewConfig.file===file)) return;
-
-  // Navigate current tab if one exists
-  if (activeWs && !activeWs.pinned) {
-    const pane = activeWs.panes[0];
-    if (pane) {
-      pane.viewType = 'docs'; pane.viewConfig = {file};
-      activeWs.title = title; activeWs.icon = '📄';
-      const tabEl = document.querySelector(`.ws-tab[data-ws="${activeWs.id}"]`);
-      if (tabEl) {
-        const t = tabEl.querySelector('.ws-tab-title');
-        const i = tabEl.querySelector('.ws-tab-icon');
-        if (t) t.textContent = title;
-        if (i) i.textContent = '📄';
-      }
-      reRenderWorkspace(activeWs.id);
-      return;
-    }
-  }
+  const existing = S.workspaces.find(ws => ws.panes.some(p=>p.viewType==='docs' && p.viewConfig.file===file));
+  if (existing) { activateWorkspace(existing.id); return; }
   createWorkspace({ title, icon: '📄', viewType: 'docs', viewConfig: {file} });
 }
 
@@ -1827,7 +1751,6 @@ const VIEW_DEFS = {
   browser:   {icon:'🌐', title:'Browser'},
   settings:  {icon:'⚙', title:'Settings'},
   storage:   {icon:'💾', title:'Storage'},
-  dockermgr: { title: 'Docker', icon: '🐳' },
   files:     {icon:'📁', title:'Files'},
   journal:   {icon:'📓', title:'Journal'},
   runbooks:  {icon:'▶',  title:'Runbooks'},
@@ -2097,34 +2020,9 @@ function mountPaneContent(wsId, paneId, viewType, viewConfig, body) {
       break;
 
     case 'storage':
-      body.innerHTML = `
-        <div class="view-storage" id="vstor-${key}">
-          <div class="tab-bar">
-            <button class="tab-btn active" onclick="storTab(this,'${key}','overview')">Overview</button>
-            <button class="tab-btn" onclick="storTab(this,'${key}','filesystem')">Filesystem</button>
-            <button class="tab-btn" onclick="storTab(this,'${key}','diagnostics')">Diagnostics</button>
-            <button class="tab-btn" onclick="storTab(this,'${key}','cleanup')">Cleanup</button>
-          </div>
-          <div id="stor-panel-${key}" class="tab-panel"></div>
-        </div>`;
-      storTab(document.querySelector('#vstor-${key} .tab-btn.active'), '${key}', 'overview');
+      body.innerHTML = `<div class="view-storage"><div style="padding:12px;color:var(--muted);font-size:11px">Loading storage info…</div></div>`;
+      loadStorageView(key);
       break;
-    case 'dockermgr':
-      body.innerHTML = `
-        <div class="view-dockermgr" id="vdkr-${key}">
-          <div class="tab-bar">
-            <button class="tab-btn active" onclick="dkrTab(this,'${key}','overview')">Overview</button>
-            <button class="tab-btn" onclick="dkrTab(this,'${key}','containers')">Containers</button>
-            <button class="tab-btn" onclick="dkrTab(this,'${key}','images')">Images</button>
-            <button class="tab-btn" onclick="dkrTab(this,'${key}','volumes')">Volumes</button>
-            <button class="tab-btn" onclick="dkrTab(this,'${key}','diagnostics')">Diagnostics</button>
-            <button class="tab-btn" onclick="dkrTab(this,'${key}','cleanup')">Cleanup</button>
-          </div>
-          <div id="dkr-panel-${key}" class="tab-panel"></div>
-        </div>`;
-      dkrTab(document.querySelector('#vdkr-${key} .tab-btn.active'), '${key}', 'overview');
-      break;
-
 
     case 'files':
       body.innerHTML = `<div class="view-files">
@@ -2200,52 +2098,6 @@ function mountPaneContent(wsId, paneId, viewType, viewConfig, body) {
     case 'tasks':
       renderTasksView(body);
       break;
-
-    case 'activity':
-      body.innerHTML = `<div class="view-activity" id="vact-${key}">
-        <div class="act-bar">
-          <span style="font-size:11px;color:var(--muted);font-weight:600;letter-spacing:.06em">ACTIVITY LOG</span>
-          <div style="display:flex;gap:6px;align-items:center;margin-left:auto">
-            <select id="act-cat-${key}" class="vs-inp" style="font-size:11px;padding:2px 6px" onchange="loadActivity('${key}')">
-              <option value="">All</option>
-              <option value="container">Docker</option>
-              <option value="note">Notes</option>
-              <option value="startup">Startup</option>
-              <option value="general">General</option>
-            </select>
-            <button class="btn" style="padding:2px 10px;font-size:11px" onclick="loadActivity('${key}')">↻ Refresh</button>
-          </div>
-        </div>
-        <div class="act-note-bar">
-          <input id="act-inp-${key}" class="vs-inp" placeholder="Add a note…" style="flex:1;font-size:11px"
-            onkeydown="if(event.key==='Enter')addActivityNote('${key}')">
-          <button class="btn p" style="padding:2px 10px;font-size:11px" onclick="addActivityNote('${key}')">Note</button>
-        </div>
-        <div id="act-list-${key}" style="overflow-y:auto;flex:1;padding:4px 0"></div>
-      </div>`;
-      loadActivity(key);
-      break;
-
-    case 'receipt':
-      body.innerHTML = `<div class="view-receipt" id="vrec-${key}"><div style="padding:20px;color:var(--muted);font-size:11px">Building server receipt…</div></div>`;
-      loadReceipt(key);
-      break;
-
-    case 'aichat':
-      body.innerHTML = `<div class="view-aichat" id="vaic-${key}">
-        <div class="aic-msgs" id="aic-msgs-${key}"></div>
-        <div class="aic-row">
-          <textarea id="aic-inp-${key}" class="vs-inp" placeholder="Ask about the server… (Shift+Enter = newline)" rows="2" style="flex:1;resize:none;font-size:12px"></textarea>
-          <button class="btn p" style="align-self:flex-end" onclick="sendAiChat('${key}')">Send</button>
-        </div>
-      </div>`;
-      (() => {
-        const ai = document.getElementById(`aic-inp-${key}`);
-        if (ai) ai.addEventListener('keydown', e => { if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();sendAiChat(key);} });
-        aicMsg(key,'system','🤖 Connected to hub AI. Ask about services, containers, disk, alerts — anything server-related.');
-      })();
-      break;
-
     default:
       body.innerHTML = `<div style="display:flex;flex-direction:column;align-items:center;justify-content:center;height:100%;gap:14px;color:var(--muted)">
         <div style="font-size:36px">○</div>
@@ -4609,441 +4461,24 @@ function showToast(msg) {
 }
 
 // ── STORAGE VIEW ──────────────────────────────────────────────────────────────
-
-// ── STORAGE VIEW ─────────────────────────────────────────────────────────────
-let _storCache = null;
-
-async function storGetData() {
-  if (_storCache && Date.now() - _storCache._ts < 30000) return _storCache;
-  const r = await fetch(API+'/api/storage');
-  _storCache = await r.json();
-  _storCache._ts = Date.now();
-  return _storCache;
-}
-
-async function storTab(btn, key, tab) {
-  const bar = btn.closest('.tab-bar');
-  if (bar) bar.querySelectorAll('.tab-btn').forEach(b => b.classList.toggle('active', b === btn));
-  const panel = document.getElementById('stor-panel-'+key);
-  if (!panel) return;
-  panel.innerHTML = '<div class="tab-loading">Loading…</div>';
-  let d;
-  try { d = await storGetData(); } catch(e) {
-    panel.innerHTML = `<div class="tab-err">Failed: ${e.message}</div>`; return;
-  }
-  if (tab === 'overview') storRenderOverview(panel, d);
-  else if (tab === 'filesystem') storRenderFilesystem(panel, d);
-  else if (tab === 'diagnostics') storRenderDiag(panel, d);
-  else if (tab === 'cleanup') storRenderCleanup(panel, d, key);
-}
-
-function storBar(pct) {
-  const cls = pct >= 90 ? 'crit' : pct >= 75 ? 'warn' : 'ok';
-  return `<div class="usage-bar-wrap"><div class="usage-bar ${cls}" style="width:${pct}%"></div></div>`;
-}
-
-function storRenderOverview(panel, d) {
-  const dkr = d.docker || {};
-  const imgs = dkr.images || {};
-  const vols = dkr.volumes || {};
-  const bc   = dkr.build_cache || {};
-  const ctrs = dkr.containers || {};
-
-  // Main disk mounts
-  const mounts = (d.mounts || []).filter(m => m.mount === '/' || m.mount.startsWith('/srv') || m.mount.startsWith('/home') || m.mount.startsWith('/backup'));
-  const mountsHtml = mounts.length ? mounts.map(m => `
-    <div class="stor-mount-row">
-      <div class="stor-mount-info">
-        <span class="stor-mount-path">${m.mount}</span>
-        <span class="stor-mount-src">${m.source}</span>
-      </div>
-      ${storBar(m.pct)}
-      <div class="stor-mount-nums">
-        <span class="stor-used">${m.used_gb}GB used</span>
-        <span class="stor-sep">/</span>
-        <span class="stor-total">${m.total_gb}GB</span>
-        <span class="stor-pct ${m.pct>=90?'crit':m.pct>=75?'warn':''}">${m.pct}%</span>
-      </div>
-    </div>`).join('') : '<div class="tab-empty">No mount data</div>';
-
-  // Docker summary cards
-  const reclaimTotal = [imgs.reclaimable, vols.reclaimable, bc.reclaimable]
-    .map(r => parseFloat((r||'0').replace(/[^0-9.]/g,'')) || 0)
-    .reduce((a,b) => a+b, 0);
-
-  panel.innerHTML = `
-    <div class="stor-section">
-      <div class="stor-section-title">Filesystem</div>
-      ${mountsHtml}
-      ${d.unattached?.length ? `<div class="stor-unattached">
-        <span class="badge-warn">Unattached disk detected:</span>
-        ${d.unattached.map(u => `<span class="stor-disk-name">${u.path} (${u.size})</span>`).join(', ')}
-        — not mounted, not in use
-      </div>` : ''}
-    </div>
-    <div class="stor-section">
-      <div class="stor-section-title">Docker Space</div>
-      <div class="stor-dkr-grid">
-        <div class="stor-dkr-card">
-          <div class="stor-dkr-num">${imgs.total || '—'}</div>
-          <div class="stor-dkr-lbl">Images</div>
-          <div class="stor-dkr-sub">${imgs.size || '—'} total · ${imgs.reclaimable || '—'} reclaimable</div>
-        </div>
-        <div class="stor-dkr-card">
-          <div class="stor-dkr-num">${ctrs.active || '—'} / ${ctrs.total || '—'}</div>
-          <div class="stor-dkr-lbl">Containers</div>
-          <div class="stor-dkr-sub">${ctrs.size || '—'} logs · ${ctrs.reclaimable || '—'} reclaimable</div>
-        </div>
-        <div class="stor-dkr-card">
-          <div class="stor-dkr-num">${vols.active || '—'} / ${vols.total || '—'}</div>
-          <div class="stor-dkr-lbl">Volumes</div>
-          <div class="stor-dkr-sub">${vols.size || '—'} total · ${vols.reclaimable || '—'} reclaimable</div>
-        </div>
-        <div class="stor-dkr-card ${reclaimTotal > 5 ? 'highlight' : ''}">
-          <div class="stor-dkr-num">~${reclaimTotal.toFixed(1)}GB</div>
-          <div class="stor-dkr-lbl">Reclaimable</div>
-          <div class="stor-dkr-sub">${reclaimTotal > 5 ? '⚡ Cleanup will free significant space' : 'Not urgent'}</div>
-        </div>
-      </div>
-    </div>
-    ${d.snap_count ? `<div class="stor-section"><div class="stor-section-title">Other</div>
-      <div class="stor-info-row"><span class="stor-info-label">Snap packages</span><span>${d.snap_count} installed</span></div>
-      ${d.log_size ? `<div class="stor-info-row"><span class="stor-info-label">Log directory</span><span>${d.log_size}</span></div>` : ''}
-    </div>` : ''}`;
-}
-
-function storRenderFilesystem(panel, d) {
-  const all = d.mounts || [];
-  panel.innerHTML = `
-    <div class="stor-section">
-      <div class="stor-section-title">All Mounts</div>
-      <div class="fs-table-wrap">
-        <table class="data-table">
-          <thead><tr><th>Mount</th><th>Source</th><th>Total</th><th>Used</th><th>Avail</th><th>Usage</th></tr></thead>
-          <tbody>${all.map(m => `<tr>
-            <td class="mono-sm">${m.mount}</td>
-            <td class="mono-sm muted-sm">${m.source}</td>
-            <td class="num-r">${m.total_gb}G</td>
-            <td class="num-r">${m.used_gb}G</td>
-            <td class="num-r">${m.avail_gb}G</td>
-            <td class="pct-cell">
-              ${storBar(m.pct)}
-              <span class="${m.pct>=90?'pct-crit':m.pct>=75?'pct-warn':'pct-ok'}">${m.pct}%</span>
-            </td>
-          </tr>`).join('')}</tbody>
-        </table>
-      </div>
-    </div>
-    <div class="stor-section">
-      <div class="stor-section-title">Context</div>
-      <div class="edu-box">
-        <p>Docker stores all container data (images, volumes, build cache) at <code>/var/lib/docker</code> on the root filesystem. This is why root fills up as you run more services.</p>
-        <p>The root LV is currently only 100GB of an available 1.8TB physical volume. Expand with: <code>sudo lvextend -L 1T /dev/ubuntu-vg/ubuntu-lv && sudo resize2fs /dev/ubuntu-vg/ubuntu-lv</code></p>
-      </div>
-    </div>`;
-}
-
-function storRenderDiag(panel, d) {
-  const mounts = d.mounts || [];
-  const root = mounts.find(m => m.mount === '/') || {};
-  const pct = root.pct || 0;
-  const findings = [];
-  if (pct >= 90) findings.push({level:'error', msg:`Root disk at ${pct}% — critical. Docker may stop working.`, fix:'Run Cleanup → Prune All immediately.'});
-  else if (pct >= 80) findings.push({level:'warn', msg:`Root disk at ${pct}% — getting tight.`, fix:'Run Cleanup → Prune Images to recover space.'});
-  else findings.push({level:'ok', msg:`Root disk at ${pct}% — healthy.`, fix:''});
-
-  const dkr = d.docker || {};
-  const imgs = dkr.images || {};
-  const vols = dkr.volumes || {};
-  const bc   = dkr.build_cache || {};
-
-  const imgRec = parseFloat((imgs.reclaimable||'0').replace(/[^0-9.]/g,'')) || 0;
-  if (imgRec > 5) findings.push({level:'warn', msg:`${imgs.reclaimable} reclaimable from images.`, fix:'Go to Cleanup → Prune Images.'});
-  const volRec = parseFloat((vols.reclaimable||'0').replace(/[^0-9.]/g,'')) || 0;
-  if (volRec > 1) findings.push({level:'info', msg:`${vols.reclaimable} reclaimable from orphaned volumes.`, fix:'Go to Cleanup → Prune Volumes.'});
-  const bcRec = parseFloat((bc.reclaimable||'0').replace(/[^0-9.]/g,'')) || 0;
-  if (bcRec > 2) findings.push({level:'info', msg:`${bc.reclaimable} reclaimable from build cache.`, fix:'Go to Cleanup → Prune Build Cache.'});
-  if (d.snap_count > 0) findings.push({level:'info', msg:`${d.snap_count} snap packages installed — snaps mount their own loop devices.`, fix:'Consider removing unused snaps: sudo snap remove <name>.'});
-
-  panel.innerHTML = `
-    <div class="stor-section">
-      <div class="stor-section-title">Diagnostics</div>
-      ${findings.map(f => `<div class="diag-row level-${f.level}">
-        <div class="diag-icon">${f.level==='error'?'🔴':f.level==='warn'?'🟡':f.level==='info'?'🔵':'🟢'}</div>
-        <div class="diag-body">
-          <div class="diag-msg">${f.msg}</div>
-          ${f.fix ? `<div class="diag-fix">→ ${f.fix}</div>` : ''}
-        </div>
-      </div>`).join('')}
-    </div>
-    <div class="stor-section">
-      <div class="stor-section-title">Volume Expansion Wizard</div>
-      <div class="edu-box">
-        <p><strong>Your server has 1.8TB physical volume but only 100GB logical volume.</strong> You have ~1.7TB free inside the volume group — no new hardware needed.</p>
-        <p>Two commands to expand. Run these directly on the server (requires sudo):</p>
-        <code class="block-code">sudo lvextend -L 1T /dev/ubuntu-vg/ubuntu-lv</code>
-        <code class="block-code">sudo resize2fs /dev/ubuntu-vg/ubuntu-lv</code>
-        <p>No reboot needed. No services interrupted. Takes about 2 seconds.</p>
-      </div>
-    </div>`;
-}
-
-function storRenderCleanup(panel, d, key) {
-  panel.innerHTML = `
-    <div class="stor-section">
-      <div class="stor-section-title">Docker Cleanup</div>
-      <div class="cleanup-edu">Docker accumulates old images, dangling volumes, and build cache over time. Pruning removes only unused items — running containers and their data are never touched.</div>
-      <div class="cleanup-grid">
-        <div class="cleanup-card">
-          <div class="cleanup-card-hdr">🗑 Images</div>
-          <div class="cleanup-card-desc">Remove images not used by any container.<br>Reclaimable: <strong>${(d.docker?.images?.reclaimable||'?')}</strong></div>
-          <button class="btn warn-btn" onclick="runStorPrune('images','${key}',this)">Prune Images</button>
-        </div>
-        <div class="cleanup-card">
-          <div class="cleanup-card-hdr">📦 Volumes</div>
-          <div class="cleanup-card-desc">Remove volumes with no container attached.<br>Reclaimable: <strong>${(d.docker?.volumes?.reclaimable||'?')}</strong></div>
-          <button class="btn warn-btn" onclick="runStorPrune('volumes','${key}',this)">Prune Volumes</button>
-        </div>
-        <div class="cleanup-card">
-          <div class="cleanup-card-hdr">🧱 Build Cache</div>
-          <div class="cleanup-card-desc">Clear intermediate build layers.<br>Reclaimable: <strong>${(d.docker?.build_cache?.reclaimable||'?')}</strong></div>
-          <button class="btn warn-btn" onclick="runStorPrune('buildcache','${key}',this)">Prune Cache</button>
-        </div>
-        <div class="cleanup-card danger-card">
-          <div class="cleanup-card-hdr">⚡ Prune Everything</div>
-          <div class="cleanup-card-desc">Images + volumes + cache + stopped containers. Maximum recovery. Irreversible.</div>
-          <button class="btn danger-btn" onclick="runStorPrune('system','${key}',this)">Prune All</button>
-        </div>
-      </div>
-      <div id="prune-out-${key}" class="prune-output"></div>
-    </div>`;
-}
-
-async function runStorPrune(type, key, btn) {
-  const out = document.getElementById('prune-out-'+key);
-  btn.disabled = true; btn.textContent = 'Pruning…';
-  if (out) out.innerHTML = '<div class="prune-running">Running prune — this may take a moment…</div>';
-  try {
-    const r = await fetch(API+'/api/docker/prune', {
-      method:'POST', headers:{'Content-Type':'application/json','X-Hub-Token':HUB_TOKEN},
-      body: JSON.stringify({type})
-    });
-    const d = await r.json();
-    if (out) out.innerHTML = `<pre class="prune-pre">${d.output||'Done.'}</pre>`;
-    _storCache = null; // invalidate cache
-    btn.textContent = '✓ Done';
-  } catch(e) {
-    if (out) out.innerHTML = `<div class="prune-err">Error: ${e.message}</div>`;
-    btn.disabled = false; btn.textContent = 'Retry';
-  }
-}
-
-// ── DOCKER MANAGEMENT VIEW ────────────────────────────────────────────────────
-let _dkrImagesCache = null, _dkrVolsCache = null, _dkrStatsCache = null, _dkrDiagCache = null;
-
-async function dkrTab(btn, key, tab) {
-  const bar = btn.closest('.tab-bar');
-  if (bar) bar.querySelectorAll('.tab-btn').forEach(b => b.classList.toggle('active', b === btn));
-  const panel = document.getElementById('dkr-panel-'+key);
-  if (!panel) return;
-  panel.innerHTML = '<div class="tab-loading">Loading…</div>';
-  if (tab === 'overview') await dkrRenderOverview(panel, key);
-  else if (tab === 'containers') await dkrRenderContainers(panel, key);
-  else if (tab === 'images') await dkrRenderImages(panel, key);
-  else if (tab === 'volumes') await dkrRenderVolumes(panel, key);
-  else if (tab === 'diagnostics') await dkrRenderDiag(panel, key);
-  else if (tab === 'cleanup') storRenderCleanup(panel, await storGetData(), key);
-}
-
-async function dkrRenderOverview(panel, key) {
-  let ctrs = [], diag = {findings:[]};
-  try {
-    const r = await fetch(API+'/api/containers'); ctrs = (await r.json()) || [];
-  } catch(e) {}
-  try {
-    const r = await fetch(API+'/api/docker/diagnostics'); diag = await r.json();
-  } catch(e) {}
-
-  const running = ctrs.filter(c => c.running);
-  const stopped = ctrs.filter(c => !c.running);
-  const issues = diag.findings?.filter(f => f.level !== 'ok') || [];
-
-  panel.innerHTML = `
-    <div class="dkr-overview">
-      <div class="dkr-stat-row">
-        <div class="dkr-stat"><span class="dkr-num">${running.length}</span><span class="dkr-lbl">Running</span></div>
-        <div class="dkr-stat"><span class="dkr-num ${stopped.length>0?'warn-num':''}">${stopped.length}</span><span class="dkr-lbl">Stopped</span></div>
-        <div class="dkr-stat"><span class="dkr-num ${issues.length>0?'warn-num':''}">${issues.length}</span><span class="dkr-lbl">Issues</span></div>
-      </div>
-      ${issues.length ? `<div class="dkr-issues">
-        ${issues.map(f=>`<div class="diag-row level-${f.level}">
-          <div class="diag-icon">${f.level==='error'?'🔴':f.level==='warn'?'🟡':'🔵'}</div>
-          <div class="diag-body"><div class="diag-msg"><strong>${f.subject}</strong> — ${f.message}</div>
-          <div class="diag-fix">→ ${f.action}</div></div>
-        </div>`).join('')}
-      </div>` : '<div class="dkr-healthy">✅ No issues detected — all containers healthy</div>'}
-      <div class="server-map-wrap">
-        <div class="server-map-title">Server Topology</div>
-        ${buildServerMap(ctrs)}
-      </div>
-    </div>`;
-}
-
-function buildServerMap(ctrs) {
-  const running = ctrs.filter(c => c.running);
-  // Group by compose project prefix
-  const groups = {};
-  running.forEach(c => {
-    const parts = c.name.split('-');
-    const grp = parts.length > 2 ? parts.slice(0,2).join('-') : parts[0];
-    if (!groups[grp]) groups[grp] = [];
-    groups[grp].push(c);
-  });
-  const grpKeys = Object.keys(groups).sort();
-  const cols = Math.min(4, grpKeys.length);
-  return `<div class="server-map" style="--map-cols:${cols}">
-    <div class="map-server-node">
-      <div class="map-server-icon">🖥</div>
-      <div class="map-server-label">fks-services</div>
-      <div class="map-server-sub">7000 · hub</div>
-    </div>
-    <div class="map-groups">
-      ${grpKeys.map(g => `
-        <div class="map-group">
-          <div class="map-group-label">${g}</div>
-          ${groups[g].map(c => {
-            const portStr = c.ports?.length ? c.ports.slice(0,2).join(' ') : '';
-            return `<div class="map-ctr" title="${c.name}${portStr?' · '+portStr:''}">
-              <span class="map-ctr-dot ${c.running?'up':'down'}"></span>
-              <span class="map-ctr-name">${c.name.replace(g+'-','')}</span>
-              ${portStr?`<span class="map-ctr-port">${portStr}</span>`:''}
-            </div>`;
-          }).join('')}
-        </div>`).join('')}
-    </div>
-  </div>`;
-}
-
-async function dkrRenderContainers(panel, key) {
-  let ctrs = [], stats = {stats:[]};
-  try { const r = await fetch(API+'/api/containers'); ctrs = (await r.json())||[]; } catch(e) {}
-  try { const r = await fetch(API+'/api/docker/stats'); stats = await r.json(); } catch(e) {}
-  const statMap = {};
-  (stats.stats||[]).forEach(s => { statMap[s.name] = s; });
-
-  panel.innerHTML = `
-    <div class="ctr-bar">
-      <input id="ctr-filter-${key}" class="vs-inp" placeholder="Filter containers…" style="font-size:11px;flex:1" oninput="dkrFilterCtrs('${key}')">
-      <button class="btn" style="padding:2px 8px;font-size:11px" onclick="dkrRenderContainers(document.getElementById('dkr-panel-${key}'),'${key}')">↻</button>
-    </div>
-    <div class="ctr-table-wrap" id="ctr-list-${key}">
-      ${ctrs.map(c => {
-        const s = statMap[c.name] || {};
-        const ports = (c.ports||[]).slice(0,3).join(' ');
-        return `<div class="ctr-row ${c.running?'':'ctr-stopped'}" data-cname="${c.name}">
-          <span class="ctr-dot ${c.running?'up':'down'}"></span>
-          <span class="ctr-name">${c.name}</span>
-          <span class="ctr-ports mono-sm muted-sm">${ports}</span>
-          ${s.cpu ? `<span class="ctr-stat">${s.cpu}</span><span class="ctr-stat">${s.mem_pct}</span>` : '<span class="ctr-stat muted-sm">—</span><span class="ctr-stat muted-sm">—</span>'}
-          <div class="ctr-acts">
-            <button class="mini-btn" onclick="dkrAction('${key}','${c.name}','restart',this)" title="Restart">↺</button>
-            ${c.running
-              ? `<button class="mini-btn warn-mini" onclick="dkrAction('${key}','${c.name}','stop',this)" title="Stop">■</button>`
-              : `<button class="mini-btn ok-mini" onclick="dkrAction('${key}','${c.name}','start',this)" title="Start">▶</button>`}
-          </div>
-        </div>`;
-      }).join('')}
-    </div>`;
-}
-
-function dkrFilterCtrs(key) {
-  const q = document.getElementById('ctr-filter-'+key)?.value.toLowerCase()||'';
-  document.querySelectorAll(`#ctr-list-${key} .ctr-row`).forEach(r => {
-    r.style.display = r.dataset.cname?.toLowerCase().includes(q) ? '' : 'none';
-  });
-}
-
-async function dkrAction(key, name, action, btn) {
-  const orig = btn.textContent;
-  btn.disabled = true; btn.textContent = '…';
-  try {
-    await fetch(`${API}/api/docker/action/${name}`, {
-      method:'POST', headers:{'Content-Type':'application/json','X-Hub-Token':HUB_TOKEN},
-      body:JSON.stringify({action})
-    });
-    showToast(`${name}: ${action} sent`);
-    setTimeout(() => dkrRenderContainers(document.getElementById('dkr-panel-'+key), key), 1500);
-  } catch(e) {
-    btn.disabled = false; btn.textContent = orig;
-    showToast('Error: '+e.message);
-  }
-}
-
-async function dkrRenderImages(panel, key) {
-  let d = {images:[], count:0};
-  try { const r = await fetch(API+'/api/docker/images'); d = await r.json(); } catch(e) {}
-  panel.innerHTML = `
-    <div class="stor-section">
-      <div class="stor-section-title">${d.count} Images</div>
-      <div class="fs-table-wrap">
-        <table class="data-table">
-          <thead><tr><th>Image</th><th>Tag</th><th>ID</th><th>Size</th><th>Age</th></tr></thead>
-          <tbody>${(d.images||[]).map(i=>`<tr>
-            <td class="mono-sm">${i.repo}</td>
-            <td class="mono-sm muted-sm">${i.tag}</td>
-            <td class="mono-sm muted-sm">${i.id}</td>
-            <td class="num-r">${i.size}</td>
-            <td class="muted-sm">${i.created_since}</td>
-          </tr>`).join('')}</tbody>
-        </table>
-      </div>
-    </div>`;
-}
-
-async function dkrRenderVolumes(panel, key) {
-  let d = {volumes:[], count:0};
-  try { const r = await fetch(API+'/api/docker/volumes'); d = await r.json(); } catch(e) {}
-  const orphaned = (d.volumes||[]).filter(v => v.reclaimable);
-  panel.innerHTML = `
-    <div class="stor-section">
-      <div class="stor-section-title">${d.count} Volumes · ${orphaned.length} orphaned</div>
-      <div class="fs-table-wrap">
-        <table class="data-table">
-          <thead><tr><th>Volume</th><th>Links</th><th>Size</th><th>Status</th></tr></thead>
-          <tbody>${(d.volumes||[]).map(v=>`<tr>
-            <td class="mono-sm">${v.name}</td>
-            <td class="num-r">${v.links}</td>
-            <td class="num-r">${v.size}</td>
-            <td>${v.reclaimable?'<span class="badge-warn">orphaned</span>':'<span class="badge-ok">in use</span>'}</td>
-          </tr>`).join('')}</tbody>
-        </table>
-      </div>
-    </div>`;
-}
-
-async function dkrRenderDiag(panel, key) {
-  let d = {findings:[]};
-  try { const r = await fetch(API+'/api/docker/diagnostics'); d = await r.json(); } catch(e) {}
-  panel.innerHTML = `
-    <div class="stor-section">
-      <div class="stor-section-title">Docker Diagnostics</div>
-      ${(d.findings||[]).map(f => `<div class="diag-row level-${f.level}">
-        <div class="diag-icon">${f.level==='error'?'🔴':f.level==='warn'?'🟡':f.level==='info'?'🔵':'🟢'}</div>
-        <div class="diag-body">
-          <div class="diag-msg"><strong>${f.subject}</strong> — ${f.message}</div>
-          ${f.action ? `<div class="diag-fix">→ ${f.action}</div>` : ''}
-          ${f.category ? `<span class="diag-tag">${f.category}</span>` : ''}
-        </div>
-      </div>`).join('')}
-      <div class="diag-meta muted-sm">Generated: ${d.generated||'—'}</div>
-    </div>`;
-}
-
-// Legacy compat
 async function loadStorageView(key) {
-  storTab(document.querySelector('#vstor-'+key+' .tab-btn.active') || {closest:()=>null}, key, 'overview');
+  // Find the view-storage div — it's the only one in the active pane for this key
+  // The pane data-pane attribute contains the paneId part of key (after wsId-)
+  const paneId = key.split('-').slice(1).join('-');
+  const paneEl = document.querySelector(`[data-pane="${paneId}"]`);
+  const el = paneEl ? paneEl.querySelector('.view-storage') : null;
+  if(!el) return;
+  try {
+    const r = await fetch(API+'/api/storage'); const d = await r.json();
+    el.innerHTML = `
+      <div class="stor-block"><div class="stor-hdr">Disk Usage</div><div class="stor-pre">${d.disk||'unavailable'}</div></div>
+      <div class="stor-block"><div class="stor-hdr">Docker System</div><div class="stor-pre">${d.docker_df||'unavailable'}</div></div>
+      <div class="stor-block"><div class="stor-hdr">Key Directories</div><div class="stor-pre">${d.dirs||'unavailable'}</div></div>
+      <div class="stor-block"><div class="stor-hdr">Docker Volumes</div><div class="stor-pre">${d.volumes||'none'}</div></div>`;
+  } catch(e) {
+    el.innerHTML = `<div style="padding:12px;color:var(--red);font-size:11px">Failed to load storage info: ${e.message}</div>`;
+  }
 }
-
 
 // ── FILE MANAGER ──────────────────────────────────────────────────────────────
 async function loadFiles(key, path) {
@@ -5214,9 +4649,6 @@ const GUIDE_FEATURES = [
   { icon:'📁', name:'Files',          desc:'Browse the server filesystem — list, inspect any path on the server.', tags:['tools'], action:()=>openView('files') },
   { icon:'💾', name:'Storage',        desc:'Disk usage, Docker volumes, key directory sizes.', tags:['monitoring'], action:()=>openView('storage') },
   { icon:'📓', name:'Journal',        desc:'Persistent activity log — every action timestamped.', tags:['ops'], action:()=>openView('journal') },
-  { icon:'📜', name:'Activity Log',   desc:'Docker events, hub startups, notes — unified server event stream.', tags:['ops','monitoring'], action:()=>openView('activity') },
-  { icon:'🧾', name:'Server Receipt', desc:'Full snapshot: hostname, IPs, OS, disk, containers, sync status.', tags:['monitoring','ops'], action:()=>openView('receipt') },
-  { icon:'🤖', name:'Hub AI Chat',    desc:'Hub-native AI — ask about your server with full context auto-loaded.', tags:['ai'], action:()=>openView('aichat') },
   { icon:'📚', name:'Docs',           desc:'Markdown guides synced from ~/guides/ on the server.', tags:['docs'], action:()=>setCategory('docs') },
   { icon:'🤖', name:'AI Chat',        desc:'Talk to Ollama models via Open WebUI — CPU-based, toggle on-demand.', tags:['ai'], action:()=>openView('chat') },
   { icon:'⚑',  name:'Issues',         desc:'Tracked known issues — per-service bug log from issues/ folder.', tags:['ops'], action:()=>openView('issues') },
@@ -5479,7 +4911,6 @@ async function loadPortsView(key) {
         ${statsHtml}
       </div>
       <div class="pm-topbar-right">
-        <a class="btn-sm" href="${API}/cutsheet" target="_blank" title="Open live cut sheet in new tab" style="text-decoration:none">📄 Cut Sheet</a>
         <button class="btn-sm" onclick="rescanPorts('${key}')">⟳ Rescan</button>
       </div>
     </div>
@@ -5986,197 +5417,6 @@ function renderTasksView(body) {
         </div>`;
     }).join('')}
   </div>`;
-}
-
-// ── SERVER INTELLIGENCE LAYER ─────────────────────────────────────────────────
-
-// Activity Log
-async function loadActivity(key) {
-  const cat = document.getElementById(`act-cat-${key}`)?.value || '';
-  const list = document.getElementById(`act-list-${key}`);
-  if (!list) return;
-  list.innerHTML = `<div style="padding:8px 16px;color:var(--muted);font-size:11px">Loading…</div>`;
-  try {
-    const r = await fetch(`/api/activity?limit=200${cat ? '&category='+cat : ''}`);
-    const d = await r.json();
-    if (!d.events || d.events.length === 0) {
-      list.innerHTML = `<div style="padding:20px;color:var(--muted);font-size:11px;text-align:center">No events yet.</div>`;
-      return;
-    }
-    const LEVEL_COLOR = { info:'var(--muted)', warn:'#f59e0b', error:'#ef4444', debug:'var(--muted2)' };
-    const CAT_ICON = { container:'🐋', startup:'🚀', note:'📝', general:'⚙', image:'📦' };
-    list.innerHTML = d.events.map(ev => {
-      const lvlClr = LEVEL_COLOR[ev.level] || 'var(--muted)';
-      const catIco = CAT_ICON[ev.category] || '•';
-      const ts = ev.ts ? ev.ts.replace('T',' ') : '';
-      return `<div class="act-row">
-        <span class="act-ico">${catIco}</span>
-        <div class="act-body">
-          <div class="act-action">${ev.action}</div>
-          ${ev.detail ? `<div class="act-detail">${ev.detail}</div>` : ''}
-        </div>
-        <div class="act-meta">
-          <span class="act-src">${ev.source}</span>
-          <span class="act-ts">${ts}</span>
-          <span class="act-lvl" style="color:${lvlClr}">${ev.level}</span>
-        </div>
-      </div>`;
-    }).join('');
-  } catch(e) {
-    list.innerHTML = `<div style="padding:20px;color:#ef4444;font-size:11px">Failed to load: ${e.message}</div>`;
-  }
-}
-
-async function addActivityNote(key) {
-  const inp = document.getElementById(`act-inp-${key}`);
-  if (!inp || !inp.value.trim()) return;
-  const note = inp.value.trim();
-  inp.value = '';
-  try {
-    await fetch('/api/activity', {
-      method: 'POST',
-      headers: {'Content-Type':'application/json'},
-      body: JSON.stringify({ action: note, source: 'user', category: 'note', level: 'info' })
-    });
-    loadActivity(key);
-  } catch(e) { showToast('Note failed: ' + e.message); }
-}
-
-// Server Receipt
-async function loadReceipt(key) {
-  const el = document.getElementById(`vrec-${key}`);
-  if (!el) return;
-  try {
-    const r = await fetch('/api/receipt');
-    const d = await r.json();
-    const syncBadge = d.sync_issues?.length
-      ? `<span style="background:#ef4444;color:#fff;border-radius:4px;padding:1px 7px;font-size:10px">${d.sync_issues.length} issue${d.sync_issues.length>1?'s':''}</span>`
-      : `<span style="background:#22c55e;color:#fff;border-radius:4px;padding:1px 7px;font-size:10px">All good</span>`;
-
-    el.innerHTML = `<div class="receipt-wrap">
-      <div class="receipt-header">
-        <span class="receipt-title">🖥 Server Receipt</span>
-        <span style="font-size:10px;color:var(--muted)">Generated ${d.generated}</span>
-        <button class="btn" style="padding:2px 10px;font-size:11px;margin-left:auto" onclick="loadReceipt('${key}')">↻ Refresh</button>
-      </div>
-
-      <div class="receipt-grid">
-        <div class="rec-card">
-          <div class="rec-card-title">Identity</div>
-          <div class="rec-row"><span class="rec-label">Hostname</span><span class="rec-val mono">${d.hostname}</span></div>
-          <div class="rec-row"><span class="rec-label">LAN IP</span><span class="rec-val mono">${d.lan_ip}</span></div>
-          ${d.tailscale ? `<div class="rec-row"><span class="rec-label">Tailscale</span><span class="rec-val mono">${d.tailscale}</span></div>` : ''}
-          <div class="rec-row"><span class="rec-label">Hub URL</span><a class="rec-link" href="${d.hub_url}" target="_blank">${d.hub_url}</a></div>
-        </div>
-
-        <div class="rec-card">
-          <div class="rec-card-title">System</div>
-          <div class="rec-row"><span class="rec-label">OS</span><span class="rec-val">${d.os}</span></div>
-          <div class="rec-row"><span class="rec-label">Uptime</span><span class="rec-val">${d.uptime}</span></div>
-          <div class="rec-row"><span class="rec-label">RAM used</span><span class="rec-val">${d.ram.used} / ${d.ram.total}</span></div>
-          <div class="rec-row"><span class="rec-label">Containers</span><span class="rec-val">${d.container_count} running ${syncBadge}</span></div>
-        </div>
-      </div>
-
-      <div class="rec-section-title">💾 Disk</div>
-      <div class="rec-table-wrap"><table class="rec-table">
-        <tr><th>Mount</th><th>Size</th><th>Used</th><th>%</th></tr>
-        ${(d.disks||[]).map(dk => {
-          const pct = parseInt(dk.pct)||0;
-          const clr = pct>92?'#ef4444':pct>85?'#f59e0b':'#22c55e';
-          return `<tr><td class="mono">${dk.mount}</td><td>${dk.size}</td><td>${dk.used}</td>
-            <td><span style="color:${clr};font-weight:600">${dk.pct}</span></td></tr>`;
-        }).join('')}
-      </table></div>
-
-      <div class="rec-section-title">🐋 Containers</div>
-      <div class="rec-table-wrap"><table class="rec-table">
-        <tr><th>Name</th><th>Status</th><th>Ports</th></tr>
-        ${(d.containers||[]).map(c => {
-          const up = c.status.toLowerCase().startsWith('up');
-          return `<tr>
-            <td class="mono">${c.name}</td>
-            <td style="color:${up?'#22c55e':'#ef4444'}">${c.status}</td>
-            <td class="mono" style="font-size:10px">${c.ports}</td>
-          </tr>`;
-        }).join('')}
-      </table></div>
-
-      ${d.sync_issues?.length ? `
-      <div class="rec-section-title">⚠ Sync Issues</div>
-      <div class="rec-table-wrap"><table class="rec-table">
-        <tr><th>Service</th><th>Port</th><th>Issue</th></tr>
-        ${d.sync_issues.map(i=>`<tr>
-          <td>${i.service}</td><td class="mono">${i.port}</td>
-          <td style="color:#f59e0b">${i.issue}</td>
-        </tr>`).join('')}
-      </table></div>` : ''}
-
-      <div class="rec-section-title">📜 Recent Activity (last 20)</div>
-      <div style="display:flex;flex-direction:column;gap:3px;padding:4px 0">
-        ${(d.recent_activity||[]).map(ev=>`
-          <div style="display:flex;gap:8px;font-size:11px;padding:3px 0;border-bottom:1px solid var(--border)">
-            <span style="color:var(--muted);flex-shrink:0;min-width:140px">${(ev.ts||'').replace('T',' ')}</span>
-            <span style="color:var(--fg);flex:1">${ev.action}</span>
-            <span style="color:var(--muted2)">${ev.source}</span>
-          </div>`).join('')}
-      </div>
-    </div>`;
-  } catch(e) {
-    el.innerHTML = `<div style="padding:20px;color:#ef4444;font-size:12px">Failed: ${e.message}</div>`;
-  }
-}
-
-// AI Chat (hub-native, talks to the /api/run + /api/receipt combo, or direct AI route)
-const _aicHistory = {};
-function aicMsg(key, role, text) {
-  const el = document.getElementById(`aic-msgs-${key}`);
-  if (!el) return;
-  if (!_aicHistory[key]) _aicHistory[key] = [];
-  _aicHistory[key].push({ role, text, ts: new Date().toISOString() });
-  const BUBBLE = {
-    system: `<div class="aic-bubble aic-sys"><span class="aic-role">SYS</span><span class="aic-text">${text}</span></div>`,
-    user:   `<div class="aic-bubble aic-usr"><span class="aic-role">YOU</span><span class="aic-text">${text}</span></div>`,
-    ai:     `<div class="aic-bubble aic-ai"><span class="aic-role">AI</span><span class="aic-text">${text}</span></div>`,
-  };
-  el.insertAdjacentHTML('beforeend', BUBBLE[role] || BUBBLE.ai);
-  el.scrollTop = el.scrollHeight;
-}
-
-async function sendAiChat(key) {
-  const inp = document.getElementById(`aic-inp-${key}`);
-  if (!inp || !inp.value.trim()) return;
-  const q = inp.value.trim();
-  inp.value = '';
-  aicMsg(key, 'user', q);
-
-  // Build context from receipt
-  let ctx = '';
-  try {
-    const r = await fetch('/api/receipt');
-    const d = await r.json();
-    ctx = `Server: ${d.hostname} | LAN: ${d.lan_ip}${d.tailscale?' | TS: '+d.tailscale:''} | OS: ${d.os} | Uptime: ${d.uptime} | RAM: ${d.ram.used}/${d.ram.total} | Containers: ${d.container_count}`;
-    if (d.sync_issues?.length) ctx += ` | Issues: ${d.sync_issues.map(i=>i.service+'='+i.issue).join(', ')}`;
-  } catch(_) {}
-
-  // Call hub AI endpoint
-  try {
-    const r = await fetch('/api/ai/chat', {
-      method: 'POST',
-      headers: {'Content-Type':'application/json'},
-      body: JSON.stringify({ message: q, context: ctx, history: (_aicHistory[key]||[]).slice(-10) })
-    });
-    const d = await r.json();
-    if (d.ok && d.reply) {
-      aicMsg(key, 'ai', d.reply);
-    } else if (d.error === 'no_ai_configured') {
-      aicMsg(key, 'ai', '⚠ No AI provider configured. Add an API key in Settings → AI Config, or start Ollama on the server.');
-    } else {
-      aicMsg(key, 'ai', '⚠ ' + (d.error || 'No response'));
-    }
-  } catch(e) {
-    aicMsg(key, 'ai', '⚠ Request failed: ' + e.message);
-  }
 }
 
 // ── MOBILE NAV ────────────────────────────────────────────────────────────────

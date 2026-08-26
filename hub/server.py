@@ -1165,6 +1165,250 @@ def build_context():
         "generated":             receipt.get("generated", datetime.now().isoformat(timespec="seconds")),
     }
 
+
+# ── Storage + Docker management APIs ──────────────────────────────────────────
+
+def api_storage_info():
+    """Disk breakdown + Docker usage combined."""
+    mounts = []
+    try:
+        out = subprocess.check_output(
+            ['df', '-BG', '--output=source,target,size,used,avail,pcent'],
+            text=True, stderr=subprocess.DEVNULL).splitlines()[1:]
+        for line in out:
+            p = line.split()
+            if len(p) >= 6 and not any(x in p[1] for x in ['docker','overlay','tmpfs','udev','loop','/snap']):
+                mounts.append({
+                    'source': p[0], 'mount': p[1],
+                    'total_gb': int(p[2].rstrip('G')),
+                    'used_gb':  int(p[3].rstrip('G')),
+                    'avail_gb': int(p[4].rstrip('G')),
+                    'pct':      int(p[5].rstrip('%')),
+                })
+    except Exception: pass
+
+    unattached = []
+    try:
+        out = subprocess.check_output(
+            ['lsblk','-dn','-o','NAME,SIZE,TYPE'],
+            text=True, stderr=subprocess.DEVNULL).splitlines()
+        for line in out:
+            p = line.split()
+            if len(p) >= 3 and p[2] == 'disk':
+                check = subprocess.check_output(
+                    ['lsblk','-n','-o','MOUNTPOINT', '/dev/' + p[0]],
+                    text=True, stderr=subprocess.DEVNULL).strip()
+                if not check:
+                    unattached.append({'name': p[0], 'size': p[1], 'path': '/dev/' + p[0]})
+    except Exception: pass
+
+    docker_df = {'images': {}, 'containers': {}, 'volumes': {}, 'build_cache': {}}
+    try:
+        raw = subprocess.check_output(
+            ['docker', 'system', 'df'],
+            text=True, stderr=subprocess.DEVNULL).splitlines()
+        for line in raw[1:]:
+            p = line.split()
+            if not p: continue
+            if 'Image' in line:
+                docker_df['images'] = {'total': p[1], 'active': p[2], 'size': p[3], 'reclaimable': ' '.join(p[4:])}
+            elif 'Container' in line:
+                docker_df['containers'] = {'total': p[1], 'active': p[2], 'size': p[3], 'reclaimable': ' '.join(p[4:])}
+            elif 'Volume' in line:
+                docker_df['volumes'] = {'total': p[1], 'active': p[2], 'size': p[3], 'reclaimable': ' '.join(p[4:])}
+            elif 'Build' in line or 'Cache' in line:
+                docker_df['build_cache'] = {'total': p[1], 'active': p[2], 'size': p[3], 'reclaimable': ' '.join(p[4:])}
+    except Exception: pass
+
+    snap_count = 0
+    try:
+        snap_count = int(subprocess.check_output(
+            ['bash', '-c', 'snap list 2>/dev/null | tail -n +2 | wc -l'],
+            text=True).strip())
+    except Exception: pass
+
+    log_size = ''
+    try:
+        log_size = subprocess.check_output(
+            ['du', '-sh', '/var/log'], text=True, stderr=subprocess.DEVNULL).split()[0]
+    except Exception: pass
+
+    return {
+        'mounts': mounts,
+        'unattached': unattached,
+        'docker': docker_df,
+        'snap_count': snap_count,
+        'log_size': log_size,
+        'generated': datetime.now().isoformat(timespec='seconds'),
+    }
+
+
+def api_docker_images():
+    """Docker images list with metadata."""
+    images = []
+    try:
+        out = subprocess.check_output(
+            ['docker', 'images', '--format',
+             '{{.Repository}}\t{{.Tag}}\t{{.ID}}\t{{.Size}}\t{{.CreatedSince}}'],
+            text=True, stderr=subprocess.DEVNULL).strip()
+        for line in out.splitlines():
+            p = line.split('\t')
+            if len(p) >= 5:
+                images.append({
+                    'repo': p[0], 'tag': p[1], 'id': p[2],
+                    'size': p[3], 'created_since': p[4],
+                })
+    except Exception: pass
+    return {'images': images, 'count': len(images)}
+
+
+def api_docker_volumes():
+    """Docker volumes with link counts and sizes."""
+    volumes = []
+    try:
+        out = subprocess.check_output(
+            ['docker', 'system', 'df', '-v'],
+            text=True, stderr=subprocess.DEVNULL)
+        in_vol = False
+        for line in out.splitlines():
+            if 'Local Volumes' in line: in_vol = True; continue
+            if in_vol and 'Build Cache' in line: break
+            if in_vol and line.strip() and 'VOLUME' not in line:
+                p = line.split()
+                if len(p) >= 3:
+                    volumes.append({
+                        'name': p[0],
+                        'links': p[1],
+                        'size': p[2],
+                        'reclaimable': p[1] == '0',
+                    })
+    except Exception: pass
+    return {'volumes': volumes, 'count': len(volumes)}
+
+
+def api_docker_stats():
+    """Per-container CPU + memory snapshot (non-streaming)."""
+    stats = []
+    try:
+        out = subprocess.check_output(
+            ['docker', 'stats', '--no-stream', '--format',
+             '{{.Name}}\t{{.CPUPerc}}\t{{.MemUsage}}\t{{.MemPerc}}\t{{.NetIO}}\t{{.BlockIO}}'],
+            text=True, stderr=subprocess.DEVNULL, timeout=15).strip()
+        for line in out.splitlines():
+            p = line.split('\t')
+            if len(p) >= 4:
+                stats.append({
+                    'name': p[0], 'cpu': p[1], 'mem_usage': p[2],
+                    'mem_pct': p[3], 'net_io': p[4] if len(p) > 4 else '',
+                    'block_io': p[5] if len(p) > 5 else '',
+                })
+    except Exception: pass
+    return {'stats': stats}
+
+
+def api_docker_diagnostics():
+    """Interpreted diagnostic signals — actionable findings, not raw data."""
+    findings = []
+    containers = get_containers()
+    running_names = [c['name'] for c in containers if c.get('running')]
+
+    # High restart counts
+    if running_names:
+        try:
+            out = subprocess.check_output(
+                ['docker', 'inspect', '--format',
+                 '{{.Name}}\t{{.RestartCount}}\t{{.State.Status}}'] + running_names,
+                text=True, stderr=subprocess.DEVNULL).strip()
+            for line in out.splitlines():
+                p = line.strip().split('\t')
+                if len(p) >= 2:
+                    name = p[0].lstrip('/')
+                    restarts = int(p[1]) if p[1].isdigit() else 0
+                    if restarts >= 3:
+                        lvl = 'error' if restarts >= 10 else 'warn'
+                        findings.append({
+                            'level': lvl, 'category': 'container', 'subject': name,
+                            'message': f'Restarted {restarts} times. Common causes: missing env var, bad config, dependency not ready.',
+                            'action': 'Check container logs for the crash reason.',
+                        })
+        except Exception: pass
+
+    # Disk pressure on root
+    try:
+        out = subprocess.check_output(
+            ['df', '-BG', '--output=target,pcent', '/'],
+            text=True, stderr=subprocess.DEVNULL).splitlines()
+        if len(out) > 1:
+            pct = int(out[1].split()[1].rstrip('%'))
+            if pct >= 90:
+                findings.append({'level': 'error', 'category': 'disk', 'subject': 'Root disk /',
+                    'message': f'Root disk at {pct}% — critical. Docker operations may start failing.',
+                    'action': 'Run Docker prune immediately, or expand the volume.'})
+            elif pct >= 80:
+                findings.append({'level': 'warn', 'category': 'disk', 'subject': 'Root disk /',
+                    'message': f'Root disk at {pct}% — getting tight.',
+                    'action': 'Run Docker prune to recover reclaimable space.'})
+    except Exception: pass
+
+    # Unhealthy containers
+    try:
+        out = subprocess.check_output(
+            ['docker', 'ps', '--filter', 'health=unhealthy', '--format', '{{.Names}}'],
+            text=True, stderr=subprocess.DEVNULL).strip()
+        for name in out.splitlines():
+            if name:
+                findings.append({'level': 'error', 'category': 'container', 'subject': name,
+                    'message': 'Container health check is failing.',
+                    'action': 'Check container logs and the HEALTHCHECK command definition.'})
+    except Exception: pass
+
+    # Containers exited with error (not clean exit)
+    try:
+        out = subprocess.check_output(
+            ['docker', 'ps', '-a', '--filter', 'status=exited',
+             '--format', '{{.Names}}\t{{.Status}}'],
+            text=True, stderr=subprocess.DEVNULL).strip()
+        for line in out.splitlines():
+            p = line.split('\t')
+            if len(p) >= 2 and 'Exited (0)' not in p[1]:
+                findings.append({'level': 'warn', 'category': 'container', 'subject': p[0],
+                    'message': f'Exited with error: {p[1]}',
+                    'action': 'Check logs. Container may need a config fix or restart.'})
+    except Exception: pass
+
+    # Large reclaimable space
+    try:
+        raw = subprocess.check_output(['docker', 'system', 'df'],
+            text=True, stderr=subprocess.DEVNULL).splitlines()
+        for line in raw:
+            p = line.split()
+            if 'Image' in line and len(p) >= 5:
+                rec = p[-1].replace('(','').replace(')','')
+                if 'GB' in rec:
+                    gb = float(rec.replace('GB',''))
+                    if gb > 3:
+                        findings.append({'level': 'info', 'category': 'docker', 'subject': 'Unused images',
+                            'message': f'{rec} reclaimable from images not attached to any container.',
+                            'action': 'Go to Docker → Cleanup → Prune Images to recover this space.'})
+            if 'Volume' in line and len(p) >= 5:
+                rec = p[-1].replace('(','').replace(')','')
+                if 'GB' in rec:
+                    gb = float(rec.replace('GB',''))
+                    if gb > 1:
+                        findings.append({'level': 'info', 'category': 'docker', 'subject': 'Orphaned volumes',
+                            'message': f'{rec} reclaimable from volumes with no container attached.',
+                            'action': 'Go to Docker → Volumes to review, then Cleanup → Prune Volumes.'})
+    except Exception: pass
+
+    if not findings:
+        findings.append({'level': 'ok', 'category': 'system', 'subject': 'All checks passed',
+            'message': 'No issues detected. Everything looks healthy.',
+            'action': ''})
+
+    return {'findings': findings, 'generated': datetime.now().isoformat(timespec='seconds')}
+
+
+
 def config_get(key, default=None):
     try:
         conn = db_conn()
@@ -1967,7 +2211,17 @@ class Handler(http.server.BaseHTTPRequestHandler):
             self.send_json({'ip': client_ip})
 
         elif p == '/api/storage':
-            self.send_json(get_storage_info())
+            self.send_json(api_storage_info())
+
+        
+        elif p == '/api/docker/images':
+            self.send_json(api_docker_images())
+        elif p == '/api/docker/volumes':
+            self.send_json(api_docker_volumes())
+        elif p == '/api/docker/stats':
+            self.send_json(api_docker_stats())
+        elif p == '/api/docker/diagnostics':
+            self.send_json(api_docker_diagnostics())
 
         elif p == '/api/files':
             path = get_server_info().get('home_dir', '/')
@@ -2402,6 +2656,45 @@ class Handler(http.server.BaseHTTPRequestHandler):
             else:
                 self.send_json({'ok': False, 'error': 'Unknown action'}, 400)
 
+        elif p == '/api/docker/prune':
+            body = {}
+            try:
+                cl = int(self.headers.get('Content-Length', 0))
+                if cl:
+                    import json as _j
+                    body = _j.loads(self.rfile.read(cl))
+            except Exception: pass
+            kind = body.get('type', 'images')
+            try:
+                if kind == 'images':
+                    out = subprocess.check_output(['docker','image','prune','-af'], text=True, stderr=subprocess.STDOUT)
+                elif kind == 'volumes':
+                    out = subprocess.check_output(['docker','volume','prune','-f'], text=True, stderr=subprocess.STDOUT)
+                elif kind == 'system':
+                    out = subprocess.check_output(['docker','system','prune','-af','--volumes'], text=True, stderr=subprocess.STDOUT)
+                else:
+                    out = 'unknown prune type'
+                self.send_json({'ok': True, 'output': out})
+            except subprocess.CalledProcessError as e:
+                self.send_json({'ok': False, 'output': e.output})
+        elif p.startswith('/api/docker/action/'):
+            cname = p.split('/')[-1]
+            body = {}
+            try:
+                cl = int(self.headers.get('Content-Length', 0))
+                if cl:
+                    import json as _j2
+                    body = _j2.loads(self.rfile.read(cl))
+            except Exception: pass
+            action = body.get('action', '')
+            if action not in ('start', 'stop', 'restart'):
+                self.send_json({'ok': False, 'error': 'invalid action'})
+            else:
+                try:
+                    subprocess.check_output(['docker', action, cname], stderr=subprocess.STDOUT)
+                    self.send_json({'ok': True, 'container': cname, 'action': action})
+                except subprocess.CalledProcessError as e:
+                    self.send_json({'ok': False, 'error': e.output})
         elif p == '/api/activity':
             # POST { action, source?, category?, detail?, level? }
             action = body.get('action', '').strip()
