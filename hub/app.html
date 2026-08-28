@@ -924,6 +924,12 @@ body.desk-mode #desk-exit { display:flex; align-items:center; gap:6px; }
 .host-layer   .stor-layer-tag { background:rgba(57,208,196,.12);  color:var(--accent); }
 .docker-layer .stor-layer-tag { background:rgba(88,166,255,.12);  color:var(--blue,#58a6ff); }
 
+
+/* ── Stub (retired) views ───────────────────────────────────────────── */
+.stub-view { display:flex; flex-direction:column; align-items:center; justify-content:center; height:100%; padding:32px; text-align:center; gap:8px; }
+.stub-icon { font-size:36px; line-height:1; opacity:.4; }
+.stub-title { font-size:14px; font-weight:700; color:var(--text); margin-bottom:4px; }
+.stub-msg { font-size:12px; color:var(--muted); line-height:1.6; max-width:360px; }
 </style>
 <link rel="manifest" href="/manifest.json">
 <meta name="theme-color" content="#58a6ff">
@@ -1066,13 +1072,12 @@ body.desk-mode #desk-exit { display:flex; align-items:center; gap:6px; }
 
 <!-- MOBILE NAV BAR -->
 <div id="mob-nav">
-  <button class="mob-nav-btn" onclick="mobNav('dashboard')" data-mob="dashboard"><span class="mni">⊞</span>Dash</button>
-  <button class="mob-nav-btn" onclick="mobNav('terminal')"  data-mob="terminal" ><span class="mni">⌨</span>Shell</button>
-  <button class="mob-nav-btn" onclick="mobNav('storage')"   data-mob="storage"  ><span class="mni">💾</span>Storage</button>
-  <button class="mob-nav-btn" onclick="mobNav('dockermgr')" data-mob="dockermgr"><span class="mni">🐳</span>Docker</button>
-  <button class="mob-nav-btn" onclick="mobNav('runbooks')"  data-mob="runbooks" ><span class="mni">▶</span>Run</button>
-  <button class="mob-nav-btn" onclick="openCmdPal()"                             ><span class="mni">🔍</span>Search</button>
-  <button class="mob-nav-btn" onclick="mobNav('settings')"  data-mob="settings" ><span class="mni">⚙</span>More</button>
+  <button class="mob-nav-btn" onclick="mobNav('dashboard')"  data-mob="dashboard" ><span class="mni">⊞</span>Dash</button>
+  <button class="mob-nav-btn" onclick="mobNav('activity')"   data-mob="activity"  ><span class="mni">📜</span>Activity</button>
+  <button class="mob-nav-btn" onclick="mobNav('dockermgr')"  data-mob="dockermgr" ><span class="mni">🐳</span>Docker</button>
+  <button class="mob-nav-btn" onclick="mobNav('storage')"    data-mob="storage"   ><span class="mni">💾</span>Storage</button>
+  <button class="mob-nav-btn" onclick="mobNav('aichat')"     data-mob="aichat"    ><span class="mni">🤖</span>AI</button>
+  <button class="mob-nav-btn" onclick="openCmdPal()"                              ><span class="mni">🔍</span>Search</button>
 </div>
 <!-- WIDGET LAYER — fixed, always on top of everything -->
 <div id="widget-layer"></div>
@@ -1092,41 +1097,28 @@ body.desk-mode #desk-exit { display:flex; align-items:center; gap:6px; }
 
   <!-- CATEGORY NAV (far left) — ordered: core → operational → security → advanced → meta -->
   <nav id="catnav">
-    <!-- CORE — daily essentials -->
-    <button class="cat-item active" data-cat="server" onclick="setCategory('server')" title="Server — terminal, logs, network">
+    <button class="cat-item active" data-cat="server" onclick="setCategory('server')" title="Server">
       <span class="cat-icon">🖥</span><span class="cat-label">Server</span>
     </button>
-    <button class="cat-item" data-cat="services" onclick="setCategory('services')" title="Services — all running containers">
+    <button class="cat-item" data-cat="services" onclick="setCategory('services')" title="Services — running containers">
       <span class="cat-icon">⚙</span><span class="cat-label">Svcs</span>
     </button>
     <div class="cat-sep"></div>
-    <!-- OPERATIONAL — act and track -->
-    <button class="cat-item" data-cat="ops" onclick="setCategory('ops')" title="Ops — runbooks, tasks, issues, journal">
+    <button class="cat-item" data-cat="ops" onclick="setCategory('ops')" title="Ops — runbooks, AI, files">
       <span class="cat-icon">▶</span><span class="cat-label">Ops</span>
     </button>
     <div class="cat-sep"></div>
-    <!-- SECURITY & ACCESS -->
-    <button class="cat-item" data-cat="vault" onclick="setCategory('vault')" title="Vault — passwords and 2FA">
-      <span class="cat-icon">🔐</span><span class="cat-label">Vault</span>
-    </button>
-    <button class="cat-item" data-cat="remote" onclick="setCategory('remote')" title="Remote — access from anywhere">
-      <span class="cat-icon">🌍</span><span class="cat-label">Remote</span>
+    <button class="cat-item" data-cat="vault" onclick="setCategory('vault')" title="Access — settings, remote, update">
+      <span class="cat-icon">⚙</span><span class="cat-label">Access</span>
     </button>
     <div class="cat-sep"></div>
-    <!-- ADVANCED — power features and reference -->
-    <button class="cat-item" data-cat="tools" onclick="setCategory('tools')" title="Tools — infra map, browser, AI">
-      <span class="cat-icon">🛠</span><span class="cat-label">Tools</span>
-    </button>
-    <button class="cat-item" data-cat="docs" onclick="setCategory('docs')" title="Docs — guides and hub reference">
+    <button class="cat-item" data-cat="docs" onclick="setCategory('docs')" title="Docs">
       <span class="cat-icon">📚</span><span class="cat-label">Docs</span>
     </button>
-    <div class="cat-sep"></div>
-    <!-- PLATFORM ECOSYSTEM -->
-    <button class="cat-item" data-cat="platform" onclick="setCategory('platform')" title="Platform — FlareVault, Metaforge, ecosystem tools">
-      <span class="cat-icon">🔮</span><span class="cat-label">Pltfrm</span>
+    <button class="cat-item" data-cat="guide" onclick="setCategory('guide')" title="Hub Guide">
+      <span class="cat-icon">🏠</span><span class="cat-label">Guide</span>
     </button>
     <div class="cat-sep"></div>
-    <!-- META -->
     <button class="cat-item" data-cat="favorites" onclick="setCategory('favorites')" title="Favorites">
       <span class="cat-icon">⭐</span><span class="cat-label">Favs</span>
     </button>
@@ -1408,129 +1400,72 @@ async function fetchIssues() {
 }
 
 // ── CATEGORY NAV ─────────────────────────────────────────────────────────────
-// Order: core daily use → operational → security/access → advanced → meta
 const CATEGORIES = {
 
-  // ── SERVER — direct control of the machine ────────────────────────────────
-  // Terminal, logs, network: you are touching the server right now.
-  // Dashboard + survey for quick situational awareness without leaving server context.
+  // ── SERVER — daily operational view ──────────────────────────────────────
   server: {
     title: 'Server',
     sections: [
-      { label:'Control', items:[
-        {icon:'⌨', label:'Terminal',   action:()=>openView('terminal')},
-        {icon:'📋', label:'Logs',       action:()=>openView('logs')},
-        {icon:'🌐', label:'Network',    action:()=>openView('network')},
+      { label:'Watch', items:[
+        {icon:'⊞',  label:'Dashboard',     action:()=>openView('dashboard')},
+        {icon:'📜', label:'Activity',       action:()=>openView('activity')},
+        {icon:'🔍', label:'Survey',         action:()=>openView('survey')},
       ]},
-      { label:'Overview', items:[
-        {icon:'⊞',  label:'Dashboard', action:()=>openView('dashboard')},
-        {icon:'🔍', label:'Survey',    action:()=>openView('survey')},
+      { label:'Manage', items:[
+        {icon:'🐳', label:'Docker',         action:()=>openView('dockermgr')},
+        {icon:'💾', label:'Storage',        action:()=>openView('storage')},
+        {icon:'🔌', label:'Ports',          action:()=>openView('ports')},
       ]},
-      { label:'Storage', items:[
-        {icon:'💾', label:'Storage',   action:()=>openView('storage')},
-        {icon:'🐳', label:'Docker',    action:()=>openView('dockermgr')},
-        {icon:'📁', label:'Files',     action:()=>openView('files')},
+      { label:'Access', items:[
+        {icon:'⌨', label:'Terminal',        action:()=>openView('terminal')},
+        {icon:'📋', label:'Container Logs', action:()=>openView('logs')},
+        {icon:'🌐', label:'Network',        action:()=>openView('network')},
       ]},
-      { label:'Landscape', items:[
-        {icon:'🔌', label:'Ports',     action:()=>openView('ports')},
+      { label:'Info', items:[
+        {icon:'🗺', label:'Infra Map',       action:()=>openView('map')},
+        {icon:'🧾', label:'Server Receipt',  action:()=>openView('receipt')},
       ]},
     ]
   },
 
-  // ── SERVICES — what's running ─────────────────────────────────────────────
-  // Every live container. Click any to open in current pane.
-  services: { title: 'Services', sections: [] }, // built dynamically from docker ps
+  // ── SERVICES — every live container ───────────────────────────────────────
+  services: { title: 'Services', sections: [] },
 
-  // ── OPS — act on problems, track what matters ─────────────────────────────
-  // Runbooks when something breaks. Tasks + issues + journal for ongoing work.
+  // ── OPS — act on the server ───────────────────────────────────────────────
   ops: {
     title: 'Ops',
     sections: [
-      { label:'Act', items:[
-        {icon:'▶',  label:'Runbooks',     action:()=>openView('runbooks')},
+      { label:'Run', items:[
+        {icon:'▶',  label:'Runbooks',       action:()=>openView('runbooks')},
+        {icon:'🤖', label:'AI Chat',         action:()=>openView('aichat')},
       ]},
-      { label:'Track', items:[
-        {icon:'📋', label:'Task Docket',  action:()=>openView('tasks')},
-        {icon:'⚑',  label:'Issues',       action:()=>openView('issues')},
-        {icon:'📓', label:'Journal',      action:()=>openView('journal')},
-      ]},
-      { label:'Intelligence', items:[
-        {icon:'📜', label:'Activity Log', action:()=>openView('activity')},
-        {icon:'🧾', label:'Server Receipt', action:()=>openView('receipt')},
-        {icon:'🤖', label:'Hub AI Chat',  action:()=>openView('aichat')},
+      { label:'Files', items:[
+        {icon:'📁', label:'Files',           action:()=>openView('files')},
       ]},
     ]
   },
 
-  // ── VAULT — credentials and 2FA gate ─────────────────────────────────────
-  // Everything about protecting access: stored secrets + the auth layer.
+  // ── VAULT — access and security ───────────────────────────────────────────
   vault: {
-    title: 'Vault',
+    title: 'Access',
     sections: [
-      { label:'Credentials', items:[
-        {icon:'🔐', label:'Password Vault', action:()=>openView('vault')},
+      { label:'Settings', items:[
+        {icon:'⚙', label:'Hub Settings',    action:()=>openView('settings')},
+        {icon:'⬆', label:'Update Hub',      action:()=>{ openView('settings'); setTimeout(()=>runHubUpdate(),400); }},
       ]},
-      { label:'Gate', items:[
-        {icon:'🛡', label:'2FA Setup',      action:()=>openView('settings')},
-        {icon:'⚙', label:'Hub Settings',   action:()=>openView('settings')},
-        {icon:'⬆', label:'Update Hub',     action:()=>{ openView('settings'); setTimeout(()=>runHubUpdate(),400); }},
+      { label:'Remote', items:[
+        {icon:'🌍', label:'Remote Access',   action:()=>openView('remote')},
       ]},
     ]
   },
 
-  // ── REMOTE — access from outside this network ──────────────────────────────
-  // Local IP, Tailscale, Cloudflare tunnel. The front door for anyone not here.
-  remote: {
-    title: 'Remote',
-    sections: [
-      { label:'Connect', items:[
-        {icon:'🌍', label:'Remote Access', action:()=>openView('remote')},
-      ]},
-    ]
-  },
-
-  // ── TOOLS — power features for when you need to go deeper ─────────────────
-  // Infra map to visualise the stack. In-hub browser. AI chat for CPU tasks.
-  tools: {
-    title: 'Tools',
-    sections: [
-      { label:'Explore', items:[
-        {icon:'🗺', label:'Infra Map', action:()=>openView('map')},
-        {icon:'🌐', label:'Browser',  action:()=>openView('browser')},
-      ]},
-      { label:'AI', items:[
-        {icon:'🤖', label:'AI Chat',  action:()=>openView('chat')},
-      ]},
-    ]
-  },
-
-  // ── DOCS — guides and hub reference ──────────────────────────────────────
-  // Markdown files from ~/guides/ on the server + the built-in hub guide.
-  docs: { title: 'Docs', sections: [] }, // built dynamically from server
+  // ── DOCS ──────────────────────────────────────────────────────────────────
+  docs: { title: 'Docs', sections: [] },
   guide: {
     title: 'Guide',
     sections: [
-      { label:'Hub Reference', items:[
-        {icon:'🏠', label:"What's Here", action:()=>openView('guide')},
-      ]},
-    ]
-  },
-
-  // ── PLATFORM — ecosystem tooling layer ───────────────────────────────────
-  // FlareVault: port authority + topology map + CF protocol layer.
-  // Metaforge: self-aware database substrate. Assumed until live.
-  platform: {
-    title: 'Platform',
-    sections: [
-      { label:'FlareVault', items:[
-        {icon:'🔒', label:'Vault & Topology',   action:()=>openView('platform')},
-        {icon:'🗺',  label:'Port Topology',      action:()=>openView('platform')},
-        {icon:'☁',  label:'CF Protocol Layer',  action:()=>openView('platform')},
-      ]},
-      { label:'Metaforge', items:[
-        {icon:'⚗',  label:'Data Substrate',     action:()=>openView('platform')},
-        {icon:'🚀', label:'Deploy Instance',     action:()=>openView('platform')},
-        {icon:'🔌', label:'MCP Endpoint',        action:()=>openView('platform')},
+      { label:'Reference', items:[
+        {icon:'🏠', label:"Hub Guide",       action:()=>openView('guide')},
       ]},
     ]
   },
@@ -1662,8 +1597,8 @@ function createWorkspace({ title, icon='⊞', pinned=false, viewType='dashboard'
 }
 
 function openView(viewType, config={}) {
-  const titles = { dashboard:'Dashboard', terminal:'Terminal', logs:'Logs', docs:'Docs', map:'Infra Map', vault:'Vault', issues:'Issues', network:'Network', chat:'AI Chat', settings:'Settings', storage:'Storage', dockermgr:'Docker', files:'Files', journal:'Journal', survey:'Survey', guide:'Guide', tasks:'Task Docket', runbooks:'Runbooks', browser:'Browser', ports:'Port Landscape', platform:'Platform' };
-  const icons  = { dashboard:'⊞', terminal:'⌨', logs:'📋', docs:'📚', map:'🗺', vault:'🔐', issues:'⚑', network:'🌐', chat:'🤖', settings:'⚙', storage:'💾', dockermgr:'🐳', files:'📁', journal:'📓', survey:'🔍', guide:'🏠', tasks:'📋', runbooks:'▶', browser:'🌐', ports:'🔌', platform:'🔮' };
+  const titles = { dashboard:'Dashboard', activity:'Activity', aichat:'AI Chat', dockermgr:'Docker', terminal:'Terminal', logs:'Logs', docs:'Docs', map:'Infra Map', vault:'Vault', issues:'Issues', network:'Network', chat:'AI Chat', settings:'Settings', storage:'Storage', dockermgr:'Docker', files:'Files', journal:'Journal', survey:'Survey', guide:'Guide', tasks:'Task Docket', runbooks:'Runbooks', browser:'Browser', ports:'Port Landscape', platform:'Platform' };
+  const icons  = { dashboard:'⊞', activity:'📜', aichat:'🤖', dockermgr:'🐳', terminal:'⌨', logs:'📋', docs:'📚', map:'🗺', vault:'🔐', issues:'⚑', network:'🌐', chat:'🤖', settings:'⚙', storage:'💾', dockermgr:'🐳', files:'📁', journal:'📓', survey:'🔍', guide:'🏠', tasks:'📋', runbooks:'▶', browser:'🌐', ports:'🔌', platform:'🔮' };
 
   const _navigateWs = (ws) => {
     const pane = ws.panes[0];
@@ -2067,24 +2002,27 @@ function mountPaneContent(wsId, paneId, viewType, viewConfig, body) {
       setTimeout(()=>drawMapPane(key), 100);
       break;
     case 'vault':
-      body.innerHTML = `<div class="view-vault" id="vlt-${key}">${vaultHTML()}</div>`;
-      initVault(key);
+      body.innerHTML = `<div class="stub-view"><div class="stub-icon">🔐</div><div class="stub-title">Password Vault</div><div class="stub-msg">The local vault placeholder has been retired. FlareVault node is running at port 7777 and is the real credential store. Integration is on the roadmap.</div><a class="btn p" href="http://192.168.1.229:7779" target="_blank" style="margin-top:12px;text-decoration:none">Open FlareVault Companion ↗</a></div>`;
       break;
     case 'issues':
-      body.innerHTML = `<div class="view-issues" id="iss-${key}"></div>`;
-      renderIssues(`iss-${key}`);
+      body.innerHTML = `<div class="stub-view"><div class="stub-icon">⚑</div><div class="stub-title">Issues</div><div class="stub-msg">Issue tracking will be available once you start adding issues via the CLI or the activity log flags them automatically.</div></div>`;
       break;
     case 'network':
       body.innerHTML = `<div class="view-net" id="net-${key}">
-        <div style="display:flex;gap:8px;margin-bottom:4px">
-          <button class="btn p" onclick="loadNet('${key}')">↻ Load</button>
+        <div style="display:flex;gap:8px;margin-bottom:4px;align-items:center">
+          <span style="font-size:10px;font-weight:700;letter-spacing:.06em;color:var(--muted);text-transform:uppercase">Network</span>
+          <button class="btn" onclick="loadNet('${key}')" style="margin-left:auto;padding:2px 8px;font-size:11px">↻ Refresh</button>
         </div>
-        <div class="net-card"><h4>UFW Firewall</h4><div class="net-pre" id="nufw-${key}">Click Load</div></div>
-        <div class="net-card"><h4>Fail2Ban SSH</h4><div class="net-pre" id="nf2b-${key}">Click Load</div></div>
-        <div class="net-card"><h4>Listening Ports</h4><div class="net-pre" id="npts-${key}">Click Load</div></div>
+        <div class="net-card"><h4>UFW Firewall</h4><div class="net-pre" id="nufw-${key}">Loading…</div></div>
+        <div class="net-card"><h4>Fail2Ban SSH</h4><div class="net-pre" id="nf2b-${key}">Loading…</div></div>
+        <div class="net-card"><h4>Listening Ports</h4><div class="net-pre" id="npts-${key}">Loading…</div></div>
       </div>`;
+      loadNet(key);
       break;
     case 'browser':
+      body.innerHTML = `<div class="stub-view"><div class="stub-icon">🌐</div><div class="stub-title">Browser</div><div class="stub-msg">Use your real browser. Services are accessible via the Services nav — click any to open in an iframe pane.</div></div>`;
+      break;
+    case '_browser_old':
       body.innerHTML = `<div style="display:flex;flex-direction:column;height:100%">
         <div style="display:flex;gap:4px;padding:4px 6px;background:var(--panel2);border-bottom:1px solid var(--border);flex-shrink:0;align-items:center">
           <button onclick="browserNav('${key}','back')"  class="btn" style="padding:2px 8px;font-size:12px">←</button>
@@ -2172,6 +2110,9 @@ function mountPaneContent(wsId, paneId, viewType, viewConfig, body) {
       break;
 
     case 'journal':
+      body.innerHTML = `<div class="stub-view"><div class="stub-icon">📓</div><div class="stub-title">Journal</div><div class="stub-msg">Use the Activity view instead — it already captures everything that happens on the server and supports manual notes.</div><button class="btn p" onclick="openView('activity')" style="margin-top:12px">Open Activity →</button></div>`;
+      break;
+    case '_journal_old':
       body.innerHTML = `<div class="view-journal">
         <div class="jnl-bar">
           <input id="jnl-inp-${key}" class="vs-inp" placeholder="Add a journal entry…" style="flex:1" onkeydown="if(event.key==='Enter')addJournalEntry('${key}')">
@@ -2227,11 +2168,10 @@ function mountPaneContent(wsId, paneId, viewType, viewConfig, body) {
       renderRemoteView(body);
       break;
     case 'platform':
-      body.innerHTML = `<div class="view-platform" id="vpf-${key}"><div style="padding:20px;color:var(--muted);font-size:11px">Loading platform…</div></div>`;
-      renderPlatformView(key);
+      body.innerHTML = `<div class="stub-view"><div class="stub-icon">🔮</div><div class="stub-title">Platform</div><div class="stub-msg">Platform view retired — use the Server nav for Docker, Storage, and Ports. FlareVault and Metaforge are accessible via their own ports.</div></div>`;
       break;
     case 'tasks':
-      renderTasksView(body);
+      body.innerHTML = `<div class="stub-view"><div class="stub-icon">📋</div><div class="stub-title">Task Docket</div><div class="stub-msg">The static task list has been retired. Tasks are tracked in the project GitHub repo and the Activity log.</div></div>`;
       break;
 
     case 'activity':
