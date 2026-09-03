@@ -249,11 +249,16 @@ def get_status(force=False):
                     })
 
             # Detect unattached drives (no filesystem, no mount — typically raw/unused)
+            # Cross-check: skip disks whose partitions are already mounted (e.g. /dev/sdb1 at /backup)
+            mounted_devs = {d['device'] for d in disks}
             unattached = []
             for entry in (parts[6].strip().split(';') if len(parts) > 6 else []):
                 p = entry.strip().split('|')
                 if len(p) >= 2 and p[0]:
-                    unattached.append({'name': p[0], 'size': p[1]})
+                    name = p[0]
+                    has_mounted_part = any(dev.startswith(f'/dev/{name}') for dev in mounted_devs)
+                    if not has_mounted_part:
+                        unattached.append({'name': name, 'size': p[1]})
 
             data = {
                 'online': True,
