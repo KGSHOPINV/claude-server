@@ -2170,8 +2170,17 @@ class Handler(http.server.BaseHTTPRequestHandler):
                     ts = datetime.now().isoformat()
                 except Exception:
                     pass
+            # Enrich with federation schema fields (FV-BI-SH contract)
+            fed_ports = []
+            for p in ports:
+                fed_ports.append({
+                    **p,
+                    'protocol':    'tcp',
+                    'state':       'LISTEN',
+                    'assigned_by': 'sh',
+                })
             self.send_json({
-                'ports':      ports,
+                'ports':      fed_ports,
                 'events':     events,
                 'lanes':      PORT_LANES,
                 'scanned_at': ts,
