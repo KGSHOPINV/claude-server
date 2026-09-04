@@ -950,6 +950,7 @@ body.desk-mode #desk-exit { display:flex; align-items:center; gap:6px; }
   <span class="chip">disk <span id="t-disk">—</span></span>
   <span class="chip">load <span id="t-load">—</span></span>
   <span class="chip">🐳 <span id="t-ct">—</span></span>
+  <span class="chip" title="System power draw (ACPI)">⚡ <span id="t-pwr">—</span>W</span>
   <div id="top-r">
     <span style="color:var(--muted);font-family:var(--mono);font-size:10px" id="t-clock"></span>
     <button class="tbtn" onclick="hardRefresh()">↻ Refresh</button>
@@ -1338,6 +1339,8 @@ function applyStatus(ok) {
     document.getElementById('t-ct').textContent = s.containers;
     document.getElementById('f-ct').textContent = s.containers + ' containers';
   }
+  if (s.power_watts !== undefined && s.power_watts > 0)
+    document.getElementById('t-pwr').textContent = s.power_watts;
   if (s.fetched_at) document.getElementById('f-last').textContent = 'Updated ' + s.fetched_at;
 }
 

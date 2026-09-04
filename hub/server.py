@@ -279,6 +279,18 @@ def get_status(force=False):
             data = {'online': True, 'parse_error': str(e), 'raw': r['output']}
 
     if data.get('online'):
+        # Read system power draw from ACPI power meter (microwatts → watts)
+        try:
+            import glob as _glob
+            _pw = 0
+            for _nf in _glob.glob('/sys/class/hwmon/hwmon*/name'):
+                if open(_nf).read().strip() == 'power_meter':
+                    _avg = _nf.replace('/name', '/power1_average')
+                    _pw = round(int(open(_avg).read().strip()) / 1_000_000)
+                    break
+            data['power_watts'] = _pw
+        except Exception:
+            data['power_watts'] = 0
         si = get_server_info()
         # Build server_info copy with ram_total_gb — don't mutate the process-level cache
         if data.get('ram_total_mb'):
