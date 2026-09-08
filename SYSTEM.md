@@ -16,7 +16,7 @@ Everything else -- Portainer, Netdata, n8n, Uptime Kuma, all of it -- are **opti
 
 No npm. No frameworks. No build step. Pure Python stdlib.
 
-**Port:** `:7000`
+**Port:** `:8765`
 
 ---
 
@@ -118,7 +118,7 @@ Hub does not care which services are installed. It reads what Docker has running
 
 ## Full API Surface
 
-Base URL: `http://YOUR_SERVER_IP:7000`
+Base URL: `http://YOUR_SERVER_IP:8765`
 
 | Route | Method | What it returns |
 |-------|--------|----------------|
@@ -139,19 +139,20 @@ Base URL: `http://YOUR_SERVER_IP:7000`
 
 ---
 
-## Port Map (7xxx space -- ServerHub and federation)
+## Port Map
 
 | Port | Service | Owner |
 |------|---------|-------|
-| 7000 | ServerHub | SH |
-| 7001 | ntfy (self-hosted) | SH |
-| 7002 | n8n (alt) | SH |
-| 7003 | Redis (planned) | SH |
+| 8765 | ServerHub | SH |
+| 8085 | ntfy (self-hosted) | SH |
 | 7777 | flarevault-node | FV |
 | 7779 | companion-app | FV |
 | 7780 | flarevault-mcp | FV |
 | 7781 | node-console | FV |
 | 7782-7799 | FV system management | FV |
+
+> Note: hub port 8765 and ntfy 8085 are the actual deployed ports.
+> The 7xxx block is reserved for federation services only.
 
 ---
 
@@ -276,7 +277,7 @@ Boot order:  SH -> FV -> MF    (SH is always first -- it installs before anythin
 1. Read this file
 2. Read `TASKS.md` for what is next
 3. SSH in: `ssh YOUR_USER@YOUR_SERVER_IP`
-4. Check hub: `curl -s http://localhost:7000/api/status | python3 -m json.tool`
+4. Check hub: `curl -s http://localhost:8765/api/status | python3 -m json.tool`
 5. Check containers: `dkps`
 
 Done. You are oriented.

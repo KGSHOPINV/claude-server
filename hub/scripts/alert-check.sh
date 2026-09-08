@@ -3,7 +3,7 @@
 # Systemd timer: hub-alert.timer
 # Only sends a notification when state CHANGES (down → up or up → down)
 NTFY="http://localhost:8085/server-alerts"
-HOST="192.168.1.229"
+HOST="${HUB_SERVER_IP:-localhost}"
 STATE_FILE="/tmp/.alert-state"
 
 declare -A SERVICES=(
