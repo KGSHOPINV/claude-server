@@ -43,6 +43,7 @@ _ssl_ctx.verify_mode = ssl.CERT_NONE
 SSH_HOST   = os.environ.get('HUB_SSH_HOST', 'localhost')
 SSH_USER   = os.environ.get('HUB_SSH_USER', '')   # optional; overrides user parsed from SSH_HOST
 SERVER_IP  = os.environ.get('HUB_SERVER_IP', '')  # leave blank — hub reads actual IP from server
+DOCKER_ROOT = os.environ.get('HUB_DOCKER_ROOT', '/srv/docker')
 
 # ── Proxy cache ───────────────────────────────────────────────────────────────
 # HTML pages: 5s TTL (they change). JS/CSS/images: 60s TTL (static assets).
@@ -180,7 +181,7 @@ def get_server_info():
     r = ssh_run(
         'printf "%s\t%s\t%s\t%s\t%s\t%s"'
         ' "$(hostname)"'
-        ' "$(lsb_release -rs 2>/dev/null || uname -r)"'
+        ' "$(lsb_release -ds 2>/dev/null | tr -d \'"\' || uname -r)"'
         ' "$(ip route get 1 2>/dev/null | awk \'{print $7}\' | head -1)"'
         ' "$(tailscale ip -4 2>/dev/null || echo none)"'
         ' "$(nproc)"'
@@ -190,7 +191,7 @@ def get_server_info():
         parts = r['output'].split('\t')
         _server_info_cache = {
             'hostname':    parts[0].strip() if len(parts) > 0 else '',
-            'os':          f"Ubuntu {parts[1].strip()}" if len(parts) > 1 else '',
+            'os':          parts[1].strip() if len(parts) > 1 else '',
             'local_ip':    parts[2].strip() if len(parts) > 2 else '',
             'tailscale_ip': parts[3].strip() if len(parts) > 3 else 'none',
             'cpu_cores':   int(parts[4].strip()) if len(parts) > 4 and parts[4].strip().isdigit() else 0,
@@ -492,7 +493,7 @@ def build_cutsheet_html(ports, services, server_info):
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Port Cut Sheet — {si.get('hostname','server')}</title>
+<title>Port Cut Sheet — {server_info.get('hostname', 'server')}</title>
 <style>
 :root{{
   --paper:#fff;--ink:#111827;--ink2:#374151;--dim:#6b7280;
@@ -558,7 +559,7 @@ body{{background:var(--paper);color:var(--ink);font-family:var(--sans);font-size
 
 <div class="hdr">
   <div>
-    <div class="hdr-eye">Port Reference — {si.get('hostname','server')}</div>
+    <div class="hdr-eye">Port Reference — {server_info.get('hostname', 'server')}</div>
     <div class="hdr-title">Port Cut Sheet</div>
     <div class="hdr-sub">{ip} &nbsp;·&nbsp; Tailscale {ts_ip} &nbsp;·&nbsp; {os_}</div>
   </div>
@@ -587,11 +588,11 @@ body{{background:var(--paper);color:var(--ink);font-family:var(--sans);font-size
   <span><strong>Portainer</strong> · https://{ip}:9443</span>
   <span><strong>Cockpit</strong> · https://{ip}:9090</span>
   <span><strong>Netdata</strong> · http://{ip}:19999</span>
-  <span><strong>SSH</strong> · {si.get('ssh_user','admin')}@{ip}</span>
+  <span><strong>SSH</strong> · {server_info.get('ssh_user', 'admin')}@{ip}</span>
 </div>
 
 <div class="foot">
-  <span>{si.get('hostname','server')} · {os_} · {ram} GB RAM · Docker stack · Watchtower auto-update</span>
+  <span>{server_info.get('hostname', 'server')} · {os_} · {ram} GB RAM · Docker stack · Watchtower auto-update</span>
   <span>http://{ip}:7000/cutsheet &nbsp;·&nbsp; {ts}</span>
 </div>
 
@@ -1534,7 +1535,7 @@ def get_storage_info():
 def get_files(path):
     safe = path.replace('..','').replace('~','').strip()
     if not safe.startswith('/'):
-        safe = get_server_info().get('home_dir', '/root')
+        safe = get_server_info().get('home_dir', os.path.expanduser('~'))
     r = ssh_run(f"ls -lah --time-style=short-iso '{safe}' 2>&1 | head -60")
     return {'path': safe, 'listing': r.get('output',''), 'error': r.get('error','') if not r.get('online') else ''}
 
@@ -1546,7 +1547,7 @@ def get_manifest():
     info_r = ssh_run(
         'printf "%s\t%s\t%s\t%s\t%s\t%s" '
         '"$(hostname)" '
-        '"$(lsb_release -rs 2>/dev/null)" '
+        '"$(lsb_release -ds 2>/dev/null | tr -d \'"\')" '
         '"$(uname -r)" '
         '"$(ip route get 1 2>/dev/null | awk \'{print $7}\' | head -1)" '
         '"$(tailscale ip -4 2>/dev/null || echo none)" '
@@ -1557,7 +1558,7 @@ def get_manifest():
         parts = info_r['output'].split('\t')
         server = {
             'hostname': parts[0] if len(parts) > 0 else '',
-            'os': f'Ubuntu {parts[1]}' if len(parts) > 1 else '',
+            'os': parts[1] if len(parts) > 1 else '',
             'kernel': parts[2] if len(parts) > 2 else '',
             'local_ip': parts[3] if len(parts) > 3 else '',
             'tailscale_ip': parts[4] if len(parts) > 4 else 'none',
@@ -1611,7 +1612,7 @@ def _substitute_guide_tokens(text):
         '{{server.local_ip}}':    si.get('local_ip', ''),
         '{{server.tailscale_ip}}':si.get('tailscale_ip', 'none'),
         '{{server.os}}':          si.get('os', ''),
-        '{{server.home_dir}}':    si.get('home_dir', '/root'),
+        '{{server.home_dir}}':    si.get('home_dir', os.path.expanduser('~')),
         '{{server.ssh_user}}':    si.get('ssh_user', ''),
         '{{server.cpu_cores}}':   str(si.get('cpu_cores', '')),
         '{{hub.port}}':           str(PORT),
@@ -2623,7 +2624,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
             ts_ip = si.get('tailscale_ip','none')
             ts_name_r = ssh_run('tailscale status --self 2>/dev/null | head -1 | awk \'{print $2}\'')
             ts_name = ts_name_r.get('output','').strip() or 'unknown'
-            home = si.get('home_dir', '/root')
+            home = si.get('home_dir', os.path.expanduser('~'))
             user = si.get('ssh_user', '')
             local_ip = si.get('local_ip','')
             claude_md = f"""# Claude Server — {si.get('hostname','Server')} Session
