@@ -2,7 +2,7 @@
 # alert-check.sh — service health check every 15 min → ntfy
 # Systemd timer: hub-alert.timer
 # Only sends a notification when state CHANGES (down → up or up → down)
-NTFY="http://localhost:8085/server-alerts"
+NTFY="${HUB_NTFY_URL:-http://localhost:8085}/server-alerts"
 HOST="${HUB_SERVER_IP:-localhost}"
 STATE_FILE="/tmp/.alert-state"
 

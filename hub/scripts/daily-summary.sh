@@ -1,7 +1,7 @@
 #!/bin/bash
 # daily-summary.sh — 7am morning server brief → ntfy
 # Systemd timer: hub-daily.timer
-NTFY="http://localhost:8085/server-alerts"
+NTFY="${HUB_NTFY_URL:-http://localhost:8085}/server-alerts"
 
 running=$(docker ps -q 2>/dev/null | wc -l)
 total=$(docker ps -aq 2>/dev/null | wc -l)
