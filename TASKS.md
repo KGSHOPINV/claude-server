@@ -49,6 +49,33 @@
 
 ---
 
+## Planned Builds
+
+### MCP Server
+- Expose /api/* as Claude tools via MCP protocol
+- Lives in server-kit/mcp/
+- Auth: TOTP or Cloudflare service token
+- Enables Claude to act on server from any session without SSH
+
+### HQ/Node Pairing
+- /api/pair endpoint -- accepts one-time token + node identity
+- /api/peers endpoint -- returns all nodes with live status
+- HQ dashboard peer view -- see all servers in one UI
+- Pairing token generator in hub config UI
+
+### Cloudflare Tunnel Setup
+- cloudflared service routing hub.domain.com -> localhost:8765
+- ntfy.domain.com -> localhost:8085 (phone alerts without Tailscale)
+- Cloudflare Access policy (email OTP gate)
+- Service tokens for Claude, MF, FV identities
+
+### Server Identity
+- Declared name at install time -- written to hub config
+- Every /api response includes "server": "name"
+- CLAUDE.md template filled with real server identity at install
+
+---
+
 ## Hub Architecture
 
 ```

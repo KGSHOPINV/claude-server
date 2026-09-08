@@ -255,6 +255,52 @@ Boot order:  SH -> FV -> MF    (SH is always first -- it installs before anythin
 
 ---
 
+## Multi-Server Architecture
+
+ServerHub supports a HQ/node model for running multiple servers.
+
+**HQ server** -- one server is designated headquarters. It has Cloudflare Tunnel for public access and aggregates status from all nodes. Set via `"role": "hq"` in hub config.
+
+**Node servers** -- additional servers pair to HQ during install. Each node knows its HQ URL and reports to it. Set via `"role": "node"` and `"hq_url"` in hub config.
+
+**Pairing flow:**
+1. HQ dashboard generates a one-time pairing token (24h expiry)
+2. New server install.sh uses: `PAIR_TOKEN=xxx PAIR_HOST=hub.yourdomain.com bash install.sh`
+3. New server calls `POST HQ_URL/api/pair` with token + its own identity
+4. HQ adds it to peer registry. Token consumed.
+
+**Peer registry** -- stored in hub config as a peers list:
+```json
+{ "peers": [
+  { "name": "home-lab", "url": "http://192.168.1.229:8765", "role": "hq" },
+  { "name": "new-server", "url": "http://100.75.x.x:8765", "role": "node" }
+]}
+```
+
+`GET /api/peers` -- returns all peers with live status polled from each.
+
+**Server identity** -- each hub declares its name at install time. Every API response includes `"server": "home-lab"`. Claude sessions always know which server they're on.
+
+---
+
+## MCP Server (planned)
+
+ServerHub will expose its API as an MCP server so any Claude session can call hub tools directly without SSH.
+
+Planned tools:
+- `get_status()` -- RAM, CPU, uptime, load
+- `get_containers()` -- all Docker containers + state
+- `restart_container(name)` -- restart any container
+- `run_command(cmd)` -- TOTP-gated shell execution
+- `get_ports()` -- full port landscape
+- `get_storage()` -- disk, mounts, usage
+- `get_activity()` -- event log
+- `get_peers()` -- all registered server nodes
+
+MCP server lives in `server-kit/mcp/`. Combined with Cloudflare Tunnel, any Claude session can connect to hub from anywhere.
+
+---
+
 ## Federation Build State (SH side -- what is live vs what is next)
 
 | Feature | Status | Blocked on |
