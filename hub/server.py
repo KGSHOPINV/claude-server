@@ -342,8 +342,8 @@ SERVICES = [
     {'name': 'Uptime Kuma', 'port': 3001,  'group': 'Monitoring',     'description': 'Uptime monitoring',     'installed': True},
     {'name': 'Netdata',     'port': 19999, 'group': 'Monitoring',     'description': 'Real-time metrics',     'installed': True},
     {'name': 'Dozzle',      'port': 8090,  'group': 'Monitoring',     'description': 'Container log viewer',  'installed': True},
-    {'name': 'ntfy',        'port': 7001,  'group': 'Notifications',  'description': 'Push notifications',    'installed': True},
-    {'name': 'n8n',         'port': 7002,  'group': 'Tools',          'description': 'Workflow automation',   'installed': True},
+    {'name': 'ntfy',        'port': 8085,  'group': 'Notifications',  'description': 'Push notifications',    'installed': True},
+    {'name': 'n8n',         'port': 5678,  'group': 'Tools',          'description': 'Workflow automation',   'installed': True},
     {'name': 'Supabase',    'port': 8000,  'group': 'Tools',          'description': 'Database platform',     'installed': False},
     {'name': 'Redis',       'port': 6379,  'group': 'Tools',          'description': 'Cache / key-value',     'installed': True,  'no_ui': True},
     {'name': 'SurrealDB',   'port': 8001,  'group': 'Tools',          'description': 'Multi-model / graph DB','installed': True},
@@ -357,11 +357,12 @@ SERVICES = [
 
 def build_services(containers):
     running_names = {c['name'].lower() for c in containers if c['running']}
+    ip = SERVER_IP or subprocess.run(['hostname', '-I'], capture_output=True, text=True).stdout.split()[0]
     result = []
     for s in SERVICES:
         svc = dict(s)
         scheme = 'https' if s.get('https') else 'http'
-        svc['url'] = f"{scheme}://{SERVER_IP}:{s['port']}" if not s.get('no_ui') else None
+        svc['url'] = f"{scheme}://{ip}:{s['port']}" if not s.get('no_ui') else None
         # Match container name heuristically
         n = s['name'].lower().replace(' ', '-').replace('.', '')
         svc['running'] = n in running_names or s['name'].lower() in running_names
@@ -392,8 +393,8 @@ _PORT_NAMES[22]   = 'SSH'
 _PORT_NAMES[80]   = 'HTTP (NPM)'
 _PORT_NAMES[443]  = 'HTTPS (NPM)'
 _PORT_NAMES[7000] = 'Hub'
-_PORT_NAMES[7001] = 'ntfy'
-_PORT_NAMES[7002] = 'n8n'
+_PORT_NAMES[8085] = 'ntfy'
+_PORT_NAMES[5678] = 'n8n'
 _PORT_NAMES[7003] = 'Redis (server)'
 
 def _port_lane(port):
@@ -858,6 +859,22 @@ def db_ensure_tables():
             detail  TEXT DEFAULT '',
             level   TEXT NOT NULL DEFAULT 'info'
         )""")
+        conn.execute("""CREATE TABLE IF NOT EXISTS notes (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            category TEXT DEFAULT '',
+            key TEXT UNIQUE NOT NULL,
+            value TEXT,
+            updated TEXT
+        )""")
+        conn.execute("""CREATE TABLE IF NOT EXISTS issues (
+            id TEXT PRIMARY KEY,
+            service TEXT,
+            title TEXT,
+            body TEXT,
+            status TEXT DEFAULT 'open',
+            created INTEGER,
+            updated INTEGER
+        )""")
         # Seed default admin if no users exist
         row = conn.execute("SELECT COUNT(*) as c FROM users").fetchone()
         if row['c'] == 0:
@@ -962,7 +979,7 @@ def _ntfy_send(title, body, priority='default', tags='server'):
     try:
         conf_path = os.path.expanduser('~/.server-alerts.conf')
         url = os.environ.get('HUB_NTFY_URL', 'http://localhost:8085')
-        topic = os.uname().nodename.lower() if hasattr(os, 'uname') else 'server'
+        topic = os.environ.get('HUB_NTFY_TOPIC', 'server-alerts')
         token = ''
         if os.path.exists(conf_path):
             for line in open(conf_path):
@@ -1573,7 +1590,7 @@ def get_manifest():
     services = build_services(containers)
 
     # Hub git ref (if running from a git checkout)
-    git_r = ssh_run('cd ~/hub && git log -1 --format="%h %s" 2>/dev/null || echo unknown')
+    git_r = ssh_run(f'cd {BASE_DIR} && git log -1 --format="%h %s" 2>/dev/null || echo unknown')
     hub_ref = git_r.get('output', 'unknown').strip() if git_r.get('online') else 'unknown'
 
     # Docker disk usage
@@ -2358,7 +2375,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
         elif p.startswith('/api/activity'):
             # GET /api/activity?limit=100&category=docker
             from urllib.parse import parse_qs, urlparse
-            qs = parse_qs(urlparse(p).query)
+            qs = parse_qs(urlparse(self.path).query)
             limit = int(qs.get('limit', ['100'])[0])
             cat   = qs.get('category', [None])[0]
             self.send_json({'ok': True, 'events': activity_recent(limit, cat)})
@@ -2606,9 +2623,9 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 self.send_json({'error': 'gate_required', 'layer': 3,
                                 'message': 'Hub update requires TOTP verification'}, 403)
                 return
-            hub_dir = os.path.expanduser('~/hub')
+            hub_dir = BASE_DIR
             lines = []
-            pull = ssh_run(f'cd {hub_dir} && git pull origin master 2>&1', timeout=60)
+            pull = ssh_run(f'cd {hub_dir} && git pull 2>&1', timeout=60)
             lines.append(pull.get('output', pull.get('error', '(no output)')))
             restart = ssh_run('systemctl --user restart hub 2>&1', timeout=15)
             lines.append(restart.get('output', '') or ('restarted' if restart.get('exitcode',1)==0 else restart.get('error','')))
