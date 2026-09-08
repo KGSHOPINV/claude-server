@@ -942,6 +942,39 @@ body.desk-mode #desk-exit { display:flex; align-items:center; gap:6px; }
 .dtree-label { background:rgba(160,100,255,.1); color:#b48eff; }
 .dtree-uuid { font-size:10px; color:var(--muted); font-family:monospace; }
 
+/* ── FEDERATION VIEW ─────────────────────────────── */
+.view-fed { padding:14px; overflow-y:auto; height:100%; box-sizing:border-box; display:flex; flex-direction:column; gap:12px; }
+.fed-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(280px,1fr)); gap:10px; }
+.fed-card { background:var(--panel); border:1px solid var(--border); border-radius:8px; padding:13px 14px; display:flex; flex-direction:column; gap:9px; }
+.fed-card-hdr { display:flex; align-items:center; gap:8px; }
+.fed-card-icon { font-size:16px; line-height:1; }
+.fed-card-name { font-size:12px; font-weight:700; flex:1; }
+.fed-dot { width:7px; height:7px; border-radius:50%; flex-shrink:0; transition:background .3s; }
+.fed-dot.conn { background:var(--green); box-shadow:0 0 5px var(--green); }
+.fed-dot.unreachable { background:var(--red); }
+.fed-dot.uncfg { background:var(--muted2); border:1px solid var(--border2); }
+.fed-status-txt { font-size:10px; }
+.fed-info-row { display:flex; align-items:center; gap:6px; font-size:11px; min-width:0; }
+.fed-info-lbl { font-size:9px; color:var(--muted2); text-transform:uppercase; letter-spacing:.4px; width:68px; flex-shrink:0; }
+.fed-info-val { font-family:var(--mono); font-size:10.5px; color:var(--text); flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.fed-info-val.dim { color:var(--muted2); font-style:italic; font-family:var(--ui); }
+.fed-actions { display:flex; gap:5px; flex-wrap:wrap; }
+.fed-provides { background:var(--panel2); border:1px solid var(--border); border-radius:4px; padding:7px 9px; }
+.fed-provides-lbl { font-size:9px; font-weight:700; text-transform:uppercase; letter-spacing:.5px; color:var(--muted2); margin-bottom:4px; }
+.fed-provides-list { font-size:10px; color:var(--muted); line-height:1.7; }
+.fed-peer-row { display:flex; align-items:center; gap:8px; padding:5px 0; border-bottom:1px solid var(--border); }
+.fed-peer-row:last-child { border-bottom:none; }
+.fed-peer-name { font-size:11px; font-weight:600; min-width:80px; }
+.fed-peer-url { font-family:var(--mono); font-size:10px; color:var(--muted); flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.fed-peer-seen { font-size:9px; color:var(--muted2); white-space:nowrap; flex-shrink:0; }
+.fed-peer-del { background:none; border:none; color:var(--muted2); cursor:pointer; font-size:12px; padding:0 3px; flex-shrink:0; }
+.fed-peer-del:hover { color:var(--red); }
+.fed-add-form { display:flex; gap:5px; flex-wrap:wrap; align-items:center; padding-top:4px; }
+.fed-inp { background:var(--bg); border:1px solid var(--border2); border-radius:3px; color:var(--text); font-family:var(--mono); font-size:11px; padding:4px 8px; transition:border-color var(--t); }
+.fed-inp:focus { outline:none; border-color:var(--accent); }
+.fed-cfg-row { display:flex; align-items:center; gap:8px; }
+.fed-cfg-lbl { font-size:10px; color:var(--muted); width:60px; flex-shrink:0; }
+
 /* ── Stub (retired) views ───────────────────────────────────────────── */
 .stub-view { display:flex; flex-direction:column; align-items:center; justify-content:center; height:100%; padding:32px; text-align:center; gap:8px; }
 .stub-icon { font-size:36px; line-height:1; opacity:.4; }
@@ -1462,6 +1495,9 @@ const CATEGORIES = {
       { label:'Files', items:[
         {icon:'📁', label:'Files',           action:()=>openView('files')},
       ]},
+      { label:'Ecosystem', items:[
+        {icon:'🛰', label:'Federation',      action:()=>openView('federation')},
+      ]},
     ]
   },
 
@@ -1821,6 +1857,7 @@ const VIEW_DEFS = {
   runbooks:  {icon:'▶',  title:'Runbooks'},
   iframe:    {icon:'🔗', title:'Service'},
   blank:     {icon:'○',  title:'New Pane'},
+  federation:{icon:'🛰', title:'Federation'},
 };
 
 function splitPane(wsId, paneId, dir) {
@@ -2239,6 +2276,22 @@ function mountPaneContent(wsId, paneId, viewType, viewConfig, body) {
       })();
       break;
 
+    case 'federation':
+      body.innerHTML = `<div class="view-fed" id="vfed-${key}">
+        <div style="display:flex;align-items:center;justify-content:space-between">
+          <span style="font-size:11px;font-weight:700;letter-spacing:.06em;color:var(--muted);text-transform:uppercase">Federation</span>
+          <button class="btn" style="padding:2px 10px;font-size:11px" onclick="loadFedView('${key}')">↻ Refresh</button>
+        </div>
+        <div class="fed-grid">
+          <div class="fed-card" id="fed-fv-${key}"><div style="color:var(--muted);font-size:11px">Loading FV status…</div></div>
+          <div class="fed-card" id="fed-mf-${key}"><div style="color:var(--muted);font-size:11px">Loading MF status…</div></div>
+        </div>
+        <div class="fed-card" id="fed-peers-${key}"><div style="color:var(--muted);font-size:11px">Loading peers…</div></div>
+        <div class="fed-card" id="fed-cfg-${key}"><div style="color:var(--muted);font-size:11px">Loading config…</div></div>
+      </div>`;
+      setTimeout(() => loadFedView(key), 100);
+      break;
+
     default:
       body.innerHTML = `<div style="display:flex;flex-direction:column;align-items:center;justify-content:center;height:100%;gap:14px;color:var(--muted)">
         <div style="font-size:36px">○</div>
@@ -2251,6 +2304,209 @@ function mountPaneContent(wsId, paneId, viewType, viewConfig, body) {
 function initPaneView(wsId, paneId, viewType, viewConfig) {
   const key = wsId + '-' + paneId;
   if (viewType === 'map') drawMapPane(key);
+}
+
+// ── FEDERATION ────────────────────────────────────────────────────────────────
+async function loadFedView(key) {
+  const fvCard    = document.getElementById(`fed-fv-${key}`);
+  const mfCard    = document.getElementById(`fed-mf-${key}`);
+  const peersCard = document.getElementById(`fed-peers-${key}`);
+  const cfgCard   = document.getElementById(`fed-cfg-${key}`);
+  if (!fvCard) return;
+
+  // Load federation config from /api/federation, fall back to /api/config
+  let fed = {fv_url:'', mf_url:'', peers:[], fv_last_contact:null, mf_last_contact:null};
+  try {
+    const r = await fetch('/api/federation');
+    if (r.ok) fed = await r.json();
+  } catch {}
+  if (!fed.fv_url || !fed.mf_url) {
+    try {
+      const cfg = await fetch('/api/config').then(r=>r.json()).catch(()=>({}));
+      if (!fed.fv_url) fed.fv_url = cfg.fv_url || cfg.FV_URL || '';
+      if (!fed.mf_url) fed.mf_url = cfg.mf_url || cfg.MF_URL || '';
+    } catch {}
+  }
+
+  // Test reachability (no-cors so we just detect network errors, not HTTP status)
+  async function testUrl(url) {
+    if (!url) return 'uncfg';
+    try {
+      await fetch(url + '/api/status', {signal: AbortSignal.timeout(3000), mode:'no-cors'});
+      return 'conn';
+    } catch { return 'unreachable'; }
+  }
+  const [fvStatus, mfStatus] = await Promise.all([testUrl(fed.fv_url), testUrl(fed.mf_url)]);
+
+  const statusLabel = {conn:'Connected', unreachable:'Unreachable', uncfg:'Not configured'};
+  const statusColor = {conn:'var(--green)', unreachable:'var(--red)', uncfg:'var(--muted)'};
+  function dotHtml(st) {
+    return `<span class="fed-dot ${st}" title="${statusLabel[st]||st}"></span><span class="fed-status-txt" style="color:${statusColor[st]||'var(--muted)'}">${statusLabel[st]||st}</span>`;
+  }
+  function tsAgo(ts) {
+    if (!ts) return 'Never';
+    const d = new Date(ts), s = Math.floor((Date.now()-d)/1000);
+    if (s<60) return `${s}s ago`;
+    if (s<3600) return `${Math.floor(s/60)}m ago`;
+    if (s<86400) return `${Math.floor(s/3600)}h ago`;
+    return d.toLocaleDateString();
+  }
+  function infoRow(lbl, val, dim) {
+    return `<div class="fed-info-row"><span class="fed-info-lbl">${lbl}</span><span class="fed-info-val${dim?' dim':''}">${val||'—'}</span></div>`;
+  }
+
+  // FV card
+  fvCard.innerHTML = `
+    <div class="fed-card-hdr">
+      <span class="fed-card-icon">🔒</span>
+      <span class="fed-card-name">FlareVault (FV)</span>
+      ${dotHtml(fvStatus)}
+    </div>
+    ${infoRow('URL', fed.fv_url||'not set', !fed.fv_url)}
+    ${infoRow('Last contact', tsAgo(fed.fv_last_contact), true)}
+    <div class="fed-actions">
+      <button class="btn-sm" onclick="fedTest('${key}','fv')">Test connection</button>
+      ${fed.fv_url?`<a class="btn-sm" href="${fed.fv_url}" target="_blank" style="text-decoration:none">Open FV ↗</a>`:''}
+    </div>
+    <div class="fed-provides">
+      <div class="fed-provides-lbl">ServerHub provides to FV</div>
+      <div class="fed-provides-list">Port landscape · Container health events · Capacity check</div>
+    </div>`;
+
+  // MF card
+  mfCard.innerHTML = `
+    <div class="fed-card-hdr">
+      <span class="fed-card-icon">⚙</span>
+      <span class="fed-card-name">Metaforge (MF)</span>
+      ${dotHtml(mfStatus)}
+    </div>
+    ${infoRow('URL', fed.mf_url||'not set', !fed.mf_url)}
+    ${infoRow('Last push', tsAgo(fed.mf_last_contact), true)}
+    <div class="fed-actions">
+      <button class="btn-sm p" onclick="fedPushMF('${key}')">Push context now</button>
+      <button class="btn-sm" onclick="fedTest('${key}','mf')">Test connection</button>
+      ${fed.mf_url?`<a class="btn-sm" href="${fed.mf_url}" target="_blank" style="text-decoration:none">Open MF ↗</a>`:''}
+    </div>
+    <div class="fed-provides">
+      <div class="fed-provides-lbl">ServerHub provides to MF</div>
+      <div class="fed-provides-list">/api/context · Container feed · Activity log · Port landscape</div>
+    </div>`;
+
+  // Peers — normalize: fed.peers may be a JSON string (from DB) or an array
+  let peers = fed.peers;
+  if (typeof peers === 'string') { try { peers = JSON.parse(peers||'[]'); } catch { peers = []; } }
+  if (!Array.isArray(peers)) peers = [];
+  window._fedPeers = window._fedPeers || {};
+  window._fedPeers[key] = peers;
+
+  const peerRows = peers.length
+    ? peers.map((p,i) => `
+      <div class="fed-peer-row">
+        <span class="fed-dot ${p.status||'uncfg'}" title="${p.status||'unknown'}"></span>
+        <span class="fed-peer-name">${p.name||'?'}</span>
+        <span class="fed-peer-url">${p.url||''}</span>
+        <span class="fed-peer-seen">${tsAgo(p.last_seen)}</span>
+        <button class="fed-peer-del" title="Remove peer" onclick="fedDelPeer('${key}',${i})">✕</button>
+      </div>`).join('')
+    : `<div style="font-size:11px;color:var(--muted2);padding:6px 0">No peer nodes registered.</div>`;
+
+  peersCard.innerHTML = `
+    <div class="fed-card-hdr">
+      <span class="fed-card-icon">🌐</span>
+      <span class="fed-card-name">Peer Nodes</span>
+      <span style="font-size:10px;color:var(--muted2)">${peers.length} registered</span>
+    </div>
+    <div id="fed-peer-list-${key}">${peerRows}</div>
+    <div class="fed-add-form">
+      <input class="fed-inp" id="fed-pname-${key}" placeholder="Name" style="width:110px">
+      <input class="fed-inp" id="fed-purl-${key}" placeholder="https://…" style="flex:1;min-width:140px">
+      <button class="btn-sm p" onclick="fedAddPeer('${key}')">Add peer</button>
+    </div>`;
+
+  // Config form
+  cfgCard.innerHTML = `
+    <div class="fed-card-hdr">
+      <span class="fed-card-icon">🔧</span>
+      <span class="fed-card-name">Federation Config</span>
+    </div>
+    <div class="fed-cfg-row">
+      <span class="fed-cfg-lbl">FV URL</span>
+      <input class="fed-inp" id="fed-fvurl-${key}" value="${fed.fv_url||''}" placeholder="http://host:port" style="flex:1">
+    </div>
+    <div class="fed-cfg-row">
+      <span class="fed-cfg-lbl">MF URL</span>
+      <input class="fed-inp" id="fed-mfurl-${key}" value="${fed.mf_url||''}" placeholder="http://host:port" style="flex:1">
+    </div>
+    <div style="display:flex;gap:6px;align-items:center">
+      <button class="btn p" onclick="fedSaveCfg('${key}')" style="padding:4px 14px">Save URLs</button>
+      <span id="fed-cfg-msg-${key}" style="font-size:10px;color:var(--muted)"></span>
+    </div>`;
+}
+
+async function fedSaveCfg(key) {
+  const fvUrl = document.getElementById(`fed-fvurl-${key}`)?.value.trim() || '';
+  const mfUrl = document.getElementById(`fed-mfurl-${key}`)?.value.trim() || '';
+  const msg   = document.getElementById(`fed-cfg-msg-${key}`);
+  try {
+    const r = await fetch('/api/federation', {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({fv_url: fvUrl, mf_url: mfUrl})
+    });
+    const d = await r.json();
+    if (msg) { msg.textContent = d.ok ? '✓ Saved' : ('Error: '+(d.error||'?')); msg.style.color = d.ok?'var(--green)':'var(--red)'; }
+    setTimeout(() => loadFedView(key), 500);
+  } catch { if (msg) { msg.textContent = 'Save failed'; msg.style.color = 'var(--red)'; } }
+}
+
+async function fedTest(key, which) {
+  const cfg = await fetch('/api/federation').then(r=>r.json()).catch(()=>({}));
+  const url = which==='fv' ? (cfg.fv_url||'') : (cfg.mf_url||'');
+  const label = which==='fv' ? 'FV' : 'MF';
+  if (!url) { showToast(`${label} URL not configured`); return; }
+  showToast(`Testing ${label} connection…`);
+  try {
+    await fetch(url+'/api/status', {signal:AbortSignal.timeout(5000), mode:'no-cors'});
+    showToast(`${label} reachable ✓`);
+  } catch { showToast(`${label} unreachable`); }
+}
+
+async function fedPushMF(key) {
+  showToast('Pushing context to MF…');
+  const cfg = await fetch('/api/federation').then(r=>r.json()).catch(()=>({}));
+  const url = cfg.mf_url || '';
+  if (!url) { showToast('MF URL not configured'); return; }
+  try {
+    const ctx = await apiFetch('/api/context').catch(()=>({}));
+    await fetch(url+'/api/context', {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify(ctx), signal: AbortSignal.timeout(8000)
+    });
+    // Record timestamp
+    await fetch('/api/federation', {method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({mf_last_contact: new Date().toISOString()})}).catch(()=>{});
+    showToast('Context pushed to MF ✓');
+    setTimeout(() => loadFedView(key), 500);
+  } catch(e) { showToast('Push failed: '+(e.message||e)); }
+}
+
+async function fedAddPeer(key) {
+  const name = document.getElementById(`fed-pname-${key}`)?.value.trim();
+  const url  = document.getElementById(`fed-purl-${key}`)?.value.trim();
+  if (!name || !url) { showToast('Enter both name and URL'); return; }
+  const peers = [...(window._fedPeers?.[key] || [])];
+  peers.push({name, url, status:'uncfg', last_seen:null});
+  await fetch('/api/federation', {method:'POST', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({peers: JSON.stringify(peers)})}).catch(()=>{});
+  showToast('Peer added');
+  setTimeout(() => loadFedView(key), 300);
+}
+
+async function fedDelPeer(key, idx) {
+  const peers = [...(window._fedPeers?.[key] || [])];
+  peers.splice(idx, 1);
+  await fetch('/api/federation', {method:'POST', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({peers: JSON.stringify(peers)})}).catch(()=>{});
+  setTimeout(() => loadFedView(key), 300);
 }
 
 // ── TERMINAL ──────────────────────────────────────────────────────────────────
@@ -5264,6 +5520,7 @@ const GUIDE_FEATURES = [
   { icon:'📚', name:'Docs',           desc:'Markdown guides synced from ~/guides/ on the server.', tags:['docs'], action:()=>setCategory('docs') },
   { icon:'🤖', name:'AI Chat',        desc:'Talk to Ollama models via Open WebUI — CPU-based, toggle on-demand.', tags:['ai'], action:()=>openView('chat') },
   { icon:'⚑',  name:'Issues',         desc:'Tracked known issues — per-service bug log from issues/ folder.', tags:['ops'], action:()=>openView('issues') },
+  { icon:'🛰', name:'Federation',     desc:'FlareVault + Metaforge status, peer nodes, ecosystem config.', tags:['ecosystem','ops'], action:()=>openView('federation') },
   { icon:'⚙', name:'Settings',       desc:'Users, TOTP, AI config, theme, accent color.', tags:['admin'], action:()=>openView('settings') },
 ];
 

@@ -1566,6 +1566,16 @@ def config_set(key, value):
     except Exception as e:
         return str(e)
 
+def config_get_all():
+    """Return all hub_config keys as a dict."""
+    try:
+        conn = db_conn()
+        rows = conn.execute("SELECT key,value FROM hub_config").fetchall()
+        conn.close()
+        return {r['key']: r['value'] for r in rows}
+    except Exception:
+        return {}
+
 def users_list():
     try:
         conn = db_conn()
@@ -2467,6 +2477,22 @@ class Handler(http.server.BaseHTTPRequestHandler):
         elif p == '/api/context':
             self.send_json(build_context())
 
+        elif p == '/api/federation':
+            cfg = config_get_all()
+            # peers stored as JSON string in hub_config
+            peers_raw = cfg.get('peers', '[]')
+            try:
+                peers = json.loads(peers_raw) if peers_raw else []
+            except Exception:
+                peers = []
+            self.send_json({
+                'fv_url':          cfg.get('fv_url', ''),
+                'mf_url':          cfg.get('mf_url', ''),
+                'peers':           peers,
+                'fv_last_contact': cfg.get('fv_last_contact') or None,
+                'mf_last_contact': cfg.get('mf_last_contact') or None,
+            })
+
         elif p.startswith('/proxy/'):
             # /proxy/3000/some/path?query=string
             remainder = p[7:]  # e.g. "3000/some/path"
@@ -2557,6 +2583,17 @@ class Handler(http.server.BaseHTTPRequestHandler):
             for k, v in body.items():
                 config_set(k, str(v))
             self.send_json({'ok': True})
+
+        elif p == '/api/federation':
+            # Accept: fv_url, mf_url, peers (JSON string), fv_last_contact, mf_last_contact
+            # No gate required — URLs are not secrets; peers list is operational data.
+            allowed = {'fv_url', 'mf_url', 'peers', 'fv_last_contact', 'mf_last_contact'}
+            saved = 0
+            for k, v in body.items():
+                if k in allowed:
+                    config_set(k, str(v) if v is not None else '')
+                    saved += 1
+            self.send_json({'ok': True, 'saved': saved})
 
         elif p == '/api/journal':
             body_text = body.get('body','').strip()
