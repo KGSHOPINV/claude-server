@@ -2493,6 +2493,25 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 'mf_last_contact': cfg.get('mf_last_contact') or None,
             })
 
+        elif p == '/api/identity':
+            # Identity beacon — used by peer mesh registration and discovery
+            si = get_server_info()
+            cfg = config_get_all()
+            ts_ip = si.get('tailscale_ip', '')
+            # hub_url: prefer config override, else build from tailscale IP, else local IP
+            hub_url = cfg.get('hub_url', '')
+            if not hub_url:
+                ip = ts_ip if ts_ip and ts_ip != 'none' else si.get('local_ip', '')
+                hub_url = f'http://{ip}:{PORT}' if ip else ''
+            self.send_json({
+                'hostname':    si.get('hostname', ''),
+                'name':        cfg.get('server_name', si.get('hostname', '')),
+                'hub_url':     hub_url,
+                'local_ip':    si.get('local_ip', ''),
+                'tailscale_ip': ts_ip,
+                'version':     '1.0',
+            })
+
         elif p.startswith('/proxy/'):
             # /proxy/3000/some/path?query=string
             remainder = p[7:]  # e.g. "3000/some/path"
@@ -2594,6 +2613,50 @@ class Handler(http.server.BaseHTTPRequestHandler):
                     config_set(k, str(v) if v is not None else '')
                     saved += 1
             self.send_json({'ok': True, 'saved': saved})
+
+        elif p == '/api/peer/register':
+            # Bidirectional peer mesh registration.
+            # POST {"hub_url": "http://ip:8765", "echo": true/false}
+            # - Adds hub_url to this hub's peers list
+            # - If echo=true, also POSTs back to register this hub on the peer
+            peer_url = body.get('hub_url', '').rstrip('/')
+            if not peer_url:
+                self.send_json({'ok': False, 'error': 'hub_url required'}, 400)
+                return
+            # Load and update peers list
+            cfg = config_get_all()
+            peers_raw = cfg.get('peers', '[]')
+            try:
+                peers = json.loads(peers_raw) if peers_raw else []
+            except Exception:
+                peers = []
+            if peer_url not in peers:
+                peers.append(peer_url)
+                config_set('peers', json.dumps(peers))
+                log_activity(f'Peer registered: {peer_url}', 'system', 'federation', '', 'info')
+            # Echo back — register ourselves on the peer (one level deep, no infinite loop)
+            echo = body.get('echo', True)
+            if echo:
+                si = get_server_info()
+                cfg2 = config_get_all()
+                ts_ip = si.get('tailscale_ip', '')
+                my_hub_url = cfg2.get('hub_url', '')
+                if not my_hub_url:
+                    ip = ts_ip if ts_ip and ts_ip != 'none' else si.get('local_ip', '')
+                    my_hub_url = f'http://{ip}:{PORT}' if ip else ''
+                if my_hub_url:
+                    try:
+                        echo_body = json.dumps({'hub_url': my_hub_url, 'echo': False}).encode()
+                        req = urllib.request.Request(
+                            f'{peer_url}/api/peer/register',
+                            data=echo_body,
+                            headers={'Content-Type': 'application/json'},
+                            method='POST'
+                        )
+                        urllib.request.urlopen(req, timeout=5)
+                    except Exception as e:
+                        pass  # Best-effort; peer may be offline at registration time
+            self.send_json({'ok': True, 'peers': peers})
 
         elif p == '/api/journal':
             body_text = body.get('body','').strip()
