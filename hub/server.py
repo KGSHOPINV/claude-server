@@ -355,19 +355,90 @@ SERVICES = [
     {'name': 'Open WebUI',  'port': 3004,  'group': 'AI',             'description': 'AI chat interface',     'installed': True},
 ]
 
-def build_services(containers):
-    running_names = {c['name'].lower() for c in containers if c['running']}
-    ip = SERVER_IP or subprocess.run(['hostname', '-I'], capture_output=True, text=True).stdout.split()[0]
-    result = []
+def build_services(server_info=None):
+    """Build service list: known services enriched with live Docker state,
+    plus auto-discovered containers not in the known list."""
+    si = server_info or get_server_info()
+    ip = si.get('local_ip') or SERVER_IP or 'localhost'
+
+    # Use cached containers (get_containers has a 30s cache + ssh_run)
+    containers = get_containers()
+
+    # Build running map: container_name → {ports, status, image}
+    running = {}
+    for c in containers:
+        if not c.get('running'):
+            continue
+        name = c['name']
+        ports_str = c.get('ports', '')
+        host_ports = []
+        for m in re.finditer(r'(?:0\.0\.0\.0|\[::\]):(\d+)->', ports_str):
+            try:
+                host_ports.append(int(m.group(1)))
+            except ValueError:
+                pass
+        running[name] = {
+            'ports': host_ports,
+            'status': c.get('status', ''),
+            'image': c.get('image', ''),
+        }
+
+    services = []
+    seen_containers = set()
+
+    # First pass: known services — enrich with live running state
     for s in SERVICES:
+        name = s.get('name', '')
+        port = s.get('port')
+
+        # Heuristic match by container field or name variants
+        matched_container = None
+        explicit = s.get('container', '')
+        if explicit and explicit in running:
+            matched_container = explicit
+        else:
+            n = name.lower().replace(' ', '-').replace('.', '')
+            for cname in running:
+                if cname.lower() in (n, name.lower()):
+                    matched_container = cname
+                    break
+
+        if matched_container:
+            seen_containers.add(matched_container)
+
+        is_running = matched_container is not None
+        actual_ports = running[matched_container]['ports'] if matched_container else []
+        display_port = actual_ports[0] if actual_ports else port
+        scheme = 'https' if s.get('https') or port in HTTPS_PORTS else 'http'
+
         svc = dict(s)
-        scheme = 'https' if s.get('https') else 'http'
-        svc['url'] = f"{scheme}://{ip}:{s['port']}" if not s.get('no_ui') else None
-        # Match container name heuristically
-        n = s['name'].lower().replace(' ', '-').replace('.', '')
-        svc['running'] = n in running_names or s['name'].lower() in running_names
-        result.append(svc)
-    return result
+        svc['running'] = is_running
+        svc['actual_ports'] = actual_ports
+        svc['url'] = (f"{scheme}://{ip}:{display_port}" if display_port else '') if not s.get('no_ui') else None
+        services.append(svc)
+
+    # Second pass: auto-discovered containers NOT in the known list
+    for cname, info in running.items():
+        if cname in seen_containers:
+            continue
+        if not info['ports']:
+            continue  # skip containers with no exposed ports
+
+        port = info['ports'][0]
+        services.append({
+            'name': cname,
+            'label': cname,
+            'description': f"Auto-discovered — {info['image']}",
+            'port': port,
+            'actual_ports': info['ports'],
+            'url': f"http://{ip}:{port}",
+            'running': True,
+            'installed': True,
+            'group': 'Discovered',
+            'discovered': True,
+        })
+
+    return services
 
 # ── Port lanes ─────────────────────────────────────────────────────────────────
 
@@ -1587,7 +1658,7 @@ def get_manifest():
         server['ram_total_gb'] = round(status['ram_total_mb'] / 1024, 1)
 
     containers = get_containers()
-    services = build_services(containers)
+    services = build_services(server)
 
     # Hub git ref (if running from a git checkout)
     git_r = ssh_run(f'cd {BASE_DIR} && git log -1 --format="%h %s" 2>/dev/null || echo unknown')
@@ -2160,8 +2231,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
             self.send_json(get_containers(force=force))
 
         elif p == '/api/services':
-            containers = get_containers()
-            self.send_json(build_services(containers))
+            self.send_json(build_services())
 
         elif p == '/api/vault':
             blob = vault_get()
@@ -2262,10 +2332,11 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 except Exception:
                     ports = []
             try:
-                svcs = build_services(get_containers())
+                si   = get_server_info()
+                svcs = build_services(si)
             except Exception:
                 svcs = []
-            si   = get_server_info()
+                si   = get_server_info()
             html = build_cutsheet_html(ports, svcs, si)
             enc  = html.encode('utf-8')
             self.send_response(200)
