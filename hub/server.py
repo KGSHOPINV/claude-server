@@ -1219,6 +1219,35 @@ def api_storage_info():
                     unattached.append({'name': p[0], 'size': p[1], 'path': '/dev/' + p[0]})
     except Exception: pass
 
+    # Disk info tree — physical disks + partitions with fstype, label, uuid, mountpoint
+    disk_tree = []
+    try:
+        raw = subprocess.check_output(
+            ['lsblk', '-o', 'NAME,SIZE,TYPE,MOUNTPOINT,FSTYPE,LABEL,UUID', '-rn'],
+            text=True, stderr=subprocess.DEVNULL).splitlines()
+        current_disk = None
+        disk_map = {}
+        for line in raw:
+            p = line.split()
+            if len(p) < 3: continue
+            name, size, typ = p[0], p[1], p[2]
+            mount   = p[3] if len(p) > 3 else ''
+            fstype  = p[4] if len(p) > 4 else ''
+            label   = p[5] if len(p) > 5 else ''
+            uuid    = p[6] if len(p) > 6 else ''
+            if typ == 'disk':
+                current_disk = {'name': name, 'size': size, 'path': '/dev/'+name, 'parts': []}
+                disk_map[name] = current_disk
+                disk_tree.append(current_disk)
+            elif typ in ('part', 'lvm', 'crypt') and current_disk:
+                current_disk['parts'].append({
+                    'name': name, 'size': size, 'type': typ,
+                    'mount': mount, 'fstype': fstype,
+                    'label': label, 'uuid': uuid,
+                    'path': '/dev/'+name,
+                })
+    except Exception: pass
+
     docker_df = {'images': {}, 'containers': {}, 'volumes': {}, 'build_cache': {}}
     try:
         raw = subprocess.check_output(
@@ -1256,6 +1285,7 @@ def api_storage_info():
         'docker': docker_df,
         'snap_count': snap_count,
         'log_size': log_size,
+        'disk_tree': disk_tree,
         'generated': datetime.now().isoformat(timespec='seconds'),
     }
 

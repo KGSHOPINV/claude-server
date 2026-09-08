@@ -925,6 +925,23 @@ body.desk-mode #desk-exit { display:flex; align-items:center; gap:6px; }
 .docker-layer .stor-layer-tag { background:rgba(88,166,255,.12);  color:var(--blue,#58a6ff); }
 
 
+/* ── Disk tree (Diagnostics tab) ───────────────────────────────────── */
+.dtree { display:flex; flex-direction:column; gap:10px; }
+.dtree-disk { border:1px solid var(--border); border-radius:6px; overflow:hidden; }
+.dtree-disk-hdr { display:flex; align-items:center; gap:8px; padding:8px 10px; background:var(--panel2,rgba(255,255,255,.04)); font-size:12px; font-weight:700; }
+.dtree-disk-icon { font-size:16px; }
+.dtree-disk-name { font-family:monospace; flex:1; }
+.dtree-disk-size { font-size:11px; color:var(--muted); }
+.dtree-parts { display:flex; flex-direction:column; gap:1px; padding:4px 6px 6px; }
+.dtree-part { display:flex; align-items:center; gap:6px; padding:5px 6px; border-radius:4px; font-size:11px; flex-wrap:wrap; }
+.dtree-part:nth-child(odd) { background:rgba(0,0,0,.05); }
+.dtree-part-name { font-weight:600; min-width:90px; }
+.dtree-tag { font-size:10px; padding:2px 6px; border-radius:3px; background:rgba(88,166,255,.1); color:var(--muted); white-space:nowrap; }
+.dtree-mount { background:rgba(57,208,196,.12); color:var(--accent); font-weight:600; }
+.dtree-nomount { background:rgba(255,166,77,.1); color:#f90; }
+.dtree-label { background:rgba(160,100,255,.1); color:#b48eff; }
+.dtree-uuid { font-size:10px; color:var(--muted); font-family:monospace; }
+
 /* ── Stub (retired) views ───────────────────────────────────────────── */
 .stub-view { display:flex; flex-direction:column; align-items:center; justify-content:center; height:100%; padding:32px; text-align:center; gap:8px; }
 .stub-icon { font-size:36px; line-height:1; opacity:.4; }
@@ -4618,29 +4635,54 @@ function storBar(pct) {
   return `<div class="usage-bar-wrap"><div class="usage-bar ${cls}" style="width:${pct}%"></div></div>`;
 }
 
+function storMountIcon(mp) {
+  if (mp === '/') return '💿';
+  if (mp === '/backup') return '💾';
+  if (mp.startsWith('/boot')) return '🏁';
+  return '📁';
+}
+function storMountLabel(mp, source) {
+  if (mp === '/') return 'OS Drive';
+  if (mp === '/backup') return 'Backup Drive';
+  if (mp === '/boot/efi') return 'EFI Boot';
+  if (mp === '/boot') return 'Boot';
+  return mp.replace(/^\//, '') || source || 'Volume';
+}
+
 function storRenderOverview(panel, d) {
   const dkr = d.docker || {};
   const imgs = dkr.images || {};
   const vols = dkr.volumes || {};
   const bc   = dkr.build_cache || {};
   const ctrs = dkr.containers || {};
-  const root = (d.mounts || []).find(m => m.mount === '/') || {};
-  const pct = root.pct || 0;
+
+  // All real storage volumes — filter out tiny/system mounts
+  const realMounts = (d.mounts || []).filter(m => m.total_gb >= 1);
+
   const reclaimTotal = [imgs.reclaimable, vols.reclaimable, bc.reclaimable]
     .map(r => parseFloat((r||'0').replace(/[^0-9.]/g,'')) || 0)
     .reduce((a,b) => a+b, 0);
+
   panel.innerHTML = `
     <div class="stor-overview-grid">
-      <div class="stor-card">
-        <div class="stor-card-hdr">
-          <span class="stor-card-icon">💿</span>
-          <span class="stor-card-label">Root Disk</span>
-          <span class="stor-card-badge ${pct>=90?'badge-err':pct>=80?'badge-warn':'badge-ok'}">${pct}%</span>
-        </div>
-        ${storBar(pct)}
-        <div class="stor-card-row"><span>${root.used_gb||'?'}GB used</span><span class="muted-sm">of ${root.total_gb||'?'}GB</span><span class="muted-sm" style="margin-left:auto">${root.avail_gb||'?'}GB free</span></div>
-        <div class="stor-card-note">All Docker data (images, volumes, cache) lives here at /var/lib/docker</div>
-      </div>
+      ${realMounts.map(m => {
+        const isRoot = m.mount === '/';
+        return `<div class="stor-card">
+          <div class="stor-card-hdr">
+            <span class="stor-card-icon">${storMountIcon(m.mount)}</span>
+            <span class="stor-card-label">${storMountLabel(m.mount, m.source)}</span>
+            <span class="stor-card-badge ${m.pct>=90?'badge-err':m.pct>=80?'badge-warn':'badge-ok'}">${m.pct}%</span>
+          </div>
+          ${storBar(m.pct)}
+          <div class="stor-card-row">
+            <span>${m.used_gb}GB used</span>
+            <span class="muted-sm">of ${m.total_gb}GB</span>
+            <span class="muted-sm" style="margin-left:auto">${m.avail_gb}GB free</span>
+          </div>
+          <div class="stor-card-note mono-sm">${m.source} → ${m.mount}${isRoot ? ' · Docker data lives here' : ''}</div>
+        </div>`;
+      }).join('')}
+
       <div class="stor-card ${reclaimTotal > 5 ? 'stor-card-hl' : ''}">
         <div class="stor-card-hdr">
           <span class="stor-card-icon">🐳</span>
@@ -4655,11 +4697,13 @@ function storRenderOverview(panel, d) {
         </div>
         ${reclaimTotal > 5 ? '<div class="stor-card-note warn-note">Go to Cleanup tab — should free ~' + reclaimTotal.toFixed(0) + 'GB</div>' : ''}
       </div>
+
       ${(d.unattached||[]).length ? `<div class="stor-card stor-card-hl">
         <div class="stor-card-hdr"><span class="stor-card-icon">💽</span><span class="stor-card-label">Unattached Disk</span><span class="badge-warn">not mounted</span></div>
         ${d.unattached.map(u => `<div class="stor-card-row"><span class="mono-sm">${u.path}</span><span class="muted-sm">${u.size}</span></div>`).join('')}
-        <div class="stor-card-note warn-note">Raw disk — no filesystem yet. Format it as /backup via Diagnostics tab.</div>
+        <div class="stor-card-note warn-note">Raw disk — no filesystem or mount point. Format and mount it, then add to /etc/fstab with nofail.</div>
       </div>` : ''}
+
       <div class="stor-card">
         <div class="stor-card-hdr"><span class="stor-card-icon">🏗</span><span class="stor-card-label">Server Layers</span></div>
         <div class="stor-layer">
@@ -4717,12 +4761,17 @@ function storRenderFilesystem(panel, d) {
 
 function storRenderDiag(panel, d) {
   const mounts = d.mounts || [];
-  const root = mounts.find(m => m.mount === '/') || {};
-  const pct = root.pct || 0;
+  const realMounts = mounts.filter(m => m.total_gb >= 1);
   const findings = [];
-  if (pct >= 90) findings.push({level:'error', msg:`Root disk at ${pct}% — critical. Docker may stop working.`, fix:'Run Cleanup → Prune All immediately.'});
-  else if (pct >= 80) findings.push({level:'warn', msg:`Root disk at ${pct}% — getting tight.`, fix:'Run Cleanup → Prune Images to recover space.'});
-  else findings.push({level:'ok', msg:`Root disk at ${pct}% — healthy.`, fix:''});
+
+  // Check all real mounts for high usage
+  realMounts.forEach(m => {
+    const label = storMountLabel(m.mount, m.source);
+    if (m.pct >= 90) findings.push({level:'error', msg:`${label} (${m.mount}) at ${m.pct}% — critical.`, fix: m.mount === '/' ? 'Run Cleanup → Prune All immediately.' : 'Free up space on this volume.'});
+    else if (m.pct >= 80) findings.push({level:'warn', msg:`${label} (${m.mount}) at ${m.pct}% — getting tight.`, fix: m.mount === '/' ? 'Run Cleanup → Prune Images.' : 'Review what is using this volume.'});
+    else findings.push({level:'ok', msg:`${label} (${m.mount}) at ${m.pct}% — healthy.`, fix:''});
+  });
+  if (!realMounts.length) findings.push({level:'ok', msg:'No large mounts detected — data may still be loading.', fix:''});
 
   const dkr = d.docker || {};
   const imgs = dkr.images || {};
@@ -4737,6 +4786,27 @@ function storRenderDiag(panel, d) {
   if (bcRec > 2) findings.push({level:'info', msg:`${bc.reclaimable} reclaimable from build cache.`, fix:'Go to Cleanup → Prune Build Cache.'});
   if (d.snap_count > 0) findings.push({level:'info', msg:`${d.snap_count} snap packages installed — snaps mount their own loop devices.`, fix:'Consider removing unused snaps: sudo snap remove <name>.'});
 
+  // Disk tree
+  const tree = d.disk_tree || [];
+  const diskTreeHtml = tree.length ? tree.map(disk => `
+    <div class="dtree-disk">
+      <div class="dtree-disk-hdr">
+        <span class="dtree-disk-icon">💽</span>
+        <span class="dtree-disk-name">/dev/${disk.name}</span>
+        <span class="dtree-disk-size">${disk.size}</span>
+      </div>
+      ${disk.parts && disk.parts.length ? `<div class="dtree-parts">${disk.parts.map(p => `
+        <div class="dtree-part">
+          <span class="dtree-part-name mono-sm">/dev/${p.name}</span>
+          <span class="dtree-tag">${p.size}</span>
+          ${p.fstype ? `<span class="dtree-tag">${p.fstype}</span>` : ''}
+          ${p.mount ? `<span class="dtree-tag dtree-mount">${p.mount}</span>` : '<span class="dtree-tag dtree-nomount">not mounted</span>'}
+          ${p.label ? `<span class="dtree-tag dtree-label">label:${p.label}</span>` : ''}
+          ${p.uuid ? `<span class="dtree-uuid mono-sm" title="${p.uuid}">${p.uuid.slice(0,8)}…</span>` : ''}
+        </div>`).join('')}
+      </div>` : '<div class="dtree-noparts muted-sm" style="padding:6px 0 0 16px">no partitions detected</div>'}
+    </div>`).join('') : '<div class="muted-sm">No disk tree — server may need a hub update to expose this data.</div>';
+
   panel.innerHTML = `
     <div class="stor-section">
       <div class="stor-section-title">Diagnostics</div>
@@ -4749,13 +4819,15 @@ function storRenderDiag(panel, d) {
       </div>`).join('')}
     </div>
     <div class="stor-section">
-      <div class="stor-section-title">Volume Expansion Wizard</div>
+      <div class="stor-section-title">Disk Configuration</div>
+      <div class="dtree">${diskTreeHtml}</div>
+    </div>
+    <div class="stor-section">
+      <div class="stor-section-title">Volume Expansion</div>
       <div class="edu-box">
-        <p><strong>Your server has 1.8TB physical volume but only 100GB logical volume.</strong> You have ~1.7TB free inside the volume group — no new hardware needed.</p>
-        <p>Two commands to expand. Run these directly on the server (requires sudo):</p>
-        <code class="block-code">sudo lvextend -L 1T /dev/ubuntu-vg/ubuntu-lv</code>
-        <code class="block-code">sudo resize2fs /dev/ubuntu-vg/ubuntu-lv</code>
-        <p>No reboot needed. No services interrupted. Takes about 2 seconds.</p>
+        <p><strong>Root LV is 100GB of a 1.8TB physical volume.</strong> ~1.7TB free inside the volume group — no new hardware needed.</p>
+        <p>Expand with (no reboot, no downtime):</p>
+        <code class="block-code">sudo lvextend -L 1T /dev/ubuntu-vg/ubuntu-lv && sudo resize2fs /dev/ubuntu-vg/ubuntu-lv</code>
       </div>
     </div>`;
 }
