@@ -1678,10 +1678,14 @@ function openView(viewType, config={}) {
   const activeWs = S.workspaces.find(w => w.id === S.activeWs);
   if (activeWs && activeWs.panes.some(p => p.viewType === viewType)) return;
 
+  // Already open in another tab? → switch to it (dedup)
+  const existingWs = S.workspaces.find(ws => ws.panes.some(p => p.viewType === viewType));
+  if (existingWs) { activateWorkspace(existingWs.id); return; }
+
   // Active tab exists and isn't pinned? → navigate in place (browser behaviour)
   if (activeWs && !activeWs.pinned) { _navigateWs(activeWs); return; }
 
-  // No active tab yet → create the first one
+  // No active tab yet, or current tab is pinned → create a new tab
   createWorkspace({ title: titles[viewType]||viewType, icon: icons[viewType]||'⊞', viewType, viewConfig: config });
 }
 

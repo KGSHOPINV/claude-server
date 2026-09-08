@@ -226,8 +226,13 @@ def get_status(force=False):
         '"$(cat /proc/loadavg | awk \'{print $1,$2,$3}\')" '
         # All real mounted volumes (exclude tmpfs, loop/snap, devtmpfs)
         '"$(df -h -x tmpfs -x devtmpfs 2>/dev/null | awk \'NR>1 && !/loop/{printf "%s|%s|%s|%s|%s;", $1,$2,$3,$5,$6}\')" '
-        # Unattached raw disks (no mount point) — shows drives not yet partitioned/mounted
-        '"$(lsblk -dn -o NAME,SIZE,TYPE,MOUNTPOINTS 2>/dev/null | awk \'$3=="disk" && $4=="" {printf "%s|%s;", $1,$2}\')"'
+        # Unattached raw disks — disk with NO mounted partitions/children at all
+        # Uses full tree check (-r = raw, includes children) so LVM, RAID, and partitioned
+        # OS disks are never falsely flagged as unattached.
+        '"$(for d in $(lsblk -dn -o NAME,TYPE 2>/dev/null | awk \'$2=="disk" && !/loop/{print $1}\'); do '
+        'mnt=$(lsblk -rno MOUNTPOINT /dev/$d 2>/dev/null | grep -cv \'^$\' || echo 0); '
+        'size=$(lsblk -dn -o SIZE /dev/$d 2>/dev/null); '
+        '[ "$mnt" -eq 0 ] && echo "${d}|${size}"; done)"'
     )
 
     if not r['online']:
