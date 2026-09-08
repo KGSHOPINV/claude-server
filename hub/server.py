@@ -25,7 +25,7 @@ import urllib.error
 import urllib.request
 from datetime import datetime
 
-PORT      = int(os.environ.get('HUB_PORT', 7000))
+PORT      = int(os.environ.get('HUB_PORT', 8765))
 BASE_DIR  = os.path.dirname(os.path.abspath(__file__))
 DB_PATH   = os.environ.get('HUB_DB',     os.path.join(BASE_DIR, '..', 'db', 'server.db'))
 APP_PATH    = os.path.join(BASE_DIR, 'app.html')
