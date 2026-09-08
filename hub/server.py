@@ -194,7 +194,7 @@ def get_server_info():
             'local_ip':    parts[2].strip() if len(parts) > 2 else '',
             'tailscale_ip': parts[3].strip() if len(parts) > 3 else 'none',
             'cpu_cores':   int(parts[4].strip()) if len(parts) > 4 and parts[4].strip().isdigit() else 0,
-            'home_dir':    parts[5].strip() if len(parts) > 5 and parts[5].strip() else '/root',
+            'home_dir':    parts[5].strip() if len(parts) > 5 and parts[5].strip() else os.path.expanduser('~'),
             'ssh_user':    SSH_USER or (SSH_HOST.split('@')[0] if '@' in SSH_HOST else ''),
         }
     else:
@@ -492,7 +492,7 @@ def build_cutsheet_html(ports, services, server_info):
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Port Cut Sheet — fks-services</title>
+<title>Port Cut Sheet — {si.get('hostname','server')}</title>
 <style>
 :root{{
   --paper:#fff;--ink:#111827;--ink2:#374151;--dim:#6b7280;
@@ -558,7 +558,7 @@ body{{background:var(--paper);color:var(--ink);font-family:var(--sans);font-size
 
 <div class="hdr">
   <div>
-    <div class="hdr-eye">Port Reference — fks-services</div>
+    <div class="hdr-eye">Port Reference — {si.get('hostname','server')}</div>
     <div class="hdr-title">Port Cut Sheet</div>
     <div class="hdr-sub">{ip} &nbsp;·&nbsp; Tailscale {ts_ip} &nbsp;·&nbsp; {os_}</div>
   </div>
@@ -587,11 +587,11 @@ body{{background:var(--paper);color:var(--ink);font-family:var(--sans);font-size
   <span><strong>Portainer</strong> · https://{ip}:9443</span>
   <span><strong>Cockpit</strong> · https://{ip}:9090</span>
   <span><strong>Netdata</strong> · http://{ip}:19999</span>
-  <span><strong>SSH</strong> · admin1@{ip}</span>
+  <span><strong>SSH</strong> · {si.get('ssh_user','admin')}@{ip}</span>
 </div>
 
 <div class="foot">
-  <span>fks-services · {os_} · {ram} GB RAM · Docker stack · Watchtower auto-update</span>
+  <span>{si.get('hostname','server')} · {os_} · {ram} GB RAM · Docker stack · Watchtower auto-update</span>
   <span>http://{ip}:7000/cutsheet &nbsp;·&nbsp; {ts}</span>
 </div>
 
@@ -659,7 +659,7 @@ def scan_ports():
         # Process name heuristic for hub itself
         if pn == PORT and p['process'] in ('python3', 'python', ''):
             p['container'] = 'server-hub'
-        p['service']   = _PORT_NAMES.get(pn, p['container'].replace('keynox-', '') if p['container'] else '')
+        p['service']   = _PORT_NAMES.get(pn, p['container'] if p['container'] else '')
         p['lane']      = _port_lane(pn)
 
     ports.sort(key=lambda x: x['port'])
@@ -960,7 +960,7 @@ def _ntfy_send(title, body, priority='default', tags='server'):
     """Send ntfy push notification. Reads config from ~/.server-alerts.conf or env."""
     try:
         conf_path = os.path.expanduser('~/.server-alerts.conf')
-        url = 'http://localhost:7001'
+        url = os.environ.get('HUB_NTFY_URL', 'http://localhost:8085')
         topic = os.uname().nodename.lower() if hasattr(os, 'uname') else 'server'
         token = ''
         if os.path.exists(conf_path):
@@ -1524,7 +1524,7 @@ def get_storage_info():
     r2 = ssh_run("docker system df 2>/dev/null")
     results['docker_df'] = r2.get('output','') if r2.get('online') else ''
     # Key directory sizes
-    r3 = ssh_run("du -sh /srv/docker /srv/backups $HOME 2>/dev/null")
+    r3 = ssh_run(f"du -sh {DOCKER_ROOT} /srv/backups $HOME 2>/dev/null")
     results['dirs'] = r3.get('output','') if r3.get('online') else ''
     # Docker volumes list
     r4 = ssh_run("docker volume ls --format '{{.Name}}' 2>/dev/null | head -30")
@@ -1998,7 +1998,7 @@ def tunnel_start():
         subprocess.run(['docker', 'rm', '-f', 'server-hub-tunnel'], capture_output=True, timeout=8)
         r = subprocess.run(
             ['docker', 'run', '-d', '--name', 'server-hub-tunnel', '--network', 'host',
-             'cloudflare/server-hub-tunnel:latest', 'tunnel', '--url', f'http://localhost:{PORT}'],
+             'cloudflare/cloudflared:latest', 'tunnel', '--url', f'http://localhost:{PORT}'],
             capture_output=True, text=True, timeout=30
         )
         if r.returncode == 0:
@@ -2549,13 +2549,13 @@ class Handler(http.server.BaseHTTPRequestHandler):
         elif p == '/api/service/install':
             name = body.get('name','').strip().lower()
             INSTALLABLE = {
-                'n8n':       'cd /srv/docker/n8n && docker compose up -d',
-                'redis':     'cd /srv/docker/redis && docker compose up -d',
-                'surrealdb': 'cd /srv/docker/surrealdb && docker compose up -d',
-                'minio':     'cd /srv/docker/minio && docker compose up -d',
-                'adminer':   'cd /srv/docker/adminer && docker compose up -d',
-                'mailpit':   'cd /srv/docker/mailpit && docker compose up -d',
-                'wikijs':    'cd /srv/docker/wikijs && docker compose up -d',
+                'n8n':       'cd ' + DOCKER_ROOT + '/n8n && docker compose up -d',
+                'redis':     'cd ' + DOCKER_ROOT + '/redis && docker compose up -d',
+                'surrealdb': 'cd ' + DOCKER_ROOT + '/surrealdb && docker compose up -d',
+                'minio':     'cd ' + DOCKER_ROOT + '/minio && docker compose up -d',
+                'adminer':   'cd ' + DOCKER_ROOT + '/adminer && docker compose up -d',
+                'mailpit':   'cd ' + DOCKER_ROOT + '/mailpit && docker compose up -d',
+                'wikijs':    'cd ' + DOCKER_ROOT + '/wikijs && docker compose up -d',
             }
             if name not in INSTALLABLE:
                 self.send_json({'ok': False, 'error': f'Unknown service: {name}'}, 400)
