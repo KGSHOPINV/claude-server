@@ -448,7 +448,7 @@ def build_services(server_info=None):
 # ── Port lanes ─────────────────────────────────────────────────────────────────
 
 PORT_LANES = [
-    {'name': 'Hub',            'color': 'accent',  'ranges': [(7000, 7099)]},
+    {'name': 'Hub',            'color': 'accent',  'ranges': [(8765, 8765)]},
     {'name': 'System',         'color': 'muted',   'ranges': [(1, 1023)]},
     {'name': 'Infrastructure', 'color': 'blue',    'ranges': [(3000, 3099), (80, 81), (443, 443)]},
     {'name': 'Monitoring',     'color': 'teal',    'ranges': [(19000, 19999), (8090, 8090)]},
@@ -468,7 +468,7 @@ for _s in SERVICES:
 _PORT_NAMES[22]   = 'SSH'
 _PORT_NAMES[80]   = 'HTTP (NPM)'
 _PORT_NAMES[443]  = 'HTTPS (NPM)'
-_PORT_NAMES[7000] = 'Hub'
+_PORT_NAMES[8765] = 'Hub'
 _PORT_NAMES[8085] = 'ntfy'
 _PORT_NAMES[5678] = 'n8n'
 _PORT_NAMES[7003] = 'Redis (server)'
@@ -2515,6 +2515,79 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 'local_ip':    si.get('local_ip', ''),
                 'tailscale_ip': ts_ip,
                 'version':     '1.0',
+            })
+
+
+        elif p == '/api/sitemap':
+            routes = {
+                'GET': [
+                    {'path': '/', 'description': 'Hub dashboard (HTML)'},
+                    {'path': '/api/status', 'description': 'Server status'},
+                    {'path': '/api/containers', 'description': 'Docker container list'},
+                    {'path': '/api/services', 'description': 'Known services with running state'},
+                    {'path': '/api/ports', 'description': 'Live port scan + lane classification'},
+                    {'path': '/api/storage', 'description': 'Disk usage per mount'},
+                    {'path': '/api/docker/images', 'description': 'Docker image list'},
+                    {'path': '/api/docker/volumes', 'description': 'Docker volume list'},
+                    {'path': '/api/docker/stats', 'description': 'Container CPU/RAM stats'},
+                    {'path': '/api/docker/diagnostics', 'description': 'Container health diagnostics'},
+                    {'path': '/api/identity', 'description': 'Peer mesh identity beacon'},
+                    {'path': '/api/federation', 'description': 'Registered peer hubs'},
+                    {'path': '/api/config', 'description': 'Hub config key/value store'},
+                    {'path': '/api/integrations', 'description': 'External integrations'},
+                    {'path': '/api/vault', 'description': 'Encrypted credential vault'},
+                    {'path': '/api/issues', 'description': 'Tracked issue list'},
+                    {'path': '/api/docs', 'description': 'Guide/doc list'},
+                    {'path': '/api/docs/content', 'description': 'Guide content by filename'},
+                    {'path': '/api/journal', 'description': 'Activity journal entries'},
+                    {'path': '/api/receipt', 'description': 'Server receipt / hardware overview'},
+                    {'path': '/api/manifest', 'description': 'Service manifest (BOM)'},
+                    {'path': '/api/my-ip', 'description': 'Client IP detection'},
+                    {'path': '/api/auth/check', 'description': 'Session auth check'},
+                    {'path': '/api/users', 'description': 'User list'},
+                    {'path': '/api/access', 'description': 'Access/permission config'},
+                    {'path': '/api/ai/config', 'description': 'AI/LLM configuration'},
+                    {'path': '/api/totp/status', 'description': 'TOTP gate status'},
+                    {'path': '/api/totp/setup', 'description': 'TOTP setup (QR + secret)'},
+                    {'path': '/api/context', 'description': 'Claude context export'},
+                    {'path': '/api/sync', 'description': 'Sync status'},
+                    {'path': '/api/files', 'description': 'File browser'},
+                    {'path': '/cutsheet', 'description': 'Port cut-sheet (HTML)'},
+                    {'path': '/api/sitemap', 'description': 'This endpoint -- route registry'},
+                    {'path': '/proxy/{port}/{path}', 'description': 'Reverse proxy to local service'},
+                ],
+                'POST': [
+                    {'path': '/api/run', 'description': 'Run shell command (gate level 3)'},
+                    {'path': '/api/vault', 'description': 'Save encrypted vault blob'},
+                    {'path': '/api/refresh', 'description': 'Force status cache refresh'},
+                    {'path': '/api/auth/login', 'description': 'Authenticate (returns session token)'},
+                    {'path': '/api/auth/logout', 'description': 'Invalidate session'},
+                    {'path': '/api/config', 'description': 'Set hub config value'},
+                    {'path': '/api/federation', 'description': 'Add federation peer URL'},
+                    {'path': '/api/peer/register', 'description': 'Bidirectional peer mesh registration'},
+                    {'path': '/api/journal', 'description': 'Append journal entry'},
+                    {'path': '/api/ai/chat', 'description': 'AI chat message'},
+                    {'path': '/api/ai/config', 'description': 'Set AI config (key/model)'},
+                    {'path': '/api/totp/confirm', 'description': 'Confirm TOTP setup'},
+                    {'path': '/api/totp/verify', 'description': 'Verify TOTP code (elevate gate)'},
+                    {'path': '/api/totp/disable', 'description': 'Disable TOTP'},
+                    {'path': '/api/service/install', 'description': 'Deploy a new service'},
+                    {'path': '/api/tunnel/start', 'description': 'Start Cloudflare tunnel'},
+                    {'path': '/api/tunnel/stop', 'description': 'Stop Cloudflare tunnel'},
+                    {'path': '/api/ports/ack', 'description': 'Acknowledge port alert'},
+                    {'path': '/api/update', 'description': 'git pull + hub restart'},
+                    {'path': '/api/users', 'description': 'Create user'},
+                    {'path': '/api/docker/prune', 'description': 'Docker system prune'},
+                    {'path': '/api/activity', 'description': 'Log activity event'},
+                    {'path': '/api/setup/generate-claude-md', 'description': 'Generate CLAUDE.md'},
+                ],
+            }
+            self.send_json({
+                'hub_version': '1.0',
+                'port': PORT,
+                'routes': routes,
+                'total_get': len(routes['GET']),
+                'total_post': len(routes['POST']),
             })
 
         elif p.startswith('/proxy/'):
