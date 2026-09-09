@@ -1,0 +1,19 @@
+{
+  "_meta": {
+    "generated": "2026-09-09T23:09:45.501949+00:00",
+    "generator": "hub/tools/registry_gen.py",
+    "codes_map": "knowledge/telescope-codes.json",
+    "source_files": [
+      "hub/server.py"
+    ]
+  },
+  "summary": {
+    "matched": 0,
+    "shadow": 0,
+    "dead": 0,
+    "clean": true
+  },
+  "matched": [],
+  "shadow": [],
+  "dead": []
+}
