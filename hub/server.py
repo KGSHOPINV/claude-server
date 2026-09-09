@@ -951,6 +951,13 @@ def db_ensure_tables():
             created INTEGER,
             updated INTEGER
         )""")
+        conn.execute("""CREATE TABLE IF NOT EXISTS incidents (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            title TEXT NOT NULL,
+            body TEXT,
+            severity TEXT DEFAULT 'info',
+            created_at TEXT DEFAULT (datetime('now'))
+        )""")
         # Seed default admin if no users exist
         row = conn.execute("SELECT COUNT(*) as c FROM users").fetchone()
         if row['c'] == 0:
@@ -2614,6 +2621,32 @@ class Handler(http.server.BaseHTTPRequestHandler):
             self.end_headers()
             self.wfile.write(content)
 
+        elif p == '/api/incidents':
+            try:
+                conn = db_conn()
+                rows = conn.execute(
+                    "SELECT id, title, body, severity, created_at FROM incidents ORDER BY id DESC LIMIT 50"
+                ).fetchall()
+                conn.close()
+                self.send_json({'ok': True, 'incidents': [dict(r) for r in rows]})
+            except Exception as e:
+                self.send_json({'ok': False, 'error': str(e)}, 500)
+
+        elif p == '/api/sitemap':
+            self.send_json({'ok': True, 'endpoints': [
+                'GET  /api/incidents', 'POST /api/incidents',
+                'GET  /api/issues', 'GET  /api/journal', 'POST /api/journal',
+                'GET  /api/activity', 'POST /api/activity',
+                'GET  /api/receipt', 'GET  /api/sync', 'GET  /api/context',
+                'GET  /api/federation', 'GET  /api/identity',
+                'GET  /api/status', 'GET  /api/info',
+                'POST /api/run', 'POST /api/service/install',
+                'POST /api/tunnel/start', 'POST /api/tunnel/stop',
+                'POST /api/update', 'POST /api/users',
+                'POST /api/totp/confirm', 'POST /api/totp/verify', 'POST /api/totp/disable',
+                'GET  /api/peers', 'POST /api/peer/register',
+            ]})
+
         else:
             self.send_response(404)
             self.end_headers()
@@ -3032,6 +3065,33 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 level    = body.get('level', 'info'),
             )
             self.send_json({'ok': True})
+
+        elif p == '/api/incidents':
+            # POST { title, body?, severity? }
+            title = body.get('title', '').strip()
+            if not title:
+                self.send_json({'ok': False, 'error': 'title required'}, 400)
+                return
+            severity = body.get('severity', 'info').strip()
+            if severity not in ('info', 'warn', 'critical'):
+                severity = 'info'
+            incident_body = body.get('body', '')
+            try:
+                conn = db_conn()
+                cur = conn.execute(
+                    "INSERT INTO incidents (title, body, severity) VALUES (?, ?, ?)",
+                    (title, incident_body, severity)
+                )
+                new_id = cur.lastrowid
+                conn.commit()
+                row = conn.execute(
+                    "SELECT id, title, body, severity, created_at FROM incidents WHERE id=?",
+                    (new_id,)
+                ).fetchone()
+                conn.close()
+                self.send_json({'ok': True, 'incident': dict(row)}, 201)
+            except Exception as e:
+                self.send_json({'ok': False, 'error': str(e)}, 500)
 
         else:
             self.send_response(404)
