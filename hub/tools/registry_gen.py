@@ -61,10 +61,15 @@ def load_codes_map() -> dict:
     with CODES_MAP_PATH.open(encoding="utf-8") as fh:
         data = json.load(fh)
 
-    # The map may be flat {code: description} or nested with a "codes" key.
-    # Support both shapes.
+    # Support three shapes:
+    #   flat:    {"20200301": "db_conn", ...}
+    #   codes:   {"codes": {"20200301": "db_conn", ...}}
+    #   objects: {"objects": [{"code": "20200301", "name": "db_conn", ...}, ...]}
     if isinstance(data, dict) and "codes" in data:
         return data["codes"]
+    if isinstance(data, dict) and "objects" in data:
+        return {obj["code"]: obj.get("description", obj.get("name", ""))
+                for obj in data["objects"] if "code" in obj}
     return data
 
 
