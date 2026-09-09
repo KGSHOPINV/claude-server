@@ -51,6 +51,7 @@ DOCKER_ROOT = os.environ.get('HUB_DOCKER_ROOT', '/srv/docker')
 _proxy_cache = {}
 _pcache_lock = threading.Lock()
 
+# 20209301  _pcache_get — proxy cache read, 5s HTML / 60s asset TTL
 def _pcache_get(key):
     with _pcache_lock:
         hit = _proxy_cache.get(key)
@@ -60,6 +61,7 @@ def _pcache_get(key):
     ttl = 5 if 'text/html' in ct else 60
     return (content, ct, status) if time.time() - ts < ttl else None
 
+# 20209302  _pcache_put — proxy cache write, evict oldest when >400
 def _pcache_put(key, content, ct, status):
     with _pcache_lock:
         if len(_proxy_cache) > 400:
@@ -67,6 +69,7 @@ def _pcache_put(key, content, ct, status):
             del _proxy_cache[oldest]
         _proxy_cache[key] = (content, ct, status, time.time())
 
+# 20209303  _rewrite_proxy_html — rewrite src/href/action attrs through proxy
 def _rewrite_proxy_html(html, port):
     """Rewrite absolute src/href/action attrs through proxy, then inject <base>."""
     # Rewrite first so the injected <base> tag itself doesn't get double-processed
@@ -87,6 +90,7 @@ def _rewrite_proxy_html(html, port):
         html = f'<head>{base_tag}</head>' + html
     return html
 
+# 20209304  _rewrite_proxy_css — rewrite url(/path) in CSS through proxy
 def _rewrite_proxy_css(css, port):
     """Rewrite url(/path) references in CSS through proxy."""
     def _sub(m):
@@ -97,6 +101,7 @@ def _rewrite_proxy_css(css, port):
 
 # ── Proxy ─────────────────────────────────────────────────────────────────────
 
+# 20209305  proxy_fetch — proxy HTTP/HTTPS request to local service
 def proxy_fetch(port, subpath, query=''):
     """Proxy a request to a local service, stripping X-Frame-Options."""
     cache_key = (port, subpath, query)
@@ -145,6 +150,7 @@ def proxy_fetch(port, subpath, query=''):
 
 # ── SSH ────────────────────────────────────────────────────────────────────────
 
+# 20200303  ssh_run — run shell cmd via SSH or bash -c in LOCAL_MODE
 def ssh_run(cmd, timeout=15):
     try:
         args = ['bash', '-c', cmd] if LOCAL_MODE else ['ssh', SSH_HOST, cmd]
@@ -173,6 +179,7 @@ _sessions = {}  # token -> {user, created}
 _users_lock = threading.Lock()
 _server_info_cache = None   # cached once per process restart
 
+# 20201301  get_server_info — hostname/OS/IP/cores via SSH, cached process-lifetime
 def get_server_info():
     """Fetch server identity once and cache for the lifetime of the process."""
     global _server_info_cache
@@ -212,6 +219,7 @@ def get_server_info():
         }
     return _server_info_cache
 
+# 20202301  get_status — uptime/RAM/disk/containers/load, 60s SSH cache
 def get_status(force=False):
     with _lock:
         age = time.time() - _cache['ts']
@@ -310,6 +318,7 @@ def get_status(force=False):
         _cache['ts'] = time.time()
     return data
 
+# 20202302  get_containers — docker ps -a parsed, 30s cache
 def get_containers(force=False):
     with _lock:
         age = time.time() - _cache['containers_ts']
@@ -360,6 +369,7 @@ SERVICES = [
     {'name': 'Open WebUI',  'port': 3004,  'group': 'AI',             'description': 'AI chat interface',     'installed': True},
 ]
 
+# 20202303  build_services — enrich SERVICES list with live Docker state
 def build_services(server_info=None):
     """Build service list: known services enriched with live Docker state,
     plus auto-discovered containers not in the known list."""
@@ -473,6 +483,7 @@ _PORT_NAMES[8085] = 'ntfy'
 _PORT_NAMES[5678] = 'n8n'
 _PORT_NAMES[7003] = 'Redis (server)'
 
+# 20202304  _port_lane — map port number to lane name
 def _port_lane(port):
     """Return the lane name for a port number."""
     for lane in PORT_LANES:
@@ -481,6 +492,7 @@ def _port_lane(port):
                 return lane['name']
     return 'Other'
 
+# 20209306  build_cutsheet_html — generate self-contained port cutsheet HTML
 def build_cutsheet_html(ports, services, server_info):
     """Generate a live port cut-sheet as a self-contained HTML page."""
     from datetime import datetime as _dt
@@ -677,6 +689,7 @@ body{{background:var(--paper);color:var(--ink);font-family:var(--sans);font-size
 </html>"""
 
 
+# 20202305  scan_ports — ss -tlnp4 + docker ps → enriched port list
 def scan_ports():
     """Scan all listening TCP ports. Returns (ports_list, docker_port_map)."""
     # Get all listening TCP ports with process info
@@ -748,6 +761,7 @@ def scan_ports():
 _port_cache       = {'ports': [], 'events': [], 'ts': ''}
 _port_cache_lock  = threading.Lock()
 
+# 20202306  _do_port_snapshot — scan ports, diff, write port_snapshots/port_events
 def _do_port_snapshot():
     """Scan ports, detect changes, persist to DB."""
     ports, _ = scan_ports()
@@ -793,6 +807,7 @@ def _do_port_snapshot():
     with _port_cache_lock:
         _port_cache['events'] = [dict(r) for r in rows]
 
+# 20202307  _port_scan_loop — background daemon: scan every 5 minutes
 def _port_scan_loop():
     time.sleep(10)  # Give hub a moment to fully start up before first scan
     while True:
@@ -804,6 +819,7 @@ def _port_scan_loop():
 
 # ── SQLite helpers ─────────────────────────────────────────────────────────────
 
+# 20200301  db_conn — open SQLite connection, row_factory=Row
 def db_conn():
     conn = sqlite3.connect(DB_PATH)
     conn.row_factory = sqlite3.Row
@@ -856,6 +872,7 @@ def get_setup_status():
         'kit_path': kit if kit_present else None,
     }
 
+# 20204304  vault_get — SELECT vault_blob from notes
 def vault_get():
     try:
         conn = db_conn()
@@ -865,6 +882,7 @@ def vault_get():
     except Exception:
         return None
 
+# 20204305  vault_put — UPSERT vault_blob in notes
 def vault_put(blob):
     try:
         conn = db_conn()
@@ -880,6 +898,7 @@ def vault_put(blob):
     except Exception as e:
         return str(e)
 
+# 20204308  issues_get — SELECT all from issues
 def issues_get():
     try:
         conn = db_conn()
@@ -889,6 +908,7 @@ def issues_get():
     except Exception:
         return []
 
+# 20200302  db_ensure_tables — create all tables + seed admin user
 def db_ensure_tables():
     try:
         conn = db_conn()
@@ -971,6 +991,7 @@ def db_ensure_tables():
 
 # ── Activity Logger ───────────────────────────────────────────────────────────
 
+# 20200307  log_activity — append to activity_log, never raises
 def log_activity(action, source='system', category='general', detail='', level='info'):
     """Write one line to the activity log. Universal — always safe to call."""
     try:
@@ -984,6 +1005,7 @@ def log_activity(action, source='system', category='general', detail='', level='
     except Exception:
         pass  # never crash the caller
 
+# 20200308  activity_recent — SELECT recent activity_log rows
 def activity_recent(limit=100, category=None):
     try:
         conn = db_conn()
@@ -1003,6 +1025,7 @@ def activity_recent(limit=100, category=None):
 
 _docker_watcher_running = False
 
+# 20206301  _docker_event_loop — stream docker events; write activity_log; ntfy on die/start
 def _docker_event_loop():
     """Stream docker events and write to activity log. Restarts on failure."""
     global _docker_watcher_running
@@ -1057,6 +1080,7 @@ def _docker_event_loop():
         _docker_watcher_running = False
         time.sleep(10)  # wait before reconnecting
 
+# 20206302  _ntfy_send — POST push notification to ntfy
 def _ntfy_send(title, body, priority='default', tags='server'):
     """Send ntfy push notification. Reads config from ~/.server-alerts.conf or env."""
     try:
@@ -1081,6 +1105,7 @@ def _ntfy_send(title, body, priority='default', tags='server'):
 
 # ── Server Receipt ────────────────────────────────────────────────────────────
 
+# 20202317  build_receipt — full server snapshot via local subprocess
 def build_receipt():
     """Full server snapshot — universal, degrades gracefully."""
     import platform, shutil
@@ -1195,6 +1220,7 @@ def build_receipt():
     }
 
 
+# 20202318  build_context — HANDOFF_SERVERHUB context payload for AI
 def build_context():
     """Server context payload — per Metaforge HANDOFF_SERVERHUB spec.
     Sent to FlareVault at pairing; refresh every 60s or on significant change."""
@@ -1286,6 +1312,7 @@ def build_context():
 
 # ── Storage + Docker management APIs ──────────────────────────────────────────
 
+# 20202311  api_storage_info — df -BG + lsblk + docker system df
 def api_storage_info():
     """Disk breakdown + Docker usage combined."""
     mounts = []
@@ -1391,6 +1418,7 @@ def api_storage_info():
     }
 
 
+# 20202312  api_docker_images — docker images parsed
 def api_docker_images():
     """Docker images list with metadata."""
     images = []
@@ -1410,6 +1438,7 @@ def api_docker_images():
     return {'images': images, 'count': len(images)}
 
 
+# 20202313  api_docker_volumes — docker system df -v volumes
 def api_docker_volumes():
     """Docker volumes with link counts and sizes."""
     volumes = []
@@ -1434,6 +1463,7 @@ def api_docker_volumes():
     return {'volumes': volumes, 'count': len(volumes)}
 
 
+# 20202314  api_docker_stats — docker stats --no-stream per container
 def api_docker_stats():
     """Per-container CPU + memory snapshot (non-streaming)."""
     stats = []
@@ -1454,6 +1484,7 @@ def api_docker_stats():
     return {'stats': stats}
 
 
+# 20202315  api_docker_diagnostics — interpreted findings: restarts, disk, unhealthy
 def api_docker_diagnostics():
     """Interpreted diagnostic signals — actionable findings, not raw data."""
     findings = []
@@ -1557,6 +1588,7 @@ def api_docker_diagnostics():
 
 
 
+# 20204301  config_get — SELECT single value from hub_config
 def config_get(key, default=None):
     try:
         conn = db_conn()
@@ -1566,6 +1598,7 @@ def config_get(key, default=None):
     except Exception:
         return default
 
+# 20204302  config_set — UPSERT key/value in hub_config
 def config_set(key, value):
     try:
         conn = db_conn()
@@ -1578,6 +1611,7 @@ def config_set(key, value):
     except Exception as e:
         return str(e)
 
+# 20204303  config_get_all — SELECT all hub_config as dict
 def config_get_all():
     """Return all hub_config keys as a dict."""
     try:
@@ -1588,6 +1622,7 @@ def config_get_all():
     except Exception:
         return {}
 
+# 20205301  users_list — SELECT all users (no password_hash)
 def users_list():
     try:
         conn = db_conn()
@@ -1597,6 +1632,7 @@ def users_list():
     except Exception:
         return []
 
+# 20205302  user_auth — SHA-256 password check, returns user row or None
 def user_auth(username, password):
     try:
         h = hashlib.sha256(password.encode()).hexdigest()
@@ -1607,6 +1643,7 @@ def user_auth(username, password):
     except Exception:
         return None
 
+# 20204306  journal_add — INSERT into journal
 def journal_add(type_, body, user=''):
     try:
         conn = db_conn()
@@ -1617,6 +1654,7 @@ def journal_add(type_, body, user=''):
     except Exception:
         pass
 
+# 20204307  journal_get — SELECT recent journal rows
 def journal_get(limit=100):
     try:
         conn = db_conn()
@@ -1626,6 +1664,7 @@ def journal_get(limit=100):
     except Exception:
         return []
 
+# 20202310  get_storage_info — SSH-based df + docker volumes
 def get_storage_info():
     results = {}
     # Disk usage
@@ -1642,6 +1681,7 @@ def get_storage_info():
     results['volumes'] = r4.get('output','') if r4.get('online') else ''
     return results
 
+# 20209309  get_files — ls -lah via SSH for file browser
 def get_files(path):
     safe = path.replace('..','').replace('~','').strip()
     if not safe.startswith('/'):
@@ -1649,6 +1689,7 @@ def get_files(path):
     r = ssh_run(f"ls -lah --time-style=short-iso '{safe}' 2>&1 | head -60")
     return {'path': safe, 'listing': r.get('output',''), 'error': r.get('error','') if not r.get('online') else ''}
 
+# 20202309  get_manifest — full manifest BOM: server info, services, docker df, git ref
 def get_manifest():
     """Full system snapshot — server info, all services, containers, health."""
     now = datetime.now().isoformat()
@@ -1714,6 +1755,7 @@ def get_manifest():
     }
 
 
+# 20209307  _substitute_guide_tokens — replace {{server.*}} tokens with live values
 def _substitute_guide_tokens(text):
     """Replace {{server.*}} and {{hub.*}} template tokens with live values."""
     si = get_server_info()
@@ -1732,6 +1774,7 @@ def _substitute_guide_tokens(text):
         text = text.replace(token, val)
     return text
 
+# 20209308  _build_this_server_doc — generate live Markdown from server state
 def _build_this_server_doc():
     """Generate a live 'About this server' doc from current server state."""
     si = get_server_info()
@@ -1843,6 +1886,7 @@ def _build_this_server_doc():
     doc += "\nSee `remote-access.md` for full access topology.\n"
     return doc
 
+# 20207301  ai_system_prompt — build server-aware system prompt from cached status
 def ai_system_prompt():
     """Build a concise server-aware system prompt from live state."""
     status = _cache.get('status') or {}
@@ -1861,6 +1905,7 @@ def ai_system_prompt():
     ]
     return '\n'.join(lines)
 
+# 20207302  ai_chat — dispatch to Claude/OpenAI/Gemini based on ai_provider config
 def ai_chat(message, image_b64=None, image_type='image/jpeg'):
     """Call Claude or OpenAI depending on which key is configured."""
     provider = config_get('ai_provider', 'claude')
@@ -1947,6 +1992,7 @@ def ai_chat(message, image_b64=None, image_type='image/jpeg'):
         return {'error': str(e)}
 
 
+# 20202316  get_integrations — live health: Redis PING, SurrealDB /health, n8n /healthz
 def get_integrations():
     """Live health check for Redis, SurrealDB, n8n."""
     results = {}
@@ -1983,6 +2029,7 @@ def get_integrations():
 
     return results
 
+# 20200304  check_auth — validate session token from header or query param
 def check_auth(handler):
     token = handler.headers.get('X-Hub-Token','')
     if not token:
@@ -1996,6 +2043,7 @@ def check_auth(handler):
 
 # ── TOTP ──────────────────────────────────────────────────────────────────────
 
+# 20205303  _totp_hotp — raw HOTP: base32 secret + counter → 6-digit code
 def _totp_hotp(secret, counter):
     try:
         key = base64.b32decode(secret.upper().replace(' ', ''))
@@ -2007,6 +2055,7 @@ def _totp_hotp(secret, counter):
     except Exception:
         return ''
 
+# 20205304  totp_verify — verify code ±1 time-step against saved totp_secret
 def totp_verify(code):
     secret = config_get('totp_secret', '')
     if not secret:
@@ -2015,11 +2064,13 @@ def totp_verify(code):
     code = str(code).strip().zfill(6)
     return any(_totp_hotp(secret, t + d) == code for d in (-1, 0, 1))
 
+# 20205305  totp_new_secret — generate 20-byte random base32 secret
 def totp_new_secret():
     # Generate only — does NOT save to DB.
     # Caller must call /api/totp/confirm with a valid code to activate.
     return base64.b32encode(os.urandom(20)).decode()
 
+# 20205306  totp_verify_secret — verify code against any given secret
 def totp_verify_secret(secret, code):
     """Verify a code against any given secret (not necessarily the saved one)."""
     if not secret:
@@ -2028,6 +2079,7 @@ def totp_verify_secret(secret, code):
     code = str(code).strip().zfill(6)
     return any(_totp_hotp(secret, t + d) == code for d in (-1, 0, 1))
 
+# 20205307  totp_uri — build otpauth://totp/ URI for QR display
 def totp_uri(secret, account='admin'):
     import urllib.parse as _up
     params = _up.urlencode({'secret': secret, 'issuer': 'ServerHub',
@@ -2039,6 +2091,7 @@ def totp_uri(secret, account='admin'):
 _gate_sessions = {}
 _gate_lock     = threading.Lock()
 
+# 20200306  gate_create — mint gate token with level + expiry
 def gate_create(level, user, duration_s=1800):
     token   = secrets.token_hex(24)
     expires = time.time() + duration_s
@@ -2050,6 +2103,7 @@ def gate_create(level, user, duration_s=1800):
         _gate_sessions[token] = {'level': level, 'user': user, 'expires': expires}
     return token, expires
 
+# 20200305  gate_check — return True if TOTP not configured or valid gate token
 def gate_check(headers, required_level=3):
     """Return True if TOTP not configured OR valid gate token found at required_level+."""
     if not config_get('totp_secret', ''):
@@ -2074,6 +2128,7 @@ _tunnel_url    = ''
 _tunnel_lock_t = threading.Lock()
 _tunnel_thread = None
 
+# 20208301  _tunnel_watcher — background thread: poll docker logs for trycloudflare URL
 def _tunnel_watcher():
     """Background thread: poll server-hub-tunnel logs to extract the public URL."""
     global _tunnel_url
@@ -2090,6 +2145,7 @@ def _tunnel_watcher():
             pass
         time.sleep(4)
 
+# 20208302  tunnel_status — docker inspect tunnel container; return {running, url}
 def tunnel_status():
     try:
         r = subprocess.run(
@@ -2103,6 +2159,7 @@ def tunnel_status():
         url = _tunnel_url if running else ''
     return {'running': running, 'url': url}
 
+# 20208303  tunnel_start — docker run cloudflared; start watcher thread
 def tunnel_start():
     global _tunnel_url, _tunnel_thread
     try:
@@ -2123,6 +2180,7 @@ def tunnel_start():
     except Exception:
         return False
 
+# 20208304  tunnel_stop — docker stop + rm server-hub-tunnel
 def tunnel_stop():
     global _tunnel_url
     try:
@@ -2134,6 +2192,7 @@ def tunnel_stop():
     except Exception:
         return False
 
+# 20201302  get_access_info — all hub URLs: local, Tailscale, tunnel
 def get_access_info():
     """Return all accessible URLs for this hub."""
     local_ip = SERVER_IP
@@ -2167,9 +2226,11 @@ def get_access_info():
 # ── HTTP handler ───────────────────────────────────────────────────────────────
 
 class Handler(http.server.BaseHTTPRequestHandler):
+    # 20200309  Handler.log_message — suppress default access logging
     def log_message(self, fmt, *args):
         pass
 
+    # 20200310  Handler.send_json — serialize + write JSON response with CORS
     def send_json(self, data, status=200):
         body = json.dumps(data, default=str).encode()
         self.send_response(status)
@@ -2179,6 +2240,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(body)
 
+    # 20200311  Handler.do_OPTIONS — CORS preflight
     def do_OPTIONS(self):
         self.send_response(200)
         self.send_header('Access-Control-Allow-Origin', '*')
@@ -2186,6 +2248,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
         self.send_header('Access-Control-Allow-Headers', 'Content-Type, X-Hub-Token')
         self.end_headers()
 
+    # 20200312  Handler.get_body — parse JSON request body
     def get_body(self):
         n = int(self.headers.get('Content-Length', 0))
         return json.loads(self.rfile.read(n)) if n else {}
