@@ -4,8 +4,17 @@
 
 set -euo pipefail
 
-NTFY_URL="http://localhost:8085/alerts"
-NTFY_TOKEN="tk_7dw44frhryfbx5tf0euzj88299xb3"
+# Config file: /etc/boot-health-check.conf
+# Expected contents:
+#   NTFY_URL=http://localhost:8085/alerts
+#   NTFY_TOKEN=tk_...
+CONF_FILE="/etc/boot-health-check.conf"
+if [ -f "${CONF_FILE}" ]; then
+    # shellcheck source=/dev/null
+    source "${CONF_FILE}"
+fi
+NTFY_URL="${NTFY_URL:-http://localhost:8085/alerts}"
+NTFY_TOKEN="${NTFY_TOKEN:-}"
 
 FAILED=()
 
