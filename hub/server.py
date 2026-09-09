@@ -2257,7 +2257,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
         p = self.path.split('?')[0]
         force = 'force' in self.path
 
-        if p in ('/', '/mobile', '/desktop'):
+        if p in ('/', '/mobile', '/desktop'):  # 20301701  GET /
             ua = self.headers.get('User-Agent', '')
             is_mobile = any(x in ua for x in ('Mobile','Android','iPhone','iPad','iPod','BlackBerry','Windows Phone'))
             if p == '/' and is_mobile:
@@ -2278,7 +2278,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 self.send_response(404)
                 self.end_headers()
 
-        elif p == '/manifest.json':
+        elif p == '/manifest.json':  # 20301703  GET /manifest.json
             manifest = {
                 "name": "Server Hub",
                 "short_name": "Hub",
@@ -2298,7 +2298,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
             self.end_headers()
             self.wfile.write(content)
 
-        elif p == '/sw.js':
+        elif p == '/sw.js':  # 20301704  GET /sw.js
             sw = b"self.addEventListener('fetch', () => {});"
             self.send_response(200)
             self.send_header('Content-Type', 'application/javascript')
@@ -2306,26 +2306,26 @@ class Handler(http.server.BaseHTTPRequestHandler):
             self.end_headers()
             self.wfile.write(sw)
 
-        elif p == '/api/status':
+        elif p == '/api/status':  # 20302701  GET /api/status
             self.send_json(get_status(force=force))
 
-        elif p == '/api/setup/status':
+        elif p == '/api/setup/status':  # 20302702  GET /api/setup/status
             self.send_json(get_setup_status())
 
-        elif p == '/api/containers':
+        elif p == '/api/containers':  # 20302703  GET /api/containers
             self.send_json(get_containers(force=force))
 
-        elif p == '/api/services':
+        elif p == '/api/services':  # 20302704  GET /api/services
             self.send_json(build_services())
 
-        elif p == '/api/vault':
+        elif p == '/api/vault':  # 20304701  GET /api/vault
             blob = vault_get()
             self.send_json({'blob': blob})
 
-        elif p == '/api/issues':
+        elif p == '/api/issues':  # 20304702  GET /api/issues
             self.send_json(issues_get())
 
-        elif p == '/api/docs':
+        elif p == '/api/docs':  # 20309702  GET /api/docs
             try:
                 files = []
                 # Synthetic live doc always listed first
@@ -2341,7 +2341,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
             except Exception as e:
                 self.send_json([])
 
-        elif p == '/api/docs/content':
+        elif p == '/api/docs/content':  # 20309703  GET /api/docs/content
             fname = ''
             if '?' in self.path:
                 qs = self.path.split('?', 1)[1]
@@ -2365,14 +2365,14 @@ class Handler(http.server.BaseHTTPRequestHandler):
             except FileNotFoundError:
                 self.send_response(404); self.end_headers()
 
-        elif p == '/api/auth/check':
+        elif p == '/api/auth/check':  # 20305701  GET /api/auth/check
             sess = check_auth(self)
             if sess:
                 self.send_json({'ok': True, 'user': sess['user']})
             else:
                 self.send_json({'ok': False}, 401)
 
-        elif p == '/api/ports':
+        elif p == '/api/ports':  # 20302705  GET /api/ports
             force = 'force' in self.path
             if force:
                 try:
@@ -2406,7 +2406,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 'scanned_at': ts,
             })
 
-        elif p == '/cutsheet':
+        elif p == '/cutsheet':  # 20302717  GET /cutsheet
             # Live generated port cut sheet — no auth, shareable on LAN
             with _port_cache_lock:
                 ports = list(_port_cache['ports'])
@@ -2431,7 +2431,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
             self.end_headers()
             self.wfile.write(enc)
 
-        elif p == '/api/my-ip':
+        elif p == '/api/my-ip':  # 20301705  GET /api/my-ip
             # Return the connecting client's IP address (useful for fail2ban unban)
             client_ip = self.client_address[0]
             # X-Forwarded-For from reverse proxy
@@ -2440,20 +2440,20 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 client_ip = xff.split(',')[0].strip()
             self.send_json({'ip': client_ip})
 
-        elif p == '/api/storage':
+        elif p == '/api/storage':  # 20302706  GET /api/storage
             self.send_json(api_storage_info())
 
         
-        elif p == '/api/docker/images':
+        elif p == '/api/docker/images':  # 20302707  GET /api/docker/images
             self.send_json(api_docker_images())
-        elif p == '/api/docker/volumes':
+        elif p == '/api/docker/volumes':  # 20302708  GET /api/docker/volumes
             self.send_json(api_docker_volumes())
-        elif p == '/api/docker/stats':
+        elif p == '/api/docker/stats':  # 20302709  GET /api/docker/stats
             self.send_json(api_docker_stats())
-        elif p == '/api/docker/diagnostics':
+        elif p == '/api/docker/diagnostics':  # 20302710  GET /api/docker/diagnostics
             self.send_json(api_docker_diagnostics())
 
-        elif p == '/api/files':
+        elif p == '/api/files':  # 20309704  GET /api/files
             path = get_server_info().get('home_dir', '/')
             if '?' in self.path:
                 for part in self.path.split('?',1)[1].split('&'):
@@ -2461,7 +2461,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
                         path = part[5:].replace('%2F','/')
             self.send_json(get_files(path))
 
-        elif p == '/api/journal':
+        elif p == '/api/journal':  # 20304703  GET /api/journal
             limit = 100
             if '?' in self.path:
                 for part in self.path.split('?',1)[1].split('&'):
@@ -2470,7 +2470,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
                         except: pass
             self.send_json(journal_get(limit))
 
-        elif p == '/api/config':
+        elif p == '/api/config':  # 20304704  GET /api/config
             try:
                 conn = db_conn()
                 rows = conn.execute("SELECT key,value FROM hub_config").fetchall()
@@ -2479,22 +2479,22 @@ class Handler(http.server.BaseHTTPRequestHandler):
             except Exception:
                 self.send_json({})
 
-        elif p == '/api/users':
+        elif p == '/api/users':  # 20305702  GET /api/users
             self.send_json(users_list())
 
-        elif p == '/api/integrations':
+        elif p == '/api/integrations':  # 20302711  GET /api/integrations
             self.send_json(get_integrations())
 
-        elif p == '/api/access':
+        elif p == '/api/access':  # 20301707  GET /api/access
             self.send_json(get_access_info())
 
-        elif p == '/api/ai/config':
+        elif p == '/api/ai/config':  # 20307701  GET /api/ai/config
             self.send_json({
                 'provider': config_get('ai_provider', 'claude'),
                 'has_key': bool(config_get('ai_api_key', os.environ.get('HUB_AI_KEY', ''))),
             })
 
-        elif p == '/api/totp/status':
+        elif p == '/api/totp/status':  # 20305703  GET /api/totp/status
             secret = config_get('totp_secret', '')
             with _gate_lock:
                 now = time.time()
@@ -2503,7 +2503,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
                          for v in _gate_sessions.values() if v['expires'] > now]
             self.send_json({'configured': bool(secret), 'gates': gates})
 
-        elif p == '/api/totp/setup':
+        elif p == '/api/totp/setup':  # 20305704  GET /api/totp/setup
             # Always generate a fresh temp secret — never saved to DB here.
             # The status endpoint tells the UI whether 2FA is already active.
             # This endpoint is only called when the user wants to begin setup.
@@ -2515,7 +2515,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 'uri': totp_uri(new_secret, account),
             })
 
-        elif p == '/api/manifest':
+        elif p == '/api/manifest':  # 20302712  GET /api/manifest
             data = get_manifest()
             body = json.dumps(data, default=str, indent=2).encode()
             self.send_response(200)
@@ -2528,7 +2528,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
             self.end_headers()
             self.wfile.write(body)
 
-        elif p.startswith('/api/activity'):
+        elif p.startswith('/api/activity'):  # 20306702  GET /api/activity
             # GET /api/activity?limit=100&category=docker
             from urllib.parse import parse_qs, urlparse
             qs = parse_qs(urlparse(self.path).query)
@@ -2536,10 +2536,10 @@ class Handler(http.server.BaseHTTPRequestHandler):
             cat   = qs.get('category', [None])[0]
             self.send_json({'ok': True, 'events': activity_recent(limit, cat)})
 
-        elif p == '/api/receipt':
+        elif p == '/api/receipt':  # 20302713  GET /api/receipt
             self.send_json(build_receipt())
 
-        elif p == '/api/sync':
+        elif p == '/api/sync':  # 20302714  GET /api/sync
             # Quick sync check — what's expected vs running
             receipt = build_receipt()
             self.send_json({
@@ -2549,10 +2549,10 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 'generated': receipt['generated'],
             })
 
-        elif p == '/api/context':
+        elif p == '/api/context':  # 20302715  GET /api/context
             self.send_json(build_context())
 
-        elif p == '/api/federation':
+        elif p == '/api/federation':  # 20303701  GET /api/federation
             cfg = config_get_all()
             # peers stored as JSON string in hub_config
             peers_raw = cfg.get('peers', '[]')
@@ -2568,7 +2568,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 'mf_last_contact': cfg.get('mf_last_contact') or None,
             })
 
-        elif p == '/api/identity':
+        elif p == '/api/identity':  # 20301706  GET /api/identity
             # Identity beacon — used by peer mesh registration and discovery
             si = get_server_info()
             cfg = config_get_all()
@@ -2588,7 +2588,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
             })
 
 
-        elif p == '/api/sitemap':
+        elif p == '/api/sitemap':  # 20302716  GET /api/sitemap
             routes = {
                 'GET': [
                     {'path': '/', 'description': 'Hub dashboard (HTML)'},
@@ -2660,7 +2660,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 'total_post': len(routes['POST']),
             })
 
-        elif p.startswith('/proxy/'):
+        elif p.startswith('/proxy/'):  # 20309701  GET /proxy/{port}/{path}
             # /proxy/3000/some/path?query=string
             remainder = p[7:]  # e.g. "3000/some/path"
             slash = remainder.find('/')
@@ -2684,7 +2684,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
             self.end_headers()
             self.wfile.write(content)
 
-        elif p == '/api/incidents':
+        elif p == '/api/incidents':  # 20306701  GET /api/incidents
             try:
                 conn = db_conn()
                 rows = conn.execute(
@@ -2718,7 +2718,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
         p = self.path
         body = self.get_body()
 
-        if p == '/api/run':
+        if p == '/api/run':  # 20310701  POST /api/run
             cmd = body.get('command', '').strip()
             if not cmd:
                 self.send_json({'error': 'No command provided'}, 400)
@@ -2730,7 +2730,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
             result = ssh_run(cmd, timeout=int(body.get('timeout', 30)))
             self.send_json(result)
 
-        elif p == '/api/vault':
+        elif p == '/api/vault':  # 20304705  POST /api/vault
             blob = body.get('blob')
             if blob is None:
                 self.send_json({'ok': False, 'error': 'No blob'}, 400)
@@ -2745,12 +2745,12 @@ class Handler(http.server.BaseHTTPRequestHandler):
             else:
                 self.send_json({'ok': False, 'error': str(ok)})
 
-        elif p == '/api/refresh':
+        elif p == '/api/refresh':  # 20302718  POST /api/refresh
             get_status(force=True)
             get_containers(force=True)
             self.send_json({'ok': True})
 
-        elif p == '/api/auth/login':
+        elif p == '/api/auth/login':  # 20305705  POST /api/auth/login
             username = body.get('username','').strip()
             password = body.get('password','')
             user = user_auth(username, password)
@@ -2762,13 +2762,13 @@ class Handler(http.server.BaseHTTPRequestHandler):
             else:
                 self.send_json({'ok': False, 'error': 'Invalid username or password'}, 401)
 
-        elif p == '/api/auth/logout':
+        elif p == '/api/auth/logout':  # 20305706  POST /api/auth/logout
             token = body.get('token','')
             with _users_lock:
                 _sessions.pop(token, None)
             self.send_json({'ok': True})
 
-        elif p == '/api/config':
+        elif p == '/api/config':  # 20304706  POST /api/config
             if not gate_check(self.headers, required_level=2):
                 self.send_json({'error': 'gate_required', 'layer': 2,
                                 'message': 'Config writes require TOTP verification'}, 403)
@@ -2777,7 +2777,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 config_set(k, str(v))
             self.send_json({'ok': True})
 
-        elif p == '/api/federation':
+        elif p == '/api/federation':  # 20303702  POST /api/federation
             # Accept: fv_url, mf_url, peers (JSON string), fv_last_contact, mf_last_contact
             # No gate required — URLs are not secrets; peers list is operational data.
             allowed = {'fv_url', 'mf_url', 'peers', 'fv_last_contact', 'mf_last_contact'}
@@ -2788,7 +2788,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
                     saved += 1
             self.send_json({'ok': True, 'saved': saved})
 
-        elif p == '/api/peer/register':
+        elif p == '/api/peer/register':  # 20303703  POST /api/peer/register
             # Bidirectional peer mesh registration.
             # POST {"hub_url": "http://ip:8765", "echo": true/false}
             # - Adds hub_url to this hub's peers list
@@ -2832,7 +2832,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
                         pass  # Best-effort; peer may be offline at registration time
             self.send_json({'ok': True, 'peers': peers})
 
-        elif p == '/api/journal':
+        elif p == '/api/journal':  # 20304707  POST /api/journal
             body_text = body.get('body','').strip()
             if body_text:
                 journal_add(body.get('type','manual'), body_text, body.get('user',''))
@@ -2840,7 +2840,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
             else:
                 self.send_json({'ok': False, 'error': 'No body'}, 400)
 
-        elif p == '/api/ai/chat':
+        elif p == '/api/ai/chat':  # 20307702  POST /api/ai/chat
             message    = body.get('message', '').strip()
             image_b64  = body.get('image')       # base64 string, no data-URI prefix
             image_type = body.get('image_type', 'image/jpeg')
@@ -2856,14 +2856,14 @@ class Handler(http.server.BaseHTTPRequestHandler):
             log_activity(f'AI chat: {message[:80]}', 'user', 'aichat', result.get('provider',''), 'info')
             self.send_json(result)
 
-        elif p == '/api/ai/config':
+        elif p == '/api/ai/config':  # 20307703  POST /api/ai/config
             provider = body.get('provider', '').strip()
             api_key  = body.get('api_key', '').strip()
             if provider: config_set('ai_provider', provider)
             if api_key:  config_set('ai_api_key', api_key)
             self.send_json({'ok': True})
 
-        elif p == '/api/totp/confirm':
+        elif p == '/api/totp/confirm':  # 20305708  POST /api/totp/confirm
             # Activate 2FA: verify code against a temp secret, save only if valid.
             # This is called during setup — not for gate unlock.
             secret = str(body.get('secret', '')).strip()
@@ -2879,7 +2879,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
             journal_add('security', '2FA enabled via setup confirmation', '')
             self.send_json({'ok': True})
 
-        elif p == '/api/totp/verify':
+        elif p == '/api/totp/verify':  # 20305709  POST /api/totp/verify
             code = str(body.get('code', '')).strip()
             level = max(1, min(4, int(body.get('level', 3))))
             duration = int(body.get('duration_s', 1800))
@@ -2898,7 +2898,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 'level': level,
             })
 
-        elif p == '/api/totp/disable':
+        elif p == '/api/totp/disable':  # 20305710  POST /api/totp/disable
             code = str(body.get('code', '')).strip()
             if not totp_verify(code):
                 self.send_json({'ok': False, 'error': 'Invalid code'}, 401)
@@ -2909,7 +2909,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
             journal_add('gate_unlock', 'TOTP disabled', '')
             self.send_json({'ok': True})
 
-        elif p == '/api/service/install':
+        elif p == '/api/service/install':  # 20310704  POST /api/service/install
             name = body.get('name','').strip().lower()
             INSTALLABLE = {
                 'n8n':       'cd ' + DOCKER_ROOT + '/n8n && docker compose up -d',
@@ -2926,7 +2926,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
             result = ssh_run(INSTALLABLE[name], timeout=60)
             self.send_json({'ok': result.get('exitcode',1)==0, 'output': result.get('output',''), 'error': result.get('error','')})
 
-        elif p == '/api/tunnel/start':
+        elif p == '/api/tunnel/start':  # 20308701  POST /api/tunnel/start
             if not gate_check(self.headers, required_level=2):
                 self.send_json({'error': 'gate_required', 'layer': 2,
                                 'message': 'Tunnel control requires TOTP verification'}, 403)
@@ -2934,7 +2934,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
             ok = tunnel_start()
             self.send_json({'ok': ok})
 
-        elif p == '/api/tunnel/stop':
+        elif p == '/api/tunnel/stop':  # 20308702  POST /api/tunnel/stop
             if not gate_check(self.headers, required_level=2):
                 self.send_json({'error': 'gate_required', 'layer': 2,
                                 'message': 'Tunnel control requires TOTP verification'}, 403)
@@ -2942,7 +2942,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
             ok = tunnel_stop()
             self.send_json({'ok': ok})
 
-        elif p == '/api/ports/ack':
+        elif p == '/api/ports/ack':  # 20302721  POST /api/ports/ack
             # Acknowledge port events (dismiss alerts)
             event_ids = body.get('ids', [])
             ack_all   = body.get('all', False)
@@ -2962,7 +2962,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 _port_cache['events'] = [dict(r) for r in rows]
             self.send_json({'ok': True})
 
-        elif p == '/api/update':
+        elif p == '/api/update':  # 20310702  POST /api/update
             # git pull + restart hub service
             if not gate_check(self.headers, required_level=3):
                 self.send_json({'error': 'gate_required', 'layer': 3,
@@ -2976,7 +2976,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
             lines.append(restart.get('output', '') or ('restarted' if restart.get('exitcode',1)==0 else restart.get('error','')))
             self.send_json({'ok': pull.get('exitcode',1)==0, 'output': '\n'.join(lines)})
 
-        elif p == '/api/setup/generate-claude-md':
+        elif p == '/api/setup/generate-claude-md':  # 20310703  POST /api/setup/generate-claude-md
             # Write a filled-in CLAUDE.md to the hub directory on the server
             if not gate_check(self.headers, required_level=3):
                 self.send_json({'error': 'gate_required', 'layer': 3,
@@ -3027,7 +3027,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
             else:
                 self.send_json({'ok': False, 'error': r2.get('error','Write failed')})
 
-        elif p == '/api/users':
+        elif p == '/api/users':  # 20305707  POST /api/users
             action = body.get('action','')
             if action == 'add':
                 username = body.get('username','').strip()
@@ -3075,7 +3075,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
             else:
                 self.send_json({'ok': False, 'error': 'Unknown action'}, 400)
 
-        elif p == '/api/docker/prune':
+        elif p == '/api/docker/prune':  # 20302719  POST /api/docker/prune
             body = {}
             try:
                 cl = int(self.headers.get('Content-Length', 0))
@@ -3096,7 +3096,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 self.send_json({'ok': True, 'output': out})
             except subprocess.CalledProcessError as e:
                 self.send_json({'ok': False, 'output': e.output})
-        elif p.startswith('/api/docker/action/'):
+        elif p.startswith('/api/docker/action/'):  # 20302720  POST /api/docker/action/{cname}
             cname = p.split('/')[-1]
             body = {}
             try:
