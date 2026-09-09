@@ -3114,7 +3114,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
                     self.send_json({'ok': True, 'container': cname, 'action': action})
                 except subprocess.CalledProcessError as e:
                     self.send_json({'ok': False, 'error': e.output})
-        elif p == '/api/activity':
+        elif p == '/api/activity':  # 20306704  POST /api/activity
             # POST { action, source?, category?, detail?, level? }
             action = body.get('action', '').strip()
             if not action:
@@ -3129,7 +3129,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
             )
             self.send_json({'ok': True})
 
-        elif p == '/api/incidents':
+        elif p == '/api/incidents':  # 20306703  POST /api/incidents
             # POST { title, body?, severity? }
             title = body.get('title', '').strip()
             if not title:
