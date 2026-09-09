@@ -1,0 +1,65 @@
+{
+  "_note": "Template — fill in real values locally via notes/secrets.env. Do NOT commit real IPs, UUIDs, or passwords.",
+  "_populate": "Copy notes/secrets.env values into the fields marked <FILL_FROM_SECRETS>",
+  "servers": [
+    {
+      "uuid": "b04385cdfd9b4b3bad88e192ca982ce2",
+      "hostname": "fks-services",
+      "lan_ip": "<FILL_FROM_SECRETS>",
+      "tailscale_ip": "<FILL_FROM_SECRETS>",
+      "tailscale_name": "fks-services",
+      "ssh_user": "<FILL_FROM_SECRETS>",
+      "hub_port": 8765,
+      "hub_url_tailscale": "http://<tailscale_ip>:8765",
+      "hub_url_lan": "http://<lan_ip>:8765",
+      "public_url": null,
+      "os": "Ubuntu 24.04",
+      "ram_gb": 216,
+      "storage": "1TB OS + 4TB data",
+      "role": "primary",
+      "location": "work",
+      "netplan_clean": true,
+      "boot_health_check_installed": false,
+      "kit_status_installed": true,
+      "kit_status_result": "11/12",
+      "n8n_instance": "Keyknox n8n at :5678",
+      "flarevault_node": true,
+      "updated": "2026-09-09"
+    },
+    {
+      "uuid": "2ebe78c69fbe404e9a4145ae54aa725a",
+      "hostname": "ksgcohub",
+      "lan_ip": "<FILL_FROM_SECRETS>",
+      "tailscale_ip": "<FILL_FROM_SECRETS>",
+      "tailscale_name": "ksgcohub",
+      "ssh_user": "<FILL_FROM_SECRETS>",
+      "hub_port": 8765,
+      "hub_url_tailscale": "http://<tailscale_ip>:8765",
+      "hub_url_lan": "http://<lan_ip>:8765",
+      "public_url": "https://hub.ksgco.app",
+      "os": "Ubuntu 24.04",
+      "role": "home",
+      "location": "home",
+      "netplan_clean": true,
+      "boot_health_check_installed": true,
+      "kit_status_installed": true,
+      "kit_status_result": "12/12",
+      "n8n_instance": "ksgcohub n8n at :5678",
+      "flarevault_node": false,
+      "cf_tunnels": [
+        { "subdomain": "hub.ksgco.app", "target": "http://localhost:8765" },
+        { "subdomain": "ntfy.ksgco.app", "target": "http://localhost:8085" }
+      ],
+      "cf_access": {
+        "enabled": true,
+        "policy": "email OTP",
+        "allowed_emails": "<FILL_FROM_SECRETS>"
+      },
+      "updated": "2026-09-09"
+    }
+  ],
+  "populate_uuids": {
+    "command": "sudo dmidecode -s system-uuid",
+    "note": "Run on each server, paste UUID into the uuid field above. Keep this file local or in secrets.env."
+  }
+}

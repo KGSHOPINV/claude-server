@@ -1,0 +1,259 @@
+{
+  "_meta": {
+    "version": "1.0.0",
+    "updated": "2026-09-09",
+    "description": "Machine-readable manifest for the full claude-server mesh. Covers servers, code files, and all running services.",
+    "authority": "FlareVault — this file is the FV registry source of truth",
+    "note": "UUIDs for servers must be populated via: sudo dmidecode -s system-uuid"
+  },
+
+  "_servers_note": "IPs and UUIDs are in knowledge/servers.json (fill locally from notes/secrets.env). Never commit real IPs.",
+  "servers": [
+    {
+      "uuid": "b04385cdfd9b4b3bad88e192ca982ce2",
+      "hostname": "fks-services",
+      "lan_ip": "see notes/secrets.env",
+      "tailscale_ip": "see notes/secrets.env",
+      "ssh_user": "see notes/secrets.env",
+      "hub_url": "http://<tailscale_ip>:8765",
+      "role": "primary",
+      "os": "Ubuntu 24.04",
+      "ram_gb": 216,
+      "storage": "1TB OS + 4TB data",
+      "netplan_clean": true,
+      "boot_health_check": false,
+      "kit_status": "11/12",
+      "joined_at": null,
+      "last_seen": null,
+      "notes": "Work server. 34 containers. FlareVault node runs here."
+    },
+    {
+      "uuid": "2ebe78c69fbe404e9a4145ae54aa725a",
+      "hostname": "ksgcohub",
+      "lan_ip": "see notes/secrets.env",
+      "tailscale_ip": "see notes/secrets.env",
+      "ssh_user": "see notes/secrets.env",
+      "hub_url": "http://<tailscale_ip>:8765",
+      "role": "home",
+      "os": "Ubuntu 24.04",
+      "ram_gb": null,
+      "storage": null,
+      "netplan_clean": true,
+      "boot_health_check": true,
+      "kit_status": "12/12",
+      "joined_at": null,
+      "last_seen": null,
+      "cf_tunnels": [
+        { "tunnel_url": "hub.ksgco.app", "target": ":8765" },
+        { "tunnel_url": "ntfy.ksgco.app", "target": ":8085" }
+      ],
+      "cf_access": "email OTP on hub.ksgco.app",
+      "notes": "Home server. 12 containers. CF tunnel + Access active."
+    }
+  ],
+
+  "files": [
+    {
+      "path": "hub/server.py",
+      "purpose": "Hub HTTP server — routes, auth, DB, SSH bridge, Docker status, incidents, federation",
+      "type": "monolith",
+      "lines": 3119,
+      "refactor_phase": "1-2",
+      "refactor_status": "current",
+      "target_path": "hub/kernel/ + hub/handlers/ + hub/server.py (bootstrap)"
+    },
+    {
+      "path": "hub/app.html",
+      "purpose": "Hub SPA frontend — workspace, panes, views, state",
+      "type": "monolith",
+      "lines": 6518,
+      "refactor_phase": "3",
+      "refactor_status": "current",
+      "target_path": "hub/ui/"
+    },
+    {
+      "path": "hub/mobile.html",
+      "purpose": "Mobile shell for hub",
+      "type": "ui",
+      "lines": null,
+      "refactor_phase": null,
+      "refactor_status": "current",
+      "target_path": null
+    },
+    {
+      "path": "hub/db/server.db",
+      "purpose": "Hub SQLite — hub_config, activity_log, incidents, session tokens",
+      "type": "data",
+      "gitignored": true,
+      "tables": ["hub_config", "activity_log", "incidents", "sessions", "vault"],
+      "refactor_status": "current"
+    },
+    {
+      "path": "server-kit/server.manifest.yml",
+      "purpose": "Service BOM — feeds kit-status checks",
+      "type": "config",
+      "refactor_status": "current"
+    },
+    {
+      "path": "server-kit/install.sh",
+      "purpose": "Master install script for new server setup",
+      "type": "tool",
+      "refactor_status": "current",
+      "known_gap": "fix-netplan.sh not yet called from here"
+    },
+    {
+      "path": "server-kit/tools/kit-status.sh",
+      "purpose": "Check all services from manifest, post results to ntfy",
+      "type": "tool",
+      "deployed_to": ["fks-services", "ksgcohub"],
+      "install_path": "/usr/local/bin/kit-status",
+      "refactor_status": "current"
+    },
+    {
+      "path": "server-kit/tools/boot-health-check.sh",
+      "purpose": "Systemd oneshot — checks route, internet, DNS, Docker, hub:8765 on every boot",
+      "type": "tool",
+      "deployed_to": ["ksgcohub"],
+      "install_path": "/usr/local/bin/boot-health-check.sh",
+      "refactor_status": "current",
+      "known_gap": "Not yet deployed to fks-services"
+    },
+    {
+      "path": "server-kit/tools/boot-health-check.service",
+      "purpose": "Systemd unit for boot-health-check",
+      "type": "config",
+      "deployed_to": ["ksgcohub"],
+      "refactor_status": "current"
+    },
+    {
+      "path": "server-kit/tools/fix-netplan.sh",
+      "purpose": "Removes cloud-init 50-cloud-init.yaml conflict, disables cloud-init networking permanently",
+      "type": "tool",
+      "refactor_status": "current",
+      "known_gap": "Not called from install.sh yet"
+    },
+    {
+      "path": "server-kit/workflows/health-alert.json",
+      "purpose": "n8n workflow — checks /api/containers every 5min, posts to ntfy on failure",
+      "type": "workflow",
+      "n8n_id": "3yRcOV2hpvlaiwZ6",
+      "deployed_to": ["ksgcohub"],
+      "status": "active",
+      "refactor_status": "current"
+    },
+    {
+      "path": "server-kit/workflows/disk-alert.json",
+      "purpose": "n8n workflow — checks /api/status disks every 30min, posts to ntfy on low space",
+      "type": "workflow",
+      "n8n_id": "zdEJz3ix1wWlmpQu",
+      "deployed_to": ["ksgcohub"],
+      "status": "active",
+      "refactor_status": "current"
+    },
+    {
+      "path": "server-kit/workflows/weekly-digest.json",
+      "purpose": "n8n workflow — Sunday 8am weekly summary to ntfy",
+      "type": "workflow",
+      "n8n_id": "6sH3ASf1PkiRhe3B",
+      "deployed_to": ["ksgcohub"],
+      "status": "active",
+      "refactor_status": "current"
+    },
+    {
+      "path": "AGENTS.md",
+      "purpose": "AI session entry point — orient here first",
+      "type": "doc",
+      "refactor_status": "current"
+    },
+    {
+      "path": "MASTER.md",
+      "purpose": "Human-readable system reference",
+      "type": "doc",
+      "refactor_status": "current"
+    },
+    {
+      "path": "docs/refactor-plan.md",
+      "purpose": "Phased migration blueprint — monolith to kernel",
+      "type": "doc",
+      "refactor_status": "current"
+    },
+    {
+      "path": "knowledge/registry.json",
+      "purpose": "This file — machine-readable manifest for AI agents and FV",
+      "type": "registry",
+      "refactor_status": "current"
+    },
+    {
+      "path": "knowledge/decisions.sql",
+      "purpose": "Architecture decision log seed data",
+      "type": "registry",
+      "refactor_status": "current"
+    },
+    {
+      "path": "knowledge/servers.json",
+      "purpose": "Device UUIDs + connection metadata for both servers",
+      "type": "registry",
+      "refactor_status": "pending — needs dmidecode run on both servers"
+    }
+  ],
+
+  "services": {
+    "fks-services": [
+      { "name": "hub", "port": 8765, "compose": "/srv/docker/hub", "desired": "running", "actual": "running" },
+      { "name": "flarevault-node", "port": 7777, "compose": "/srv/docker/flarevault", "desired": "running", "actual": "running" },
+      { "name": "flarevault-monitor", "port": null, "compose": "/srv/docker/flarevault", "desired": "running", "actual": "running" },
+      { "name": "n8n", "port": 5678, "compose": "/srv/docker/n8n", "desired": "running", "actual": "running", "notes": "Keyknox n8n, N8N_SECURE_COOKIE=false set" },
+      { "name": "postgres", "port": 5432, "compose": "/srv/docker/keyknox", "desired": "running", "actual": "running" },
+      { "name": "redis", "port": 6379, "compose": "/srv/docker/redis", "desired": "running", "actual": "running" },
+      { "name": "postgraphile", "port": 5000, "compose": "/srv/docker/keyknox", "desired": "running", "actual": "running" },
+      { "name": "supabase", "port": 8000, "compose": "/srv/docker/supabase", "desired": "running", "actual": "running" },
+      { "name": "surrealdb", "port": 8001, "compose": "/srv/docker/surrealdb", "desired": "running", "actual": "running" },
+      { "name": "netdata", "port": 19999, "compose": "/srv/docker/netdata", "desired": "running", "actual": "running" },
+      { "name": "portainer", "port": 9443, "compose": "/srv/docker/portainer", "desired": "running", "actual": "running" },
+      { "name": "redis-commander", "port": 8081, "compose": "/srv/docker/redis-commander", "desired": "running", "actual": "stopped" }
+    ],
+    "ksgcohub": [
+      { "name": "hub", "port": 8765, "compose": "~/hub", "desired": "running", "actual": "running", "public_url": "hub.ksgco.app" },
+      { "name": "nginx-proxy-mgr", "port": 81, "compose": "/srv/docker/npm", "desired": "running", "actual": "running" },
+      { "name": "ntfy", "port": 8085, "compose": "/srv/docker/ntfy", "desired": "running", "actual": "running", "public_url": "ntfy.ksgco.app" },
+      { "name": "n8n", "port": 5678, "compose": "/srv/docker/n8n", "desired": "running", "actual": "running" },
+      { "name": "surrealdb", "port": 8001, "compose": "/srv/docker/surrealdb", "desired": "running", "actual": "running" },
+      { "name": "uptime-kuma", "port": 3001, "compose": "/srv/docker/uptime-kuma", "desired": "running", "actual": "running" },
+      { "name": "netdata", "port": 19999, "compose": "/srv/docker/netdata", "desired": "running", "actual": "running" },
+      { "name": "portainer", "port": 9443, "compose": "/srv/docker/portainer", "desired": "running", "actual": "running" },
+      { "name": "dozzle", "port": 8090, "compose": "/srv/docker/dozzle", "desired": "running", "actual": "running" },
+      { "name": "redis", "port": 6379, "compose": "/srv/docker/redis", "desired": "running", "actual": "running" },
+      { "name": "homepage", "port": 3000, "compose": "/srv/docker/homepage", "desired": "running", "actual": "running" },
+      { "name": "redis-commander", "port": 8081, "compose": "/srv/docker/redis-commander", "desired": "running", "actual": "stopped" },
+      { "name": "nextcloud", "port": 8181, "compose": "snap", "desired": "running", "actual": "running", "notes": "Not behind NPM yet — blocked on NPM admin password" }
+    ]
+  },
+
+  "endpoints": {
+    "documented": [
+      { "method": "GET",  "path": "/api/status",         "auth": 1, "description": "Aggregated server info" },
+      { "method": "GET",  "path": "/api/containers",      "auth": 1, "description": "Docker container list + state" },
+      { "method": "GET",  "path": "/api/ports",           "auth": 1, "description": "Active port map" },
+      { "method": "GET",  "path": "/api/sitemap",         "auth": 0, "description": "Full route registry" },
+      { "method": "GET",  "path": "/api/identity",        "auth": 0, "description": "Node identity: hostname, role" },
+      { "method": "GET",  "path": "/api/incidents",       "auth": 1, "description": "Last 50 incidents" },
+      { "method": "POST", "path": "/api/incidents",       "auth": 1, "description": "Create incident" },
+      { "method": "POST", "path": "/api/peer/register",   "auth": 0, "description": "Join mesh" },
+      { "method": "GET",  "path": "/api/federation",      "auth": 1, "description": "List known peers" },
+      { "method": "GET",  "path": "/api/hub-context",     "auth": 1, "description": "NOT BUILT — AI session context endpoint" }
+    ]
+  },
+
+  "gaps": [
+    { "id": "G001", "item": "Server UUIDs populated via /etc/machine-id", "file": "knowledge/servers.json", "status": "resolved", "note": "dmidecode returned Not Settable on fks-services; machine-id used instead" },
+    { "id": "G002", "item": "fix-netplan.sh not in install.sh", "file": "server-kit/install.sh", "fix": "Add call to fix-netplan.sh in install.sh" },
+    { "id": "G003", "item": "boot-health-check not on fks-services", "fix": "Deploy server-kit/tools/boot-health-check.sh to fks-services" },
+    { "id": "G004", "item": "/api/hub-context not built", "fix": "Phase 1 — add after kernel extraction" },
+    { "id": "G005", "item": "Backup systemd timer not set", "fix": "server-backup.sh exists, needs timer unit" },
+    { "id": "G006", "item": "Nextcloud not behind NPM", "fix": "Need NPM admin password to add proxy host" },
+    { "id": "G007", "item": "Auth gate missing on Receipt + AI Chat views", "fix": "Phase 2/3 — add gate_check(2) to those handlers" },
+    { "id": "G008", "item": "TOTP gate not enforced on hub", "fix": "Phase 1 — router-level auth enforcement" },
+    { "id": "G009", "item": "FV MCP server not built", "fix": "Phase 4" },
+    { "id": "G010", "item": "Ubuntu autoinstall ISO generator not built", "fix": "Phase 4 / FV milestone" }
+  ]
+}
