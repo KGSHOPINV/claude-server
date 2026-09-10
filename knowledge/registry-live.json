@@ -1,0 +1,825 @@
+{
+  "_meta": {
+    "generated": "2026-09-09T23:15:44.021014+00:00",
+    "generator": "hub/tools/registry_gen.py",
+    "codes_map": "knowledge/telescope-codes.json",
+    "source_files": [
+      "hub/server.py"
+    ]
+  },
+  "summary": {
+    "matched": 63,
+    "shadow": 0,
+    "dead": 75,
+    "clean": false
+  },
+  "matched": [
+    {
+      "code": "20200301",
+      "name": "db_conn \u2014 open SQLite connection, row_factory=Row",
+      "file": "hub/server.py",
+      "line": 822,
+      "raw": "# 20200301  db_conn \u2014 open SQLite connection, row_factory=Row",
+      "map_description": "Open SQLite connection, row_factory=Row"
+    },
+    {
+      "code": "20200302",
+      "name": "db_ensure_tables \u2014 create all tables + seed admin user",
+      "file": "hub/server.py",
+      "line": 911,
+      "raw": "# 20200302  db_ensure_tables \u2014 create all tables + seed admin user",
+      "map_description": "Create all tables + seed admin user"
+    },
+    {
+      "code": "20200303",
+      "name": "ssh_run \u2014 run shell cmd via SSH or bash -c in LOCAL_MODE",
+      "file": "hub/server.py",
+      "line": 153,
+      "raw": "# 20200303  ssh_run \u2014 run shell cmd via SSH or bash -c in LOCAL_MODE",
+      "map_description": "Run shell cmd via SSH or bash -c in LOCAL_MODE"
+    },
+    {
+      "code": "20200304",
+      "name": "check_auth \u2014 validate session token from header or query param",
+      "file": "hub/server.py",
+      "line": 2032,
+      "raw": "# 20200304  check_auth \u2014 validate session token from header or query param",
+      "map_description": "Validate session token from header or query param"
+    },
+    {
+      "code": "20200305",
+      "name": "gate_check \u2014 return True if TOTP not configured or valid gate token",
+      "file": "hub/server.py",
+      "line": 2106,
+      "raw": "# 20200305  gate_check \u2014 return True if TOTP not configured or valid gate token",
+      "map_description": "Return True if TOTP not configured or valid gate token"
+    },
+    {
+      "code": "20200306",
+      "name": "gate_create \u2014 mint gate token with level + expiry",
+      "file": "hub/server.py",
+      "line": 2094,
+      "raw": "# 20200306  gate_create \u2014 mint gate token with level + expiry",
+      "map_description": "Mint gate token with level + expiry"
+    },
+    {
+      "code": "20200307",
+      "name": "log_activity \u2014 append to activity_log, never raises",
+      "file": "hub/server.py",
+      "line": 994,
+      "raw": "# 20200307  log_activity \u2014 append to activity_log, never raises",
+      "map_description": "Append row to activity_log, never raises"
+    },
+    {
+      "code": "20200308",
+      "name": "activity_recent \u2014 SELECT recent activity_log rows",
+      "file": "hub/server.py",
+      "line": 1008,
+      "raw": "# 20200308  activity_recent \u2014 SELECT recent activity_log rows",
+      "map_description": "SELECT recent activity_log rows"
+    },
+    {
+      "code": "20200309",
+      "name": "Handler.log_message \u2014 suppress default access logging",
+      "file": "hub/server.py",
+      "line": 2229,
+      "raw": "    # 20200309  Handler.log_message \u2014 suppress default access logging",
+      "map_description": "Suppress default access logging"
+    },
+    {
+      "code": "20200310",
+      "name": "Handler.send_json \u2014 serialize + write JSON response with CORS",
+      "file": "hub/server.py",
+      "line": 2233,
+      "raw": "    # 20200310  Handler.send_json \u2014 serialize + write JSON response with CORS",
+      "map_description": "Serialize + write JSON response with CORS"
+    },
+    {
+      "code": "20200311",
+      "name": "Handler.do_OPTIONS \u2014 CORS preflight",
+      "file": "hub/server.py",
+      "line": 2243,
+      "raw": "    # 20200311  Handler.do_OPTIONS \u2014 CORS preflight",
+      "map_description": "CORS preflight handler"
+    },
+    {
+      "code": "20200312",
+      "name": "Handler.get_body \u2014 parse JSON request body",
+      "file": "hub/server.py",
+      "line": 2251,
+      "raw": "    # 20200312  Handler.get_body \u2014 parse JSON request body",
+      "map_description": "Parse JSON request body"
+    },
+    {
+      "code": "20201301",
+      "name": "get_server_info \u2014 hostname/OS/IP/cores via SSH, cached process-lifetime",
+      "file": "hub/server.py",
+      "line": 182,
+      "raw": "# 20201301  get_server_info \u2014 hostname/OS/IP/cores via SSH, cached process-lifetime",
+      "map_description": "One SSH call for hostname/OS/IP/cores; cached process-lifetime"
+    },
+    {
+      "code": "20201302",
+      "name": "get_access_info \u2014 all hub URLs: local, Tailscale, tunnel",
+      "file": "hub/server.py",
+      "line": 2195,
+      "raw": "# 20201302  get_access_info \u2014 all hub URLs: local, Tailscale, tunnel",
+      "map_description": "All hub URLs: local, Tailscale, tunnel"
+    },
+    {
+      "code": "20202301",
+      "name": "get_status \u2014 uptime/RAM/disk/containers/load, 60s SSH cache",
+      "file": "hub/server.py",
+      "line": 222,
+      "raw": "# 20202301  get_status \u2014 uptime/RAM/disk/containers/load, 60s SSH cache",
+      "map_description": "Uptime/RAM/disk/containers/load; 60s SSH cache"
+    },
+    {
+      "code": "20202302",
+      "name": "get_containers \u2014 docker ps -a parsed, 30s cache",
+      "file": "hub/server.py",
+      "line": 321,
+      "raw": "# 20202302  get_containers \u2014 docker ps -a parsed, 30s cache",
+      "map_description": "docker ps -a parsed; 30s cache"
+    },
+    {
+      "code": "20202303",
+      "name": "build_services \u2014 enrich SERVICES list with live Docker state",
+      "file": "hub/server.py",
+      "line": 372,
+      "raw": "# 20202303  build_services \u2014 enrich SERVICES list with live Docker state",
+      "map_description": "Enrich SERVICES list with live Docker state"
+    },
+    {
+      "code": "20202304",
+      "name": "_port_lane \u2014 map port number to lane name",
+      "file": "hub/server.py",
+      "line": 486,
+      "raw": "# 20202304  _port_lane \u2014 map port number to lane name",
+      "map_description": "Map port number to lane name"
+    },
+    {
+      "code": "20202305",
+      "name": "scan_ports \u2014 ss -tlnp4 + docker ps \u2192 enriched port list",
+      "file": "hub/server.py",
+      "line": 692,
+      "raw": "# 20202305  scan_ports \u2014 ss -tlnp4 + docker ps \u2192 enriched port list",
+      "map_description": "ss -tlnp4 + docker ps \u2192 enriched port list"
+    },
+    {
+      "code": "20202306",
+      "name": "_do_port_snapshot \u2014 scan ports, diff, write port_snapshots/port_events",
+      "file": "hub/server.py",
+      "line": 764,
+      "raw": "# 20202306  _do_port_snapshot \u2014 scan ports, diff, write port_snapshots/port_events",
+      "map_description": "Scan ports, diff, write port_snapshots/port_events"
+    },
+    {
+      "code": "20202307",
+      "name": "_port_scan_loop \u2014 background daemon: scan every 5 minutes",
+      "file": "hub/server.py",
+      "line": 810,
+      "raw": "# 20202307  _port_scan_loop \u2014 background daemon: scan every 5 minutes",
+      "map_description": "Background daemon: scan every 5 minutes"
+    },
+    {
+      "code": "20202309",
+      "name": "get_manifest \u2014 full manifest BOM: server info, services, docker df, git ref",
+      "file": "hub/server.py",
+      "line": 1692,
+      "raw": "# 20202309  get_manifest \u2014 full manifest BOM: server info, services, docker df, git ref",
+      "map_description": "Full manifest BOM: server info, services, docker df, git ref"
+    },
+    {
+      "code": "20202310",
+      "name": "get_storage_info \u2014 SSH-based df + docker volumes",
+      "file": "hub/server.py",
+      "line": 1667,
+      "raw": "# 20202310  get_storage_info \u2014 SSH-based df + docker volumes",
+      "map_description": "SSH-based df + docker volumes"
+    },
+    {
+      "code": "20202311",
+      "name": "api_storage_info \u2014 df -BG + lsblk + docker system df",
+      "file": "hub/server.py",
+      "line": 1315,
+      "raw": "# 20202311  api_storage_info \u2014 df -BG + lsblk + docker system df",
+      "map_description": "df -BG + lsblk + docker system df"
+    },
+    {
+      "code": "20202312",
+      "name": "api_docker_images \u2014 docker images parsed",
+      "file": "hub/server.py",
+      "line": 1421,
+      "raw": "# 20202312  api_docker_images \u2014 docker images parsed",
+      "map_description": "docker images parsed"
+    },
+    {
+      "code": "20202313",
+      "name": "api_docker_volumes \u2014 docker system df -v volumes",
+      "file": "hub/server.py",
+      "line": 1441,
+      "raw": "# 20202313  api_docker_volumes \u2014 docker system df -v volumes",
+      "map_description": "docker system df -v volumes parsed"
+    },
+    {
+      "code": "20202314",
+      "name": "api_docker_stats \u2014 docker stats --no-stream per container",
+      "file": "hub/server.py",
+      "line": 1466,
+      "raw": "# 20202314  api_docker_stats \u2014 docker stats --no-stream per container",
+      "map_description": "docker stats --no-stream per container"
+    },
+    {
+      "code": "20202315",
+      "name": "api_docker_diagnostics \u2014 interpreted findings: restarts, disk, unhealthy",
+      "file": "hub/server.py",
+      "line": 1487,
+      "raw": "# 20202315  api_docker_diagnostics \u2014 interpreted findings: restarts, disk, unhealthy",
+      "map_description": "Interpreted findings: restarts, disk, unhealthy"
+    },
+    {
+      "code": "20202316",
+      "name": "get_integrations \u2014 live health: Redis PING, SurrealDB /health, n8n /healthz",
+      "file": "hub/server.py",
+      "line": 1995,
+      "raw": "# 20202316  get_integrations \u2014 live health: Redis PING, SurrealDB /health, n8n /healthz",
+      "map_description": "Live health: Redis PING, SurrealDB /health, n8n /healthz"
+    },
+    {
+      "code": "20202317",
+      "name": "build_receipt \u2014 full server snapshot via local subprocess",
+      "file": "hub/server.py",
+      "line": 1108,
+      "raw": "# 20202317  build_receipt \u2014 full server snapshot via local subprocess",
+      "map_description": "Full server snapshot via local subprocess"
+    },
+    {
+      "code": "20202318",
+      "name": "build_context \u2014 HANDOFF_SERVERHUB context payload for AI",
+      "file": "hub/server.py",
+      "line": 1223,
+      "raw": "# 20202318  build_context \u2014 HANDOFF_SERVERHUB context payload for AI",
+      "map_description": "HANDOFF_SERVERHUB context payload for AI"
+    },
+    {
+      "code": "20204301",
+      "name": "config_get \u2014 SELECT single value from hub_config",
+      "file": "hub/server.py",
+      "line": 1591,
+      "raw": "# 20204301  config_get \u2014 SELECT single value from hub_config",
+      "map_description": "SELECT single value from hub_config"
+    },
+    {
+      "code": "20204302",
+      "name": "config_set \u2014 UPSERT key/value in hub_config",
+      "file": "hub/server.py",
+      "line": 1601,
+      "raw": "# 20204302  config_set \u2014 UPSERT key/value in hub_config",
+      "map_description": "UPSERT key/value in hub_config"
+    },
+    {
+      "code": "20204303",
+      "name": "config_get_all \u2014 SELECT all hub_config as dict",
+      "file": "hub/server.py",
+      "line": 1614,
+      "raw": "# 20204303  config_get_all \u2014 SELECT all hub_config as dict",
+      "map_description": "SELECT all hub_config as dict"
+    },
+    {
+      "code": "20204304",
+      "name": "vault_get \u2014 SELECT vault_blob from notes",
+      "file": "hub/server.py",
+      "line": 875,
+      "raw": "# 20204304  vault_get \u2014 SELECT vault_blob from notes",
+      "map_description": "SELECT vault_blob from notes"
+    },
+    {
+      "code": "20204305",
+      "name": "vault_put \u2014 UPSERT vault_blob in notes",
+      "file": "hub/server.py",
+      "line": 885,
+      "raw": "# 20204305  vault_put \u2014 UPSERT vault_blob in notes",
+      "map_description": "UPSERT vault_blob in notes"
+    },
+    {
+      "code": "20204306",
+      "name": "journal_add \u2014 INSERT into journal",
+      "file": "hub/server.py",
+      "line": 1646,
+      "raw": "# 20204306  journal_add \u2014 INSERT into journal",
+      "map_description": "INSERT into journal"
+    },
+    {
+      "code": "20204307",
+      "name": "journal_get \u2014 SELECT recent journal rows",
+      "file": "hub/server.py",
+      "line": 1657,
+      "raw": "# 20204307  journal_get \u2014 SELECT recent journal rows",
+      "map_description": "SELECT recent journal rows"
+    },
+    {
+      "code": "20204308",
+      "name": "issues_get \u2014 SELECT all from issues",
+      "file": "hub/server.py",
+      "line": 901,
+      "raw": "# 20204308  issues_get \u2014 SELECT all from issues",
+      "map_description": "SELECT all from issues"
+    },
+    {
+      "code": "20205301",
+      "name": "users_list \u2014 SELECT all users (no password_hash)",
+      "file": "hub/server.py",
+      "line": 1625,
+      "raw": "# 20205301  users_list \u2014 SELECT all users (no password_hash)",
+      "map_description": "SELECT all users (no password_hash)"
+    },
+    {
+      "code": "20205302",
+      "name": "user_auth \u2014 SHA-256 password check, returns user row or None",
+      "file": "hub/server.py",
+      "line": 1635,
+      "raw": "# 20205302  user_auth \u2014 SHA-256 password check, returns user row or None",
+      "map_description": "SHA-256 password check; returns user row or None"
+    },
+    {
+      "code": "20205303",
+      "name": "_totp_hotp \u2014 raw HOTP: base32 secret + counter \u2192 6-digit code",
+      "file": "hub/server.py",
+      "line": 2046,
+      "raw": "# 20205303  _totp_hotp \u2014 raw HOTP: base32 secret + counter \u2192 6-digit code",
+      "map_description": "Raw HOTP: base32 secret + counter \u2192 6-digit code"
+    },
+    {
+      "code": "20205304",
+      "name": "totp_verify \u2014 verify code \u00b11 time-step against saved totp_secret",
+      "file": "hub/server.py",
+      "line": 2058,
+      "raw": "# 20205304  totp_verify \u2014 verify code \u00b11 time-step against saved totp_secret",
+      "map_description": "Verify code \u00b11 time-step against saved totp_secret"
+    },
+    {
+      "code": "20205305",
+      "name": "totp_new_secret \u2014 generate 20-byte random base32 secret",
+      "file": "hub/server.py",
+      "line": 2067,
+      "raw": "# 20205305  totp_new_secret \u2014 generate 20-byte random base32 secret",
+      "map_description": "Generate 20-byte random base32 secret"
+    },
+    {
+      "code": "20205306",
+      "name": "totp_verify_secret \u2014 verify code against any given secret",
+      "file": "hub/server.py",
+      "line": 2073,
+      "raw": "# 20205306  totp_verify_secret \u2014 verify code against any given secret",
+      "map_description": "Verify code against any given secret"
+    },
+    {
+      "code": "20205307",
+      "name": "totp_uri \u2014 build otpauth://totp/ URI for QR display",
+      "file": "hub/server.py",
+      "line": 2082,
+      "raw": "# 20205307  totp_uri \u2014 build otpauth://totp/ URI for QR display",
+      "map_description": "Build otpauth://totp/ URI for QR display"
+    },
+    {
+      "code": "20206301",
+      "name": "_docker_event_loop \u2014 stream docker events; write activity_log; ntfy on die/start",
+      "file": "hub/server.py",
+      "line": 1028,
+      "raw": "# 20206301  _docker_event_loop \u2014 stream docker events; write activity_log; ntfy on die/start",
+      "map_description": "Stream docker events; write to activity_log; ntfy on die/start"
+    },
+    {
+      "code": "20206302",
+      "name": "_ntfy_send \u2014 POST push notification to ntfy",
+      "file": "hub/server.py",
+      "line": 1083,
+      "raw": "# 20206302  _ntfy_send \u2014 POST push notification to ntfy",
+      "map_description": "POST push notification to ntfy"
+    },
+    {
+      "code": "20207301",
+      "name": "ai_system_prompt \u2014 build server-aware system prompt from cached status",
+      "file": "hub/server.py",
+      "line": 1889,
+      "raw": "# 20207301  ai_system_prompt \u2014 build server-aware system prompt from cached status",
+      "map_description": "Build server-aware system prompt from cached status"
+    },
+    {
+      "code": "20207302",
+      "name": "ai_chat \u2014 dispatch to Claude/OpenAI/Gemini based on ai_provider config",
+      "file": "hub/server.py",
+      "line": 1908,
+      "raw": "# 20207302  ai_chat \u2014 dispatch to Claude/OpenAI/Gemini based on ai_provider config",
+      "map_description": "Dispatch to Claude/OpenAI/Gemini based on ai_provider config"
+    },
+    {
+      "code": "20208301",
+      "name": "_tunnel_watcher \u2014 background thread: poll docker logs for trycloudflare URL",
+      "file": "hub/server.py",
+      "line": 2131,
+      "raw": "# 20208301  _tunnel_watcher \u2014 background thread: poll docker logs for trycloudflare URL",
+      "map_description": "Background thread: poll docker logs for trycloudflare URL"
+    },
+    {
+      "code": "20208302",
+      "name": "tunnel_status \u2014 docker inspect tunnel container; return {running, url}",
+      "file": "hub/server.py",
+      "line": 2148,
+      "raw": "# 20208302  tunnel_status \u2014 docker inspect tunnel container; return {running, url}",
+      "map_description": "docker inspect tunnel container; return {running, url}"
+    },
+    {
+      "code": "20208303",
+      "name": "tunnel_start \u2014 docker run cloudflared; start watcher thread",
+      "file": "hub/server.py",
+      "line": 2162,
+      "raw": "# 20208303  tunnel_start \u2014 docker run cloudflared; start watcher thread",
+      "map_description": "docker run cloudflared; start watcher thread"
+    },
+    {
+      "code": "20208304",
+      "name": "tunnel_stop \u2014 docker stop + rm server-hub-tunnel",
+      "file": "hub/server.py",
+      "line": 2183,
+      "raw": "# 20208304  tunnel_stop \u2014 docker stop + rm server-hub-tunnel",
+      "map_description": "docker stop + rm server-hub-tunnel"
+    },
+    {
+      "code": "20209301",
+      "name": "_pcache_get \u2014 proxy cache read, 5s HTML / 60s asset TTL",
+      "file": "hub/server.py",
+      "line": 54,
+      "raw": "# 20209301  _pcache_get \u2014 proxy cache read, 5s HTML / 60s asset TTL",
+      "map_description": "Read from proxy cache; 5s HTML / 60s asset TTL"
+    },
+    {
+      "code": "20209302",
+      "name": "_pcache_put \u2014 proxy cache write, evict oldest when >400",
+      "file": "hub/server.py",
+      "line": 64,
+      "raw": "# 20209302  _pcache_put \u2014 proxy cache write, evict oldest when >400",
+      "map_description": "Write to proxy cache; evict oldest when >400"
+    },
+    {
+      "code": "20209303",
+      "name": "_rewrite_proxy_html \u2014 rewrite src/href/action attrs through proxy",
+      "file": "hub/server.py",
+      "line": 72,
+      "raw": "# 20209303  _rewrite_proxy_html \u2014 rewrite src/href/action attrs through proxy",
+      "map_description": "Rewrite src/href/action attrs through proxy"
+    },
+    {
+      "code": "20209304",
+      "name": "_rewrite_proxy_css \u2014 rewrite url(/path) in CSS through proxy",
+      "file": "hub/server.py",
+      "line": 93,
+      "raw": "# 20209304  _rewrite_proxy_css \u2014 rewrite url(/path) in CSS through proxy",
+      "map_description": "Rewrite url(/path) in CSS through proxy"
+    },
+    {
+      "code": "20209305",
+      "name": "proxy_fetch \u2014 proxy HTTP/HTTPS request to local service",
+      "file": "hub/server.py",
+      "line": 104,
+      "raw": "# 20209305  proxy_fetch \u2014 proxy HTTP/HTTPS request to local service",
+      "map_description": "Proxy HTTP/HTTPS request to local service"
+    },
+    {
+      "code": "20209306",
+      "name": "build_cutsheet_html \u2014 generate self-contained port cutsheet HTML",
+      "file": "hub/server.py",
+      "line": 495,
+      "raw": "# 20209306  build_cutsheet_html \u2014 generate self-contained port cutsheet HTML",
+      "map_description": "Generate self-contained port cutsheet HTML"
+    },
+    {
+      "code": "20209307",
+      "name": "_substitute_guide_tokens \u2014 replace {{server.*}} tokens with live values",
+      "file": "hub/server.py",
+      "line": 1758,
+      "raw": "# 20209307  _substitute_guide_tokens \u2014 replace {{server.*}} tokens with live values",
+      "map_description": "Replace {{server.*}} tokens with live values"
+    },
+    {
+      "code": "20209308",
+      "name": "_build_this_server_doc \u2014 generate live Markdown from server state",
+      "file": "hub/server.py",
+      "line": 1777,
+      "raw": "# 20209308  _build_this_server_doc \u2014 generate live Markdown from server state",
+      "map_description": "Generate live Markdown from server state"
+    },
+    {
+      "code": "20209309",
+      "name": "get_files \u2014 ls -lah via SSH for file browser",
+      "file": "hub/server.py",
+      "line": 1684,
+      "raw": "# 20209309  get_files \u2014 ls -lah via SSH for file browser",
+      "map_description": "ls -lah via SSH for file browser"
+    }
+  ],
+  "shadow": [],
+  "dead": [
+    {
+      "code": "20100101",
+      "map_description": "Key/value config store"
+    },
+    {
+      "code": "20100102",
+      "map_description": "User accounts with password_hash"
+    },
+    {
+      "code": "20100103",
+      "map_description": "Timestamped entries {ts, type, body, user}"
+    },
+    {
+      "code": "20100104",
+      "map_description": "All hub events with category"
+    },
+    {
+      "code": "20100105",
+      "map_description": "Port scan results"
+    },
+    {
+      "code": "20100106",
+      "map_description": "Port change events"
+    },
+    {
+      "code": "20100107",
+      "map_description": "Vault blob storage"
+    },
+    {
+      "code": "20100108",
+      "map_description": "Tracked issues"
+    },
+    {
+      "code": "20100109",
+      "map_description": "Severity-tagged incident log"
+    },
+    {
+      "code": "20202308",
+      "map_description": "Check 16 server-kit install steps"
+    },
+    {
+      "code": "20301701",
+      "map_description": "Serve app.html"
+    },
+    {
+      "code": "20301702",
+      "map_description": "Serve mobile.html"
+    },
+    {
+      "code": "20301703",
+      "map_description": "PWA manifest"
+    },
+    {
+      "code": "20301704",
+      "map_description": "Service worker stub"
+    },
+    {
+      "code": "20301705",
+      "map_description": "Return client IP"
+    },
+    {
+      "code": "20301706",
+      "map_description": "Identity beacon"
+    },
+    {
+      "code": "20301707",
+      "map_description": "Get access info: local, Tailscale, tunnel URLs"
+    },
+    {
+      "code": "20302701",
+      "map_description": "Server status: uptime, RAM, disk, load"
+    },
+    {
+      "code": "20302702",
+      "map_description": "Setup step completion status"
+    },
+    {
+      "code": "20302703",
+      "map_description": "Docker container list"
+    },
+    {
+      "code": "20302704",
+      "map_description": "Enriched services list with live Docker state"
+    },
+    {
+      "code": "20302705",
+      "map_description": "Enriched port scan results"
+    },
+    {
+      "code": "20302706",
+      "map_description": "Storage info: df, lsblk, docker volumes"
+    },
+    {
+      "code": "20302707",
+      "map_description": "Docker images list"
+    },
+    {
+      "code": "20302708",
+      "map_description": "Docker volumes list"
+    },
+    {
+      "code": "20302709",
+      "map_description": "Docker stats per container (no-stream)"
+    },
+    {
+      "code": "20302710",
+      "map_description": "Interpreted Docker findings: restarts, disk, unhealthy"
+    },
+    {
+      "code": "20302711",
+      "map_description": "Live integration health checks"
+    },
+    {
+      "code": "20302712",
+      "map_description": "Full manifest BOM"
+    },
+    {
+      "code": "20302713",
+      "map_description": "Full server snapshot receipt"
+    },
+    {
+      "code": "20302714",
+      "map_description": "Sync status payload"
+    },
+    {
+      "code": "20302715",
+      "map_description": "HANDOFF_SERVERHUB context payload"
+    },
+    {
+      "code": "20302716",
+      "map_description": "Route registry / sitemap"
+    },
+    {
+      "code": "20302717",
+      "map_description": "Self-contained port cutsheet HTML page"
+    },
+    {
+      "code": "20302718",
+      "map_description": "Flush all caches and re-fetch status"
+    },
+    {
+      "code": "20302719",
+      "map_description": "docker system prune"
+    },
+    {
+      "code": "20302720",
+      "map_description": "Container action: start/stop/restart/pull"
+    },
+    {
+      "code": "20302721",
+      "map_description": "Acknowledge port change event"
+    },
+    {
+      "code": "20303701",
+      "map_description": "List federation peers and state"
+    },
+    {
+      "code": "20303702",
+      "map_description": "Update federation config"
+    },
+    {
+      "code": "20303703",
+      "map_description": "Register a federation peer"
+    },
+    {
+      "code": "20304701",
+      "map_description": "Read vault blob"
+    },
+    {
+      "code": "20304702",
+      "map_description": "List all tracked issues"
+    },
+    {
+      "code": "20304703",
+      "map_description": "Recent journal entries"
+    },
+    {
+      "code": "20304704",
+      "map_description": "All hub_config key/value pairs"
+    },
+    {
+      "code": "20304705",
+      "map_description": "Write vault blob"
+    },
+    {
+      "code": "20304706",
+      "map_description": "Set hub_config key/value"
+    },
+    {
+      "code": "20304707",
+      "map_description": "Add journal entry"
+    },
+    {
+      "code": "20305701",
+      "map_description": "Check current session auth status"
+    },
+    {
+      "code": "20305702",
+      "map_description": "List all users (no password_hash)"
+    },
+    {
+      "code": "20305703",
+      "map_description": "TOTP configuration status"
+    },
+    {
+      "code": "20305704",
+      "map_description": "Generate TOTP setup secret and QR URI"
+    },
+    {
+      "code": "20305705",
+      "map_description": "Authenticate and create session"
+    },
+    {
+      "code": "20305706",
+      "map_description": "Invalidate session token"
+    },
+    {
+      "code": "20305707",
+      "map_description": "Create or update user"
+    },
+    {
+      "code": "20305708",
+      "map_description": "Confirm and activate TOTP secret"
+    },
+    {
+      "code": "20305709",
+      "map_description": "Verify TOTP code (gate unlock)"
+    },
+    {
+      "code": "20305710",
+      "map_description": "Disable TOTP for user"
+    },
+    {
+      "code": "20306701",
+      "map_description": "List incident log entries"
+    },
+    {
+      "code": "20306702",
+      "map_description": "Recent activity log"
+    },
+    {
+      "code": "20306703",
+      "map_description": "Create incident log entry"
+    },
+    {
+      "code": "20306704",
+      "map_description": "Append activity log entry"
+    },
+    {
+      "code": "20307701",
+      "map_description": "Read AI provider config"
+    },
+    {
+      "code": "20307702",
+      "map_description": "Submit AI chat message"
+    },
+    {
+      "code": "20307703",
+      "map_description": "Update AI provider config"
+    },
+    {
+      "code": "20308701",
+      "map_description": "Start Cloudflare tunnel container"
+    },
+    {
+      "code": "20308702",
+      "map_description": "Stop and remove Cloudflare tunnel container"
+    },
+    {
+      "code": "20309701",
+      "map_description": "Proxy request to local service at port"
+    },
+    {
+      "code": "20309702",
+      "map_description": "List available documentation guides"
+    },
+    {
+      "code": "20309703",
+      "map_description": "Fetch rendered doc content with token substitution"
+    },
+    {
+      "code": "20309704",
+      "map_description": "File browser: ls -lah via SSH"
+    },
+    {
+      "code": "20310701",
+      "map_description": "Run arbitrary shell command via SSH"
+    },
+    {
+      "code": "20310702",
+      "map_description": "Run server-update (pull all containers)"
+    },
+    {
+      "code": "20310703",
+      "map_description": "Generate CLAUDE.md from live server state"
+    },
+    {
+      "code": "20310704",
+      "map_description": "Install a new service via setup script"
+    }
+  ]
+}

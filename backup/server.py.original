@@ -25,27 +25,24 @@ import urllib.error
 import urllib.request
 from datetime import datetime
 
-# ── Kernel imports ────────────────────────────────────────────────────────────
-from kernel.db   import db_conn, db_ensure_tables, DB_PATH
-from kernel.ssh  import ssh_run, LOCAL_MODE, SSH_HOST, SSH_USER, SERVER_IP
-from kernel.log  import log_activity, activity_recent, _ntfy_send, _docker_event_loop
-from kernel.auth import (
-    check_auth, gate_check, gate_create,
-    _totp_hotp, totp_verify, totp_new_secret, totp_verify_secret, totp_uri,
-    _sessions, _users_lock, _gate_sessions, _gate_lock,
-)
-
 PORT      = int(os.environ.get('HUB_PORT', 8765))
 BASE_DIR  = os.path.dirname(os.path.abspath(__file__))
+DB_PATH   = os.environ.get('HUB_DB',     os.path.join(BASE_DIR, '..', 'db', 'server.db'))
 APP_PATH    = os.path.join(BASE_DIR, 'app.html')
 MOBILE_PATH = os.path.join(BASE_DIR, 'mobile.html')
 GUIDES_DIR= os.environ.get('HUB_GUIDES', os.path.join(BASE_DIR, 'guides'))
+
+# LOCAL_MODE=1 → run commands directly (no SSH); used when hub runs ON the server
+LOCAL_MODE = os.environ.get('HUB_LOCAL', '0') == '1'
 
 HTTPS_PORTS = {9443, 9090}
 
 _ssl_ctx = ssl.create_default_context()
 _ssl_ctx.check_hostname = False
 _ssl_ctx.verify_mode = ssl.CERT_NONE
+SSH_HOST   = os.environ.get('HUB_SSH_HOST', 'localhost')
+SSH_USER   = os.environ.get('HUB_SSH_USER', '')   # optional; overrides user parsed from SSH_HOST
+SERVER_IP  = os.environ.get('HUB_SERVER_IP', '')  # leave blank — hub reads actual IP from server
 DOCKER_ROOT = os.environ.get('HUB_DOCKER_ROOT', '/srv/docker')
 
 # ── Proxy cache ───────────────────────────────────────────────────────────────
@@ -54,7 +51,6 @@ DOCKER_ROOT = os.environ.get('HUB_DOCKER_ROOT', '/srv/docker')
 _proxy_cache = {}
 _pcache_lock = threading.Lock()
 
-# 20209301  _pcache_get — proxy cache read, 5s HTML / 60s asset TTL
 def _pcache_get(key):
     with _pcache_lock:
         hit = _proxy_cache.get(key)
@@ -64,7 +60,6 @@ def _pcache_get(key):
     ttl = 5 if 'text/html' in ct else 60
     return (content, ct, status) if time.time() - ts < ttl else None
 
-# 20209302  _pcache_put — proxy cache write, evict oldest when >400
 def _pcache_put(key, content, ct, status):
     with _pcache_lock:
         if len(_proxy_cache) > 400:
@@ -72,7 +67,6 @@ def _pcache_put(key, content, ct, status):
             del _proxy_cache[oldest]
         _proxy_cache[key] = (content, ct, status, time.time())
 
-# 20209303  _rewrite_proxy_html — rewrite src/href/action attrs through proxy
 def _rewrite_proxy_html(html, port):
     """Rewrite absolute src/href/action attrs through proxy, then inject <base>."""
     # Rewrite first so the injected <base> tag itself doesn't get double-processed
@@ -93,7 +87,6 @@ def _rewrite_proxy_html(html, port):
         html = f'<head>{base_tag}</head>' + html
     return html
 
-# 20209304  _rewrite_proxy_css — rewrite url(/path) in CSS through proxy
 def _rewrite_proxy_css(css, port):
     """Rewrite url(/path) references in CSS through proxy."""
     def _sub(m):
@@ -104,7 +97,6 @@ def _rewrite_proxy_css(css, port):
 
 # ── Proxy ─────────────────────────────────────────────────────────────────────
 
-# 20209305  proxy_fetch — proxy HTTP/HTTPS request to local service
 def proxy_fetch(port, subpath, query=''):
     """Proxy a request to a local service, stripping X-Frame-Options."""
     cache_key = (port, subpath, query)
@@ -152,15 +144,35 @@ def proxy_fetch(port, subpath, query=''):
 
 
 # ── SSH ────────────────────────────────────────────────────────────────────────
-# KERNEL: ssh_run moved to kernel/ssh.py
+
+def ssh_run(cmd, timeout=15):
+    try:
+        args = ['bash', '-c', cmd] if LOCAL_MODE else ['ssh', SSH_HOST, cmd]
+        r = subprocess.run(
+            args,
+            capture_output=True, text=True, timeout=timeout
+        )
+        return {
+            'output': r.stdout.strip(),
+            'error': r.stderr.strip(),
+            'exitcode': r.returncode,
+            'online': r.returncode == 0 or r.stdout.strip() != ''
+        }
+    except subprocess.TimeoutExpired:
+        return {'output': '', 'error': 'Connection timed out', 'exitcode': -1, 'online': False}
+    except FileNotFoundError:
+        return {'output': '', 'error': 'ssh not found in PATH', 'exitcode': -1, 'online': False}
+    except Exception as e:
+        return {'output': '', 'error': str(e), 'exitcode': -1, 'online': False}
 
 # ── Status cache ───────────────────────────────────────────────────────────────
 
 _cache = {'status': None, 'ts': 0, 'containers': None, 'containers_ts': 0}
 _lock = threading.Lock()
+_sessions = {}  # token -> {user, created}
+_users_lock = threading.Lock()
 _server_info_cache = None   # cached once per process restart
 
-# 20201301  get_server_info — hostname/OS/IP/cores via SSH, cached process-lifetime
 def get_server_info():
     """Fetch server identity once and cache for the lifetime of the process."""
     global _server_info_cache
@@ -200,7 +212,6 @@ def get_server_info():
         }
     return _server_info_cache
 
-# 20202301  get_status — uptime/RAM/disk/containers/load, 60s SSH cache
 def get_status(force=False):
     with _lock:
         age = time.time() - _cache['ts']
@@ -299,7 +310,6 @@ def get_status(force=False):
         _cache['ts'] = time.time()
     return data
 
-# 20202302  get_containers — docker ps -a parsed, 30s cache
 def get_containers(force=False):
     with _lock:
         age = time.time() - _cache['containers_ts']
@@ -350,7 +360,6 @@ SERVICES = [
     {'name': 'Open WebUI',  'port': 3004,  'group': 'AI',             'description': 'AI chat interface',     'installed': True},
 ]
 
-# 20202303  build_services — enrich SERVICES list with live Docker state
 def build_services(server_info=None):
     """Build service list: known services enriched with live Docker state,
     plus auto-discovered containers not in the known list."""
@@ -464,7 +473,6 @@ _PORT_NAMES[8085] = 'ntfy'
 _PORT_NAMES[5678] = 'n8n'
 _PORT_NAMES[7003] = 'Redis (server)'
 
-# 20202304  _port_lane — map port number to lane name
 def _port_lane(port):
     """Return the lane name for a port number."""
     for lane in PORT_LANES:
@@ -473,7 +481,6 @@ def _port_lane(port):
                 return lane['name']
     return 'Other'
 
-# 20209306  build_cutsheet_html — generate self-contained port cutsheet HTML
 def build_cutsheet_html(ports, services, server_info):
     """Generate a live port cut-sheet as a self-contained HTML page."""
     from datetime import datetime as _dt
@@ -670,7 +677,6 @@ body{{background:var(--paper);color:var(--ink);font-family:var(--sans);font-size
 </html>"""
 
 
-# 20202305  scan_ports — ss -tlnp4 + docker ps → enriched port list
 def scan_ports():
     """Scan all listening TCP ports. Returns (ports_list, docker_port_map)."""
     # Get all listening TCP ports with process info
@@ -742,7 +748,6 @@ def scan_ports():
 _port_cache       = {'ports': [], 'events': [], 'ts': ''}
 _port_cache_lock  = threading.Lock()
 
-# 20202306  _do_port_snapshot — scan ports, diff, write port_snapshots/port_events
 def _do_port_snapshot():
     """Scan ports, detect changes, persist to DB."""
     ports, _ = scan_ports()
@@ -788,7 +793,6 @@ def _do_port_snapshot():
     with _port_cache_lock:
         _port_cache['events'] = [dict(r) for r in rows]
 
-# 20202307  _port_scan_loop — background daemon: scan every 5 minutes
 def _port_scan_loop():
     time.sleep(10)  # Give hub a moment to fully start up before first scan
     while True:
@@ -799,7 +803,11 @@ def _port_scan_loop():
         time.sleep(300)  # Scan every 5 minutes
 
 # ── SQLite helpers ─────────────────────────────────────────────────────────────
-# KERNEL: db_conn moved to kernel/db.py
+
+def db_conn():
+    conn = sqlite3.connect(DB_PATH)
+    conn.row_factory = sqlite3.Row
+    return conn
 
 def get_setup_status():
     """Check which parts of server-kit have been installed."""
@@ -848,7 +856,6 @@ def get_setup_status():
         'kit_path': kit if kit_present else None,
     }
 
-# 20204304  vault_get — SELECT vault_blob from notes
 def vault_get():
     try:
         conn = db_conn()
@@ -858,7 +865,6 @@ def vault_get():
     except Exception:
         return None
 
-# 20204305  vault_put — UPSERT vault_blob in notes
 def vault_put(blob):
     try:
         conn = db_conn()
@@ -874,7 +880,6 @@ def vault_put(blob):
     except Exception as e:
         return str(e)
 
-# 20204308  issues_get — SELECT all from issues
 def issues_get():
     try:
         conn = db_conn()
@@ -884,14 +889,198 @@ def issues_get():
     except Exception:
         return []
 
-# KERNEL: db_ensure_tables moved to kernel/db.py
+def db_ensure_tables():
+    try:
+        conn = db_conn()
+        conn.execute("""CREATE TABLE IF NOT EXISTS users (
+            id INTEGER PRIMARY KEY,
+            username TEXT UNIQUE NOT NULL,
+            display TEXT,
+            password_hash TEXT NOT NULL,
+            role TEXT DEFAULT 'admin',
+            created TEXT
+        )""")
+        conn.execute("""CREATE TABLE IF NOT EXISTS hub_config (
+            key TEXT PRIMARY KEY,
+            value TEXT,
+            updated TEXT
+        )""")
+        conn.execute("""CREATE TABLE IF NOT EXISTS journal (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            ts TEXT NOT NULL,
+            type TEXT NOT NULL,
+            body TEXT NOT NULL,
+            user TEXT DEFAULT ''
+        )""")
+        conn.execute("""CREATE TABLE IF NOT EXISTS port_snapshots (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            ts TEXT NOT NULL,
+            data TEXT NOT NULL
+        )""")
+        conn.execute("""CREATE TABLE IF NOT EXISTS port_events (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            ts TEXT NOT NULL,
+            event TEXT NOT NULL,
+            port INTEGER NOT NULL,
+            process TEXT DEFAULT '',
+            container TEXT DEFAULT '',
+            acknowledged INTEGER DEFAULT 0
+        )""")
+        conn.execute("""CREATE TABLE IF NOT EXISTS activity_log (
+            id      INTEGER PRIMARY KEY AUTOINCREMENT,
+            ts      TEXT NOT NULL,
+            source  TEXT NOT NULL DEFAULT 'system',
+            category TEXT NOT NULL DEFAULT 'general',
+            action  TEXT NOT NULL,
+            detail  TEXT DEFAULT '',
+            level   TEXT NOT NULL DEFAULT 'info'
+        )""")
+        conn.execute("""CREATE TABLE IF NOT EXISTS notes (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            category TEXT DEFAULT '',
+            key TEXT UNIQUE NOT NULL,
+            value TEXT,
+            updated TEXT
+        )""")
+        conn.execute("""CREATE TABLE IF NOT EXISTS issues (
+            id TEXT PRIMARY KEY,
+            service TEXT,
+            title TEXT,
+            body TEXT,
+            status TEXT DEFAULT 'open',
+            created INTEGER,
+            updated INTEGER
+        )""")
+        conn.execute("""CREATE TABLE IF NOT EXISTS incidents (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            title TEXT NOT NULL,
+            body TEXT,
+            severity TEXT DEFAULT 'info',
+            created_at TEXT DEFAULT (datetime('now'))
+        )""")
+        # Seed default admin if no users exist
+        row = conn.execute("SELECT COUNT(*) as c FROM users").fetchone()
+        if row['c'] == 0:
+            h = hashlib.sha256(b'admin').hexdigest()
+            conn.execute("INSERT INTO users (username,display,password_hash,role,created) VALUES (?,?,?,?,?)",
+                ('admin','Administrator',h,'admin',datetime.now().isoformat()))
+        conn.commit()
+        conn.close()
+    except Exception as e:
+        print(f'  DB init error: {e}')
 
 # ── Activity Logger ───────────────────────────────────────────────────────────
-# KERNEL: log_activity, activity_recent, _ntfy_send, _docker_event_loop moved to kernel/log.py
+
+def log_activity(action, source='system', category='general', detail='', level='info'):
+    """Write one line to the activity log. Universal — always safe to call."""
+    try:
+        conn = db_conn()
+        conn.execute(
+            "INSERT INTO activity_log (ts,source,category,action,detail,level) VALUES (?,?,?,?,?,?)",
+            (datetime.now().isoformat(timespec='seconds'), source, category, action, detail, level)
+        )
+        conn.commit()
+        conn.close()
+    except Exception:
+        pass  # never crash the caller
+
+def activity_recent(limit=100, category=None):
+    try:
+        conn = db_conn()
+        if category:
+            rows = conn.execute(
+                "SELECT * FROM activity_log WHERE category=? ORDER BY id DESC LIMIT ?",
+                (category, limit)).fetchall()
+        else:
+            rows = conn.execute(
+                "SELECT * FROM activity_log ORDER BY id DESC LIMIT ?", (limit,)).fetchall()
+        conn.close()
+        return [dict(r) for r in rows]
+    except Exception:
+        return []
+
+# ── Docker Event Watcher ──────────────────────────────────────────────────────
+
+_docker_watcher_running = False
+
+def _docker_event_loop():
+    """Stream docker events and write to activity log. Restarts on failure."""
+    global _docker_watcher_running
+    import shutil
+    if not shutil.which('docker'):
+        return  # Docker not installed — skip silently
+    while True:
+        try:
+            proc = subprocess.Popen(
+                ['docker', 'events', '--format', '{{json .}}'],
+                stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
+                text=True, bufsize=1
+            )
+            _docker_watcher_running = True
+            for line in proc.stdout:
+                line = line.strip()
+                if not line:
+                    continue
+                try:
+                    ev = json.loads(line)
+                    etype  = ev.get('Type', '')
+                    action = ev.get('Action', '')
+                    actor  = ev.get('Actor', {})
+                    name   = actor.get('Attributes', {}).get('name', actor.get('ID', '')[:12])
+                    image  = actor.get('Attributes', {}).get('image', '')
+
+                    if etype == 'container':
+                        if action in ('start', 'die', 'create', 'destroy', 'restart'):
+                            level = 'warn' if action in ('die', 'destroy') else 'info'
+                            log_activity(
+                                action   = f'Container {action}: {name}',
+                                source   = 'docker',
+                                category = 'container',
+                                detail   = image,
+                                level    = level
+                            )
+                            # ntfy for significant events
+                            if action == 'die':
+                                _ntfy_send(f'🔴 Container died: {name}', image or '', 'high', 'whale,rotating_light')
+                            elif action == 'start' and name not in ('watchtower',):
+                                _ntfy_send(f'🟢 Container started: {name}', image or '', 'min', 'whale')
+                    elif etype == 'image' and action == 'pull':
+                        img = actor.get('Attributes', {}).get('name', name)
+                        log_activity(f'Image pulled: {img}', 'docker', 'image', '', 'info')
+                    elif etype == 'network':
+                        pass  # too noisy — skip
+                except Exception:
+                    continue
+            proc.wait()
+        except Exception:
+            pass
+        _docker_watcher_running = False
+        time.sleep(10)  # wait before reconnecting
+
+def _ntfy_send(title, body, priority='default', tags='server'):
+    """Send ntfy push notification. Reads config from ~/.server-alerts.conf or env."""
+    try:
+        conf_path = os.path.expanduser('~/.server-alerts.conf')
+        url = os.environ.get('HUB_NTFY_URL', 'http://localhost:8085')
+        topic = os.environ.get('HUB_NTFY_TOPIC', 'server-alerts')
+        token = ''
+        if os.path.exists(conf_path):
+            for line in open(conf_path):
+                line = line.strip()
+                if line.startswith('NTFY_URL='):    url   = line.split('=',1)[1].strip()
+                if line.startswith('NTFY_TOPIC='):  topic = line.split('=',1)[1].strip()
+                if line.startswith('NTFY_TOKEN='):  token = line.split('=',1)[1].strip()
+        headers = {'Title': title, 'Priority': priority, 'Tags': tags}
+        if token: headers['Authorization'] = f'Bearer {token}'
+        req = urllib.request.Request(
+            f'{url}/{topic}', data=body.encode(),
+            headers=headers, method='POST')
+        urllib.request.urlopen(req, timeout=5, context=_ssl_ctx)
+    except Exception:
+        pass
 
 # ── Server Receipt ────────────────────────────────────────────────────────────
 
-# 20202317  build_receipt — full server snapshot via local subprocess
 def build_receipt():
     """Full server snapshot — universal, degrades gracefully."""
     import platform, shutil
@@ -986,7 +1175,7 @@ def build_receipt():
                 sync_issues.append({'service': svc['name'], 'port': svc['port'], 'issue': 'not running'})
 
     # Recent activity
-    recent = activity_recent(db_conn, 20)
+    recent = activity_recent(20)
 
     return {
         'generated': now,
@@ -1006,7 +1195,6 @@ def build_receipt():
     }
 
 
-# 20202318  build_context — HANDOFF_SERVERHUB context payload for AI
 def build_context():
     """Server context payload — per Metaforge HANDOFF_SERVERHUB spec.
     Sent to FlareVault at pairing; refresh every 60s or on significant change."""
@@ -1098,7 +1286,6 @@ def build_context():
 
 # ── Storage + Docker management APIs ──────────────────────────────────────────
 
-# 20202311  api_storage_info — df -BG + lsblk + docker system df
 def api_storage_info():
     """Disk breakdown + Docker usage combined."""
     mounts = []
@@ -1204,7 +1391,6 @@ def api_storage_info():
     }
 
 
-# 20202312  api_docker_images — docker images parsed
 def api_docker_images():
     """Docker images list with metadata."""
     images = []
@@ -1224,7 +1410,6 @@ def api_docker_images():
     return {'images': images, 'count': len(images)}
 
 
-# 20202313  api_docker_volumes — docker system df -v volumes
 def api_docker_volumes():
     """Docker volumes with link counts and sizes."""
     volumes = []
@@ -1249,7 +1434,6 @@ def api_docker_volumes():
     return {'volumes': volumes, 'count': len(volumes)}
 
 
-# 20202314  api_docker_stats — docker stats --no-stream per container
 def api_docker_stats():
     """Per-container CPU + memory snapshot (non-streaming)."""
     stats = []
@@ -1270,7 +1454,6 @@ def api_docker_stats():
     return {'stats': stats}
 
 
-# 20202315  api_docker_diagnostics — interpreted findings: restarts, disk, unhealthy
 def api_docker_diagnostics():
     """Interpreted diagnostic signals — actionable findings, not raw data."""
     findings = []
@@ -1374,7 +1557,6 @@ def api_docker_diagnostics():
 
 
 
-# 20204301  config_get — SELECT single value from hub_config
 def config_get(key, default=None):
     try:
         conn = db_conn()
@@ -1384,7 +1566,6 @@ def config_get(key, default=None):
     except Exception:
         return default
 
-# 20204302  config_set — UPSERT key/value in hub_config
 def config_set(key, value):
     try:
         conn = db_conn()
@@ -1397,7 +1578,6 @@ def config_set(key, value):
     except Exception as e:
         return str(e)
 
-# 20204303  config_get_all — SELECT all hub_config as dict
 def config_get_all():
     """Return all hub_config keys as a dict."""
     try:
@@ -1408,7 +1588,6 @@ def config_get_all():
     except Exception:
         return {}
 
-# 20205301  users_list — SELECT all users (no password_hash)
 def users_list():
     try:
         conn = db_conn()
@@ -1418,7 +1597,6 @@ def users_list():
     except Exception:
         return []
 
-# 20205302  user_auth — SHA-256 password check, returns user row or None
 def user_auth(username, password):
     try:
         h = hashlib.sha256(password.encode()).hexdigest()
@@ -1429,7 +1607,6 @@ def user_auth(username, password):
     except Exception:
         return None
 
-# 20204306  journal_add — INSERT into journal
 def journal_add(type_, body, user=''):
     try:
         conn = db_conn()
@@ -1440,7 +1617,6 @@ def journal_add(type_, body, user=''):
     except Exception:
         pass
 
-# 20204307  journal_get — SELECT recent journal rows
 def journal_get(limit=100):
     try:
         conn = db_conn()
@@ -1450,7 +1626,6 @@ def journal_get(limit=100):
     except Exception:
         return []
 
-# 20202310  get_storage_info — SSH-based df + docker volumes
 def get_storage_info():
     results = {}
     # Disk usage
@@ -1467,7 +1642,6 @@ def get_storage_info():
     results['volumes'] = r4.get('output','') if r4.get('online') else ''
     return results
 
-# 20209309  get_files — ls -lah via SSH for file browser
 def get_files(path):
     safe = path.replace('..','').replace('~','').strip()
     if not safe.startswith('/'):
@@ -1475,7 +1649,6 @@ def get_files(path):
     r = ssh_run(f"ls -lah --time-style=short-iso '{safe}' 2>&1 | head -60")
     return {'path': safe, 'listing': r.get('output',''), 'error': r.get('error','') if not r.get('online') else ''}
 
-# 20202309  get_manifest — full manifest BOM: server info, services, docker df, git ref
 def get_manifest():
     """Full system snapshot — server info, all services, containers, health."""
     now = datetime.now().isoformat()
@@ -1541,7 +1714,6 @@ def get_manifest():
     }
 
 
-# 20209307  _substitute_guide_tokens — replace {{server.*}} tokens with live values
 def _substitute_guide_tokens(text):
     """Replace {{server.*}} and {{hub.*}} template tokens with live values."""
     si = get_server_info()
@@ -1560,7 +1732,6 @@ def _substitute_guide_tokens(text):
         text = text.replace(token, val)
     return text
 
-# 20209308  _build_this_server_doc — generate live Markdown from server state
 def _build_this_server_doc():
     """Generate a live 'About this server' doc from current server state."""
     si = get_server_info()
@@ -1672,7 +1843,6 @@ def _build_this_server_doc():
     doc += "\nSee `remote-access.md` for full access topology.\n"
     return doc
 
-# 20207301  ai_system_prompt — build server-aware system prompt from cached status
 def ai_system_prompt():
     """Build a concise server-aware system prompt from live state."""
     status = _cache.get('status') or {}
@@ -1691,7 +1861,6 @@ def ai_system_prompt():
     ]
     return '\n'.join(lines)
 
-# 20207302  ai_chat — dispatch to Claude/OpenAI/Gemini based on ai_provider config
 def ai_chat(message, image_b64=None, image_type='image/jpeg'):
     """Call Claude or OpenAI depending on which key is configured."""
     provider = config_get('ai_provider', 'claude')
@@ -1778,7 +1947,6 @@ def ai_chat(message, image_b64=None, image_type='image/jpeg'):
         return {'error': str(e)}
 
 
-# 20202316  get_integrations — live health: Redis PING, SurrealDB /health, n8n /healthz
 def get_integrations():
     """Live health check for Redis, SurrealDB, n8n."""
     results = {}
@@ -1815,20 +1983,97 @@ def get_integrations():
 
     return results
 
-# KERNEL: check_auth moved to kernel/auth.py
+def check_auth(handler):
+    token = handler.headers.get('X-Hub-Token','')
+    if not token:
+        # Also accept from query string
+        qs = handler.path.split('?',1)[1] if '?' in handler.path else ''
+        for part in qs.split('&'):
+            if part.startswith('token='):
+                token = part[6:]
+    with _users_lock:
+        return _sessions.get(token)
 
 # ── TOTP ──────────────────────────────────────────────────────────────────────
-# KERNEL: _totp_hotp, totp_verify, totp_new_secret, totp_verify_secret, totp_uri moved to kernel/auth.py
+
+def _totp_hotp(secret, counter):
+    try:
+        key = base64.b32decode(secret.upper().replace(' ', ''))
+        msg = struct.pack('>Q', counter)
+        h = hmac.new(key, msg, hashlib.sha1).digest()
+        offset = h[-1] & 0x0f
+        code = struct.unpack('>I', bytes(h[offset:offset+4]))[0] & 0x7fffffff
+        return str(code % 1_000_000).zfill(6)
+    except Exception:
+        return ''
+
+def totp_verify(code):
+    secret = config_get('totp_secret', '')
+    if not secret:
+        return False
+    t = int(time.time()) // 30
+    code = str(code).strip().zfill(6)
+    return any(_totp_hotp(secret, t + d) == code for d in (-1, 0, 1))
+
+def totp_new_secret():
+    # Generate only — does NOT save to DB.
+    # Caller must call /api/totp/confirm with a valid code to activate.
+    return base64.b32encode(os.urandom(20)).decode()
+
+def totp_verify_secret(secret, code):
+    """Verify a code against any given secret (not necessarily the saved one)."""
+    if not secret:
+        return False
+    t = int(time.time()) // 30
+    code = str(code).strip().zfill(6)
+    return any(_totp_hotp(secret, t + d) == code for d in (-1, 0, 1))
+
+def totp_uri(secret, account='admin'):
+    import urllib.parse as _up
+    params = _up.urlencode({'secret': secret, 'issuer': 'ServerHub',
+                            'algorithm': 'SHA1', 'digits': '6', 'period': '30'})
+    return f'otpauth://totp/ServerHub%3A{account}?{params}'
 
 # ── Gate sessions ─────────────────────────────────────────────────────────────
-# KERNEL: _gate_sessions, _gate_lock, gate_create, gate_check moved to kernel/auth.py
+
+_gate_sessions = {}
+_gate_lock     = threading.Lock()
+
+def gate_create(level, user, duration_s=1800):
+    token   = secrets.token_hex(24)
+    expires = time.time() + duration_s
+    with _gate_lock:
+        now = time.time()
+        stale = [k for k, v in _gate_sessions.items() if v['expires'] < now]
+        for k in stale:
+            del _gate_sessions[k]
+        _gate_sessions[token] = {'level': level, 'user': user, 'expires': expires}
+    return token, expires
+
+def gate_check(headers, required_level=3):
+    """Return True if TOTP not configured OR valid gate token found at required_level+."""
+    if not config_get('totp_secret', ''):
+        return True
+    token = headers.get('X-Gate-Token', '')
+    if not token:
+        return False
+    with _gate_lock:
+        g = _gate_sessions.get(token)
+    if not g:
+        return False
+    if g['level'] < required_level:
+        return False
+    if time.time() > g['expires']:
+        with _gate_lock:
+            _gate_sessions.pop(token, None)
+        return False
+    return True
 
 # ── Tunnel management ─────────────────────────────────────────────────────────
 _tunnel_url    = ''
 _tunnel_lock_t = threading.Lock()
 _tunnel_thread = None
 
-# 20208301  _tunnel_watcher — background thread: poll docker logs for trycloudflare URL
 def _tunnel_watcher():
     """Background thread: poll server-hub-tunnel logs to extract the public URL."""
     global _tunnel_url
@@ -1845,7 +2090,6 @@ def _tunnel_watcher():
             pass
         time.sleep(4)
 
-# 20208302  tunnel_status — docker inspect tunnel container; return {running, url}
 def tunnel_status():
     try:
         r = subprocess.run(
@@ -1859,7 +2103,6 @@ def tunnel_status():
         url = _tunnel_url if running else ''
     return {'running': running, 'url': url}
 
-# 20208303  tunnel_start — docker run cloudflared; start watcher thread
 def tunnel_start():
     global _tunnel_url, _tunnel_thread
     try:
@@ -1880,7 +2123,6 @@ def tunnel_start():
     except Exception:
         return False
 
-# 20208304  tunnel_stop — docker stop + rm server-hub-tunnel
 def tunnel_stop():
     global _tunnel_url
     try:
@@ -1892,7 +2134,6 @@ def tunnel_stop():
     except Exception:
         return False
 
-# 20201302  get_access_info — all hub URLs: local, Tailscale, tunnel
 def get_access_info():
     """Return all accessible URLs for this hub."""
     local_ip = SERVER_IP
@@ -1926,11 +2167,9 @@ def get_access_info():
 # ── HTTP handler ───────────────────────────────────────────────────────────────
 
 class Handler(http.server.BaseHTTPRequestHandler):
-    # 20200309  Handler.log_message — suppress default access logging
     def log_message(self, fmt, *args):
         pass
 
-    # 20200310  Handler.send_json — serialize + write JSON response with CORS
     def send_json(self, data, status=200):
         body = json.dumps(data, default=str).encode()
         self.send_response(status)
@@ -1940,7 +2179,6 @@ class Handler(http.server.BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(body)
 
-    # 20200311  Handler.do_OPTIONS — CORS preflight
     def do_OPTIONS(self):
         self.send_response(200)
         self.send_header('Access-Control-Allow-Origin', '*')
@@ -1948,7 +2186,6 @@ class Handler(http.server.BaseHTTPRequestHandler):
         self.send_header('Access-Control-Allow-Headers', 'Content-Type, X-Hub-Token')
         self.end_headers()
 
-    # 20200312  Handler.get_body — parse JSON request body
     def get_body(self):
         n = int(self.headers.get('Content-Length', 0))
         return json.loads(self.rfile.read(n)) if n else {}
@@ -1957,7 +2194,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
         p = self.path.split('?')[0]
         force = 'force' in self.path
 
-        if p in ('/', '/mobile', '/desktop'):  # 20301701  GET /
+        if p in ('/', '/mobile', '/desktop'):
             ua = self.headers.get('User-Agent', '')
             is_mobile = any(x in ua for x in ('Mobile','Android','iPhone','iPad','iPod','BlackBerry','Windows Phone'))
             if p == '/' and is_mobile:
@@ -1978,7 +2215,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 self.send_response(404)
                 self.end_headers()
 
-        elif p == '/manifest.json':  # 20301703  GET /manifest.json
+        elif p == '/manifest.json':
             manifest = {
                 "name": "Server Hub",
                 "short_name": "Hub",
@@ -1998,7 +2235,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
             self.end_headers()
             self.wfile.write(content)
 
-        elif p == '/sw.js':  # 20301704  GET /sw.js
+        elif p == '/sw.js':
             sw = b"self.addEventListener('fetch', () => {});"
             self.send_response(200)
             self.send_header('Content-Type', 'application/javascript')
@@ -2006,26 +2243,26 @@ class Handler(http.server.BaseHTTPRequestHandler):
             self.end_headers()
             self.wfile.write(sw)
 
-        elif p == '/api/status':  # 20302701  GET /api/status
+        elif p == '/api/status':
             self.send_json(get_status(force=force))
 
-        elif p == '/api/setup/status':  # 20302702  GET /api/setup/status
+        elif p == '/api/setup/status':
             self.send_json(get_setup_status())
 
-        elif p == '/api/containers':  # 20302703  GET /api/containers
+        elif p == '/api/containers':
             self.send_json(get_containers(force=force))
 
-        elif p == '/api/services':  # 20302704  GET /api/services
+        elif p == '/api/services':
             self.send_json(build_services())
 
-        elif p == '/api/vault':  # 20304701  GET /api/vault
+        elif p == '/api/vault':
             blob = vault_get()
             self.send_json({'blob': blob})
 
-        elif p == '/api/issues':  # 20304702  GET /api/issues
+        elif p == '/api/issues':
             self.send_json(issues_get())
 
-        elif p == '/api/docs':  # 20309702  GET /api/docs
+        elif p == '/api/docs':
             try:
                 files = []
                 # Synthetic live doc always listed first
@@ -2041,7 +2278,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
             except Exception as e:
                 self.send_json([])
 
-        elif p == '/api/docs/content':  # 20309703  GET /api/docs/content
+        elif p == '/api/docs/content':
             fname = ''
             if '?' in self.path:
                 qs = self.path.split('?', 1)[1]
@@ -2065,14 +2302,14 @@ class Handler(http.server.BaseHTTPRequestHandler):
             except FileNotFoundError:
                 self.send_response(404); self.end_headers()
 
-        elif p == '/api/auth/check':  # 20305701  GET /api/auth/check
+        elif p == '/api/auth/check':
             sess = check_auth(self)
             if sess:
                 self.send_json({'ok': True, 'user': sess['user']})
             else:
                 self.send_json({'ok': False}, 401)
 
-        elif p == '/api/ports':  # 20302705  GET /api/ports
+        elif p == '/api/ports':
             force = 'force' in self.path
             if force:
                 try:
@@ -2106,7 +2343,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 'scanned_at': ts,
             })
 
-        elif p == '/cutsheet':  # 20302717  GET /cutsheet
+        elif p == '/cutsheet':
             # Live generated port cut sheet — no auth, shareable on LAN
             with _port_cache_lock:
                 ports = list(_port_cache['ports'])
@@ -2131,7 +2368,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
             self.end_headers()
             self.wfile.write(enc)
 
-        elif p == '/api/my-ip':  # 20301705  GET /api/my-ip
+        elif p == '/api/my-ip':
             # Return the connecting client's IP address (useful for fail2ban unban)
             client_ip = self.client_address[0]
             # X-Forwarded-For from reverse proxy
@@ -2140,20 +2377,20 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 client_ip = xff.split(',')[0].strip()
             self.send_json({'ip': client_ip})
 
-        elif p == '/api/storage':  # 20302706  GET /api/storage
+        elif p == '/api/storage':
             self.send_json(api_storage_info())
 
         
-        elif p == '/api/docker/images':  # 20302707  GET /api/docker/images
+        elif p == '/api/docker/images':
             self.send_json(api_docker_images())
-        elif p == '/api/docker/volumes':  # 20302708  GET /api/docker/volumes
+        elif p == '/api/docker/volumes':
             self.send_json(api_docker_volumes())
-        elif p == '/api/docker/stats':  # 20302709  GET /api/docker/stats
+        elif p == '/api/docker/stats':
             self.send_json(api_docker_stats())
-        elif p == '/api/docker/diagnostics':  # 20302710  GET /api/docker/diagnostics
+        elif p == '/api/docker/diagnostics':
             self.send_json(api_docker_diagnostics())
 
-        elif p == '/api/files':  # 20309704  GET /api/files
+        elif p == '/api/files':
             path = get_server_info().get('home_dir', '/')
             if '?' in self.path:
                 for part in self.path.split('?',1)[1].split('&'):
@@ -2161,7 +2398,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
                         path = part[5:].replace('%2F','/')
             self.send_json(get_files(path))
 
-        elif p == '/api/journal':  # 20304703  GET /api/journal
+        elif p == '/api/journal':
             limit = 100
             if '?' in self.path:
                 for part in self.path.split('?',1)[1].split('&'):
@@ -2170,7 +2407,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
                         except: pass
             self.send_json(journal_get(limit))
 
-        elif p == '/api/config':  # 20304704  GET /api/config
+        elif p == '/api/config':
             try:
                 conn = db_conn()
                 rows = conn.execute("SELECT key,value FROM hub_config").fetchall()
@@ -2179,22 +2416,22 @@ class Handler(http.server.BaseHTTPRequestHandler):
             except Exception:
                 self.send_json({})
 
-        elif p == '/api/users':  # 20305702  GET /api/users
+        elif p == '/api/users':
             self.send_json(users_list())
 
-        elif p == '/api/integrations':  # 20302711  GET /api/integrations
+        elif p == '/api/integrations':
             self.send_json(get_integrations())
 
-        elif p == '/api/access':  # 20301707  GET /api/access
+        elif p == '/api/access':
             self.send_json(get_access_info())
 
-        elif p == '/api/ai/config':  # 20307701  GET /api/ai/config
+        elif p == '/api/ai/config':
             self.send_json({
                 'provider': config_get('ai_provider', 'claude'),
                 'has_key': bool(config_get('ai_api_key', os.environ.get('HUB_AI_KEY', ''))),
             })
 
-        elif p == '/api/totp/status':  # 20305703  GET /api/totp/status
+        elif p == '/api/totp/status':
             secret = config_get('totp_secret', '')
             with _gate_lock:
                 now = time.time()
@@ -2203,7 +2440,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
                          for v in _gate_sessions.values() if v['expires'] > now]
             self.send_json({'configured': bool(secret), 'gates': gates})
 
-        elif p == '/api/totp/setup':  # 20305704  GET /api/totp/setup
+        elif p == '/api/totp/setup':
             # Always generate a fresh temp secret — never saved to DB here.
             # The status endpoint tells the UI whether 2FA is already active.
             # This endpoint is only called when the user wants to begin setup.
@@ -2215,7 +2452,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 'uri': totp_uri(new_secret, account),
             })
 
-        elif p == '/api/manifest':  # 20302712  GET /api/manifest
+        elif p == '/api/manifest':
             data = get_manifest()
             body = json.dumps(data, default=str, indent=2).encode()
             self.send_response(200)
@@ -2228,18 +2465,18 @@ class Handler(http.server.BaseHTTPRequestHandler):
             self.end_headers()
             self.wfile.write(body)
 
-        elif p.startswith('/api/activity'):  # 20306702  GET /api/activity
+        elif p.startswith('/api/activity'):
             # GET /api/activity?limit=100&category=docker
             from urllib.parse import parse_qs, urlparse
             qs = parse_qs(urlparse(self.path).query)
             limit = int(qs.get('limit', ['100'])[0])
             cat   = qs.get('category', [None])[0]
-            self.send_json({'ok': True, 'events': activity_recent(db_conn, limit, cat)})
+            self.send_json({'ok': True, 'events': activity_recent(limit, cat)})
 
-        elif p == '/api/receipt':  # 20302713  GET /api/receipt
+        elif p == '/api/receipt':
             self.send_json(build_receipt())
 
-        elif p == '/api/sync':  # 20302714  GET /api/sync
+        elif p == '/api/sync':
             # Quick sync check — what's expected vs running
             receipt = build_receipt()
             self.send_json({
@@ -2249,10 +2486,10 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 'generated': receipt['generated'],
             })
 
-        elif p == '/api/context':  # 20302715  GET /api/context
+        elif p == '/api/context':
             self.send_json(build_context())
 
-        elif p == '/api/federation':  # 20303701  GET /api/federation
+        elif p == '/api/federation':
             cfg = config_get_all()
             # peers stored as JSON string in hub_config
             peers_raw = cfg.get('peers', '[]')
@@ -2268,7 +2505,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 'mf_last_contact': cfg.get('mf_last_contact') or None,
             })
 
-        elif p == '/api/identity':  # 20301706  GET /api/identity
+        elif p == '/api/identity':
             # Identity beacon — used by peer mesh registration and discovery
             si = get_server_info()
             cfg = config_get_all()
@@ -2288,7 +2525,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
             })
 
 
-        elif p == '/api/sitemap':  # 20302716  GET /api/sitemap
+        elif p == '/api/sitemap':
             routes = {
                 'GET': [
                     {'path': '/', 'description': 'Hub dashboard (HTML)'},
@@ -2360,7 +2597,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 'total_post': len(routes['POST']),
             })
 
-        elif p.startswith('/proxy/'):  # 20309701  GET /proxy/{port}/{path}
+        elif p.startswith('/proxy/'):
             # /proxy/3000/some/path?query=string
             remainder = p[7:]  # e.g. "3000/some/path"
             slash = remainder.find('/')
@@ -2384,7 +2621,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
             self.end_headers()
             self.wfile.write(content)
 
-        elif p == '/api/incidents':  # 20306701  GET /api/incidents
+        elif p == '/api/incidents':
             try:
                 conn = db_conn()
                 rows = conn.execute(
@@ -2395,6 +2632,21 @@ class Handler(http.server.BaseHTTPRequestHandler):
             except Exception as e:
                 self.send_json({'ok': False, 'error': str(e)}, 500)
 
+        elif p == '/api/sitemap':
+            self.send_json({'ok': True, 'endpoints': [
+                'GET  /api/incidents', 'POST /api/incidents',
+                'GET  /api/issues', 'GET  /api/journal', 'POST /api/journal',
+                'GET  /api/activity', 'POST /api/activity',
+                'GET  /api/receipt', 'GET  /api/sync', 'GET  /api/context',
+                'GET  /api/federation', 'GET  /api/identity',
+                'GET  /api/status', 'GET  /api/info',
+                'POST /api/run', 'POST /api/service/install',
+                'POST /api/tunnel/start', 'POST /api/tunnel/stop',
+                'POST /api/update', 'POST /api/users',
+                'POST /api/totp/confirm', 'POST /api/totp/verify', 'POST /api/totp/disable',
+                'GET  /api/peers', 'POST /api/peer/register',
+            ]})
+
         else:
             self.send_response(404)
             self.end_headers()
@@ -2403,24 +2655,24 @@ class Handler(http.server.BaseHTTPRequestHandler):
         p = self.path
         body = self.get_body()
 
-        if p == '/api/run':  # 20310701  POST /api/run
+        if p == '/api/run':
             cmd = body.get('command', '').strip()
             if not cmd:
                 self.send_json({'error': 'No command provided'}, 400)
                 return
-            if not gate_check(self.headers, 3, db_conn):
+            if not gate_check(self.headers, required_level=3):
                 self.send_json({'error': 'gate_required', 'layer': 3,
                                 'message': 'Shell access requires TOTP verification'}, 403)
                 return
             result = ssh_run(cmd, timeout=int(body.get('timeout', 30)))
             self.send_json(result)
 
-        elif p == '/api/vault':  # 20304705  POST /api/vault
+        elif p == '/api/vault':
             blob = body.get('blob')
             if blob is None:
                 self.send_json({'ok': False, 'error': 'No blob'}, 400)
                 return
-            if not gate_check(self.headers, 2, db_conn):
+            if not gate_check(self.headers, required_level=2):
                 self.send_json({'error': 'gate_required', 'layer': 2,
                                 'message': 'Vault writes require TOTP verification'}, 403)
                 return
@@ -2430,12 +2682,12 @@ class Handler(http.server.BaseHTTPRequestHandler):
             else:
                 self.send_json({'ok': False, 'error': str(ok)})
 
-        elif p == '/api/refresh':  # 20302718  POST /api/refresh
+        elif p == '/api/refresh':
             get_status(force=True)
             get_containers(force=True)
             self.send_json({'ok': True})
 
-        elif p == '/api/auth/login':  # 20305705  POST /api/auth/login
+        elif p == '/api/auth/login':
             username = body.get('username','').strip()
             password = body.get('password','')
             user = user_auth(username, password)
@@ -2447,14 +2699,14 @@ class Handler(http.server.BaseHTTPRequestHandler):
             else:
                 self.send_json({'ok': False, 'error': 'Invalid username or password'}, 401)
 
-        elif p == '/api/auth/logout':  # 20305706  POST /api/auth/logout
+        elif p == '/api/auth/logout':
             token = body.get('token','')
             with _users_lock:
                 _sessions.pop(token, None)
             self.send_json({'ok': True})
 
-        elif p == '/api/config':  # 20304706  POST /api/config
-            if not gate_check(self.headers, 2, db_conn):
+        elif p == '/api/config':
+            if not gate_check(self.headers, required_level=2):
                 self.send_json({'error': 'gate_required', 'layer': 2,
                                 'message': 'Config writes require TOTP verification'}, 403)
                 return
@@ -2462,7 +2714,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 config_set(k, str(v))
             self.send_json({'ok': True})
 
-        elif p == '/api/federation':  # 20303702  POST /api/federation
+        elif p == '/api/federation':
             # Accept: fv_url, mf_url, peers (JSON string), fv_last_contact, mf_last_contact
             # No gate required — URLs are not secrets; peers list is operational data.
             allowed = {'fv_url', 'mf_url', 'peers', 'fv_last_contact', 'mf_last_contact'}
@@ -2473,7 +2725,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
                     saved += 1
             self.send_json({'ok': True, 'saved': saved})
 
-        elif p == '/api/peer/register':  # 20303703  POST /api/peer/register
+        elif p == '/api/peer/register':
             # Bidirectional peer mesh registration.
             # POST {"hub_url": "http://ip:8765", "echo": true/false}
             # - Adds hub_url to this hub's peers list
@@ -2492,7 +2744,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
             if peer_url not in peers:
                 peers.append(peer_url)
                 config_set('peers', json.dumps(peers))
-                log_activity(db_conn, f'Peer registered: {peer_url}', 'system', 'federation', '', 'info')
+                log_activity(f'Peer registered: {peer_url}', 'system', 'federation', '', 'info')
             # Echo back — register ourselves on the peer (one level deep, no infinite loop)
             echo = body.get('echo', True)
             if echo:
@@ -2517,7 +2769,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
                         pass  # Best-effort; peer may be offline at registration time
             self.send_json({'ok': True, 'peers': peers})
 
-        elif p == '/api/journal':  # 20304707  POST /api/journal
+        elif p == '/api/journal':
             body_text = body.get('body','').strip()
             if body_text:
                 journal_add(body.get('type','manual'), body_text, body.get('user',''))
@@ -2525,7 +2777,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
             else:
                 self.send_json({'ok': False, 'error': 'No body'}, 400)
 
-        elif p == '/api/ai/chat':  # 20307702  POST /api/ai/chat
+        elif p == '/api/ai/chat':
             message    = body.get('message', '').strip()
             image_b64  = body.get('image')       # base64 string, no data-URI prefix
             image_type = body.get('image_type', 'image/jpeg')
@@ -2538,17 +2790,17 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 full_msg = f'[Server context: {ctx}]\n\n{full_msg}'
             result = ai_chat(full_msg, image_b64, image_type)
             # Also log the chat interaction
-            log_activity(db_conn, f'AI chat: {message[:80]}', 'user', 'aichat', result.get('provider',''), 'info')
+            log_activity(f'AI chat: {message[:80]}', 'user', 'aichat', result.get('provider',''), 'info')
             self.send_json(result)
 
-        elif p == '/api/ai/config':  # 20307703  POST /api/ai/config
+        elif p == '/api/ai/config':
             provider = body.get('provider', '').strip()
             api_key  = body.get('api_key', '').strip()
             if provider: config_set('ai_provider', provider)
             if api_key:  config_set('ai_api_key', api_key)
             self.send_json({'ok': True})
 
-        elif p == '/api/totp/confirm':  # 20305708  POST /api/totp/confirm
+        elif p == '/api/totp/confirm':
             # Activate 2FA: verify code against a temp secret, save only if valid.
             # This is called during setup — not for gate unlock.
             secret = str(body.get('secret', '')).strip()
@@ -2564,11 +2816,11 @@ class Handler(http.server.BaseHTTPRequestHandler):
             journal_add('security', '2FA enabled via setup confirmation', '')
             self.send_json({'ok': True})
 
-        elif p == '/api/totp/verify':  # 20305709  POST /api/totp/verify
+        elif p == '/api/totp/verify':
             code = str(body.get('code', '')).strip()
             level = max(1, min(4, int(body.get('level', 3))))
             duration = int(body.get('duration_s', 1800))
-            if not totp_verify(code, db_conn):
+            if not totp_verify(code):
                 self.send_json({'ok': False, 'error': 'Invalid or expired code'}, 401)
                 return
             sess = check_auth(self)
@@ -2583,9 +2835,9 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 'level': level,
             })
 
-        elif p == '/api/totp/disable':  # 20305710  POST /api/totp/disable
+        elif p == '/api/totp/disable':
             code = str(body.get('code', '')).strip()
-            if not totp_verify(code, db_conn):
+            if not totp_verify(code):
                 self.send_json({'ok': False, 'error': 'Invalid code'}, 401)
                 return
             config_set('totp_secret', '')
@@ -2594,7 +2846,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
             journal_add('gate_unlock', 'TOTP disabled', '')
             self.send_json({'ok': True})
 
-        elif p == '/api/service/install':  # 20310704  POST /api/service/install
+        elif p == '/api/service/install':
             name = body.get('name','').strip().lower()
             INSTALLABLE = {
                 'n8n':       'cd ' + DOCKER_ROOT + '/n8n && docker compose up -d',
@@ -2611,23 +2863,23 @@ class Handler(http.server.BaseHTTPRequestHandler):
             result = ssh_run(INSTALLABLE[name], timeout=60)
             self.send_json({'ok': result.get('exitcode',1)==0, 'output': result.get('output',''), 'error': result.get('error','')})
 
-        elif p == '/api/tunnel/start':  # 20308701  POST /api/tunnel/start
-            if not gate_check(self.headers, 2, db_conn):
+        elif p == '/api/tunnel/start':
+            if not gate_check(self.headers, required_level=2):
                 self.send_json({'error': 'gate_required', 'layer': 2,
                                 'message': 'Tunnel control requires TOTP verification'}, 403)
                 return
             ok = tunnel_start()
             self.send_json({'ok': ok})
 
-        elif p == '/api/tunnel/stop':  # 20308702  POST /api/tunnel/stop
-            if not gate_check(self.headers, 2, db_conn):
+        elif p == '/api/tunnel/stop':
+            if not gate_check(self.headers, required_level=2):
                 self.send_json({'error': 'gate_required', 'layer': 2,
                                 'message': 'Tunnel control requires TOTP verification'}, 403)
                 return
             ok = tunnel_stop()
             self.send_json({'ok': ok})
 
-        elif p == '/api/ports/ack':  # 20302721  POST /api/ports/ack
+        elif p == '/api/ports/ack':
             # Acknowledge port events (dismiss alerts)
             event_ids = body.get('ids', [])
             ack_all   = body.get('all', False)
@@ -2647,9 +2899,9 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 _port_cache['events'] = [dict(r) for r in rows]
             self.send_json({'ok': True})
 
-        elif p == '/api/update':  # 20310702  POST /api/update
+        elif p == '/api/update':
             # git pull + restart hub service
-            if not gate_check(self.headers, 3, db_conn):
+            if not gate_check(self.headers, required_level=3):
                 self.send_json({'error': 'gate_required', 'layer': 3,
                                 'message': 'Hub update requires TOTP verification'}, 403)
                 return
@@ -2661,9 +2913,9 @@ class Handler(http.server.BaseHTTPRequestHandler):
             lines.append(restart.get('output', '') or ('restarted' if restart.get('exitcode',1)==0 else restart.get('error','')))
             self.send_json({'ok': pull.get('exitcode',1)==0, 'output': '\n'.join(lines)})
 
-        elif p == '/api/setup/generate-claude-md':  # 20310703  POST /api/setup/generate-claude-md
+        elif p == '/api/setup/generate-claude-md':
             # Write a filled-in CLAUDE.md to the hub directory on the server
-            if not gate_check(self.headers, 3, db_conn):
+            if not gate_check(self.headers, required_level=3):
                 self.send_json({'error': 'gate_required', 'layer': 3,
                                 'message': 'Generating CLAUDE.md requires TOTP verification'}, 403)
                 return
@@ -2712,7 +2964,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
             else:
                 self.send_json({'ok': False, 'error': r2.get('error','Write failed')})
 
-        elif p == '/api/users':  # 20305707  POST /api/users
+        elif p == '/api/users':
             action = body.get('action','')
             if action == 'add':
                 username = body.get('username','').strip()
@@ -2760,7 +3012,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
             else:
                 self.send_json({'ok': False, 'error': 'Unknown action'}, 400)
 
-        elif p == '/api/docker/prune':  # 20302719  POST /api/docker/prune
+        elif p == '/api/docker/prune':
             body = {}
             try:
                 cl = int(self.headers.get('Content-Length', 0))
@@ -2781,7 +3033,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 self.send_json({'ok': True, 'output': out})
             except subprocess.CalledProcessError as e:
                 self.send_json({'ok': False, 'output': e.output})
-        elif p.startswith('/api/docker/action/'):  # 20302720  POST /api/docker/action/{cname}
+        elif p.startswith('/api/docker/action/'):
             cname = p.split('/')[-1]
             body = {}
             try:
@@ -2799,7 +3051,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
                     self.send_json({'ok': True, 'container': cname, 'action': action})
                 except subprocess.CalledProcessError as e:
                     self.send_json({'ok': False, 'error': e.output})
-        elif p == '/api/activity':  # 20306704  POST /api/activity
+        elif p == '/api/activity':
             # POST { action, source?, category?, detail?, level? }
             action = body.get('action', '').strip()
             if not action:
@@ -2814,7 +3066,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
             )
             self.send_json({'ok': True})
 
-        elif p == '/api/incidents':  # 20306703  POST /api/incidents
+        elif p == '/api/incidents':
             # POST { title, body?, severity? }
             title = body.get('title', '').strip()
             if not title:
@@ -2852,10 +3104,10 @@ if __name__ == '__main__':
     _scan_thread = threading.Thread(target=_port_scan_loop, daemon=True)
     _scan_thread.start()
     # Start Docker event watcher
-    _docker_thread = threading.Thread(target=_docker_event_loop, args=(db_conn, ssh_run, _ntfy_send), daemon=True)
+    _docker_thread = threading.Thread(target=_docker_event_loop, daemon=True)
     _docker_thread.start()
     # Log startup
-    log_activity(db_conn, 'Hub started', 'hub', 'startup', f'port={PORT}', 'info')
+    log_activity('Hub started', 'hub', 'startup', f'port={PORT}', 'info')
     print(f'\n  Server Hub API  —  http://localhost:{PORT}')
     print(f'  SSH: {SSH_HOST}  |  DB: {DB_PATH}\n')
     class ThreadedServer(socketserver.ThreadingMixIn, http.server.HTTPServer):
