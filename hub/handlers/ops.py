@@ -64,7 +64,7 @@ def get_server_info():
 # ── Route handlers ────────────────────────────────────────────────────────────
 
 # 20310701  POST /api/run — run a shell command (gate level 3)
-def post_run(handler, body):
+def post_run(handler, path, params, body):
     cmd = body.get('command', '').strip()
     if not cmd:
         handler.send_json({'error': 'No command provided'}, 400)
@@ -78,7 +78,7 @@ def post_run(handler, body):
 
 
 # 20310702  POST /api/update — git pull + restart hub (gate level 3)
-def post_update(handler, body):
+def post_update(handler, path, params, body):
     # git pull + restart hub service
     if not gate_check(handler.headers, 3, db_conn):
         handler.send_json({'error': 'gate_required', 'layer': 3,
@@ -94,7 +94,7 @@ def post_update(handler, body):
 
 
 # 20310703  POST /api/setup/generate-claude-md — regenerate CLAUDE.md
-def post_setup_generate_claude_md(handler, body):
+def post_setup_generate_claude_md(handler, path, params, body):
     # Write a filled-in CLAUDE.md to the hub directory on the server
     if not gate_check(handler.headers, 3, db_conn):
         handler.send_json({'error': 'gate_required', 'layer': 3,
@@ -147,7 +147,7 @@ def post_setup_generate_claude_md(handler, body):
 
 
 # 20310704  POST /api/service/install — install a service
-def post_service_install(handler, body):
+def post_service_install(handler, path, params, body):
     name = body.get('name', '').strip().lower()
     INSTALLABLE = {
         'n8n':       'cd ' + DOCKER_ROOT + '/n8n && docker compose up -d',

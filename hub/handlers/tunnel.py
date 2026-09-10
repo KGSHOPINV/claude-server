@@ -79,7 +79,7 @@ def tunnel_stop():
 # ── Route handlers ────────────────────────────────────────────────────────────
 
 # 20308701  POST /api/tunnel/start — start Cloudflare tunnel
-def post_tunnel_start(handler, body):
+def post_tunnel_start(handler, path, params, body):
     if not gate_check(handler.headers, 2, db_conn):
         handler.send_json({'error': 'gate_required', 'layer': 2,
                            'message': 'Tunnel control requires TOTP verification'}, 403)
@@ -89,7 +89,7 @@ def post_tunnel_start(handler, body):
 
 
 # 20308702  POST /api/tunnel/stop — stop Cloudflare tunnel
-def post_tunnel_stop(handler, body):
+def post_tunnel_stop(handler, path, params, body):
     if not gate_check(handler.headers, 2, db_conn):
         handler.send_json({'error': 'gate_required', 'layer': 2,
                            'message': 'Tunnel control requires TOTP verification'}, 403)

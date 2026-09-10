@@ -9,3 +9,7 @@ db/server.db
 # Copy CLAUDE.example.md → CLAUDE.md and fill in your values.
 # It is intentionally gitignored so credentials never reach GitHub.
 CLAUDE.md
+
+# Python bytecode
+__pycache__/
+*.pyc

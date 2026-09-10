@@ -90,7 +90,7 @@ def _journal_add(type_, body, user=''):
 # One function per route.
 
 # 20305701  GET /api/auth/check — check auth status
-def get_auth_check(handler):
+def get_auth_check(handler, path, params):
     sess = check_auth(handler)
     if sess:
         handler.send_json({'ok': True, 'user': sess['user']})
@@ -99,12 +99,12 @@ def get_auth_check(handler):
 
 
 # 20305702  GET /api/users — list users
-def get_users(handler):
+def get_users(handler, path, params):
     handler.send_json(_users_list())
 
 
 # 20305703  GET /api/totp/status — TOTP enabled/disabled
-def get_totp_status(handler):
+def get_totp_status(handler, path, params):
     secret = _config_get('totp_secret', '')
     with _gate_lock:
         now = time.time()
@@ -120,7 +120,7 @@ def get_totp_status(handler):
 
 
 # 20305704  GET /api/totp/setup — generate TOTP setup URI
-def get_totp_setup(handler):
+def get_totp_setup(handler, path, params):
     # Always generate a fresh temp secret — never saved to DB here.
     # The status endpoint tells the UI whether 2FA is already active.
     # This endpoint is only called when the user wants to begin setup.
@@ -134,7 +134,7 @@ def get_totp_setup(handler):
 
 
 # 20305705  POST /api/auth/login — login with password
-def post_auth_login(handler, body):
+def post_auth_login(handler, path, params, body):
     username = body.get('username', '').strip()
     password = body.get('password', '')
     user = _user_auth(username, password)
@@ -157,7 +157,7 @@ def post_auth_login(handler, body):
 
 
 # 20305706  POST /api/auth/logout — logout / clear session
-def post_auth_logout(handler, body):
+def post_auth_logout(handler, path, params, body):
     token = body.get('token', '')
     with _users_lock:
         _sessions.pop(token, None)
@@ -165,7 +165,7 @@ def post_auth_logout(handler, body):
 
 
 # 20305707  POST /api/users — create/update user
-def post_users(handler, body):
+def post_users(handler, path, params, body):
     action = body.get('action', '')
     if action == 'add':
         username = body.get('username', '').strip()
@@ -217,7 +217,7 @@ def post_users(handler, body):
 
 
 # 20305708  POST /api/totp/confirm — confirm TOTP enrollment
-def post_totp_confirm(handler, body):
+def post_totp_confirm(handler, path, params, body):
     # Activate 2FA: verify code against a temp secret, save only if valid.
     # This is called during setup — not for gate unlock.
     secret = str(body.get('secret', '')).strip()
@@ -235,7 +235,7 @@ def post_totp_confirm(handler, body):
 
 
 # 20305709  POST /api/totp/verify — verify TOTP code
-def post_totp_verify(handler, body):
+def post_totp_verify(handler, path, params, body):
     code     = str(body.get('code', '')).strip()
     level    = max(1, min(4, int(body.get('level', 3))))
     duration = int(body.get('duration_s', 1800))
@@ -256,7 +256,7 @@ def post_totp_verify(handler, body):
 
 
 # 20305710  POST /api/totp/disable — disable TOTP
-def post_totp_disable(handler, body):
+def post_totp_disable(handler, path, params, body):
     code = str(body.get('code', '')).strip()
     if not totp_verify(code, db_conn):
         handler.send_json({'ok': False, 'error': 'Invalid code'}, 401)

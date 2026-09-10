@@ -22,6 +22,7 @@ import subprocess
 import threading
 import time
 import urllib.error
+import urllib.parse
 import urllib.request
 from datetime import datetime
 
@@ -29,6 +30,7 @@ from datetime import datetime
 from kernel.db   import db_conn, db_ensure_tables, DB_PATH
 from kernel.ssh  import ssh_run, LOCAL_MODE, SSH_HOST, SSH_USER, SERVER_IP
 from kernel.log  import log_activity, activity_recent, _ntfy_send, _docker_event_loop
+from kernel import router
 from kernel.auth import (
     check_auth, gate_check, gate_create,
     _totp_hotp, totp_verify, totp_new_secret, totp_verify_secret, totp_uri,
@@ -1925,6 +1927,22 @@ def get_access_info():
 
 # ── HTTP handler ───────────────────────────────────────────────────────────────
 
+# 20200008  _route — bridge from the HTTP server into kernel.router.
+# HUB_ROUTER=legacy falls back to the original if/elif chain below.
+ROUTER_MODE = os.environ.get('HUB_ROUTER', 'dispatch').lower()
+
+
+def _route(handler, method, path, body=None):
+    """Try the kernel dispatch table. Returns False to fall through to legacy."""
+    if ROUTER_MODE == 'legacy':
+        return False
+    params = {}
+    if '?' in handler.path:
+        qs = handler.path.split('?', 1)[1]
+        params = {k: v[0] for k, v in urllib.parse.parse_qs(qs).items()}
+    return router.dispatch(handler, method, path, params, body, db_conn)
+
+
 class Handler(http.server.BaseHTTPRequestHandler):
     # 20200309  Handler.log_message — suppress default access logging
     def log_message(self, fmt, *args):
@@ -1955,6 +1973,8 @@ class Handler(http.server.BaseHTTPRequestHandler):
 
     def do_GET(self):
         p = self.path.split('?')[0]
+        if _route(self, 'GET', p):
+            return
         force = 'force' in self.path
 
         if p in ('/', '/mobile', '/desktop'):  # 20301701  GET /
@@ -2402,6 +2422,8 @@ class Handler(http.server.BaseHTTPRequestHandler):
     def do_POST(self):
         p = self.path
         body = self.get_body()
+        if _route(self, 'POST', self.path.split('?')[0], body):
+            return
 
         if p == '/api/run':  # 20310701  POST /api/run
             cmd = body.get('command', '').strip()
