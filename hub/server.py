@@ -25,24 +25,27 @@ import urllib.error
 import urllib.request
 from datetime import datetime
 
+# ── Kernel imports ────────────────────────────────────────────────────────────
+from kernel.db   import db_conn, db_ensure_tables, DB_PATH
+from kernel.ssh  import ssh_run, LOCAL_MODE, SSH_HOST, SSH_USER, SERVER_IP
+from kernel.log  import log_activity, activity_recent, _ntfy_send, _docker_event_loop
+from kernel.auth import (
+    check_auth, gate_check, gate_create,
+    _totp_hotp, totp_verify, totp_new_secret, totp_verify_secret, totp_uri,
+    _sessions, _users_lock, _gate_sessions, _gate_lock,
+)
+
 PORT      = int(os.environ.get('HUB_PORT', 8765))
 BASE_DIR  = os.path.dirname(os.path.abspath(__file__))
-DB_PATH   = os.environ.get('HUB_DB',     os.path.join(BASE_DIR, '..', 'db', 'server.db'))
 APP_PATH    = os.path.join(BASE_DIR, 'app.html')
 MOBILE_PATH = os.path.join(BASE_DIR, 'mobile.html')
 GUIDES_DIR= os.environ.get('HUB_GUIDES', os.path.join(BASE_DIR, 'guides'))
-
-# LOCAL_MODE=1 → run commands directly (no SSH); used when hub runs ON the server
-LOCAL_MODE = os.environ.get('HUB_LOCAL', '0') == '1'
 
 HTTPS_PORTS = {9443, 9090}
 
 _ssl_ctx = ssl.create_default_context()
 _ssl_ctx.check_hostname = False
 _ssl_ctx.verify_mode = ssl.CERT_NONE
-SSH_HOST   = os.environ.get('HUB_SSH_HOST', 'localhost')
-SSH_USER   = os.environ.get('HUB_SSH_USER', '')   # optional; overrides user parsed from SSH_HOST
-SERVER_IP  = os.environ.get('HUB_SERVER_IP', '')  # leave blank — hub reads actual IP from server
 DOCKER_ROOT = os.environ.get('HUB_DOCKER_ROOT', '/srv/docker')
 
 # ── Proxy cache ───────────────────────────────────────────────────────────────
@@ -149,34 +152,12 @@ def proxy_fetch(port, subpath, query=''):
 
 
 # ── SSH ────────────────────────────────────────────────────────────────────────
-
-# 20200303  ssh_run — run shell cmd via SSH or bash -c in LOCAL_MODE
-def ssh_run(cmd, timeout=15):
-    try:
-        args = ['bash', '-c', cmd] if LOCAL_MODE else ['ssh', SSH_HOST, cmd]
-        r = subprocess.run(
-            args,
-            capture_output=True, text=True, timeout=timeout
-        )
-        return {
-            'output': r.stdout.strip(),
-            'error': r.stderr.strip(),
-            'exitcode': r.returncode,
-            'online': r.returncode == 0 or r.stdout.strip() != ''
-        }
-    except subprocess.TimeoutExpired:
-        return {'output': '', 'error': 'Connection timed out', 'exitcode': -1, 'online': False}
-    except FileNotFoundError:
-        return {'output': '', 'error': 'ssh not found in PATH', 'exitcode': -1, 'online': False}
-    except Exception as e:
-        return {'output': '', 'error': str(e), 'exitcode': -1, 'online': False}
+# KERNEL: ssh_run moved to kernel/ssh.py
 
 # ── Status cache ───────────────────────────────────────────────────────────────
 
 _cache = {'status': None, 'ts': 0, 'containers': None, 'containers_ts': 0}
 _lock = threading.Lock()
-_sessions = {}  # token -> {user, created}
-_users_lock = threading.Lock()
 _server_info_cache = None   # cached once per process restart
 
 # 20201301  get_server_info — hostname/OS/IP/cores via SSH, cached process-lifetime
@@ -818,12 +799,7 @@ def _port_scan_loop():
         time.sleep(300)  # Scan every 5 minutes
 
 # ── SQLite helpers ─────────────────────────────────────────────────────────────
-
-# 20200301  db_conn — open SQLite connection, row_factory=Row
-def db_conn():
-    conn = sqlite3.connect(DB_PATH)
-    conn.row_factory = sqlite3.Row
-    return conn
+# KERNEL: db_conn moved to kernel/db.py
 
 def get_setup_status():
     """Check which parts of server-kit have been installed."""
@@ -908,200 +884,10 @@ def issues_get():
     except Exception:
         return []
 
-# 20200302  db_ensure_tables — create all tables + seed admin user
-def db_ensure_tables():
-    try:
-        conn = db_conn()
-        conn.execute("""CREATE TABLE IF NOT EXISTS users (
-            id INTEGER PRIMARY KEY,
-            username TEXT UNIQUE NOT NULL,
-            display TEXT,
-            password_hash TEXT NOT NULL,
-            role TEXT DEFAULT 'admin',
-            created TEXT
-        )""")
-        conn.execute("""CREATE TABLE IF NOT EXISTS hub_config (
-            key TEXT PRIMARY KEY,
-            value TEXT,
-            updated TEXT
-        )""")
-        conn.execute("""CREATE TABLE IF NOT EXISTS journal (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            ts TEXT NOT NULL,
-            type TEXT NOT NULL,
-            body TEXT NOT NULL,
-            user TEXT DEFAULT ''
-        )""")
-        conn.execute("""CREATE TABLE IF NOT EXISTS port_snapshots (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            ts TEXT NOT NULL,
-            data TEXT NOT NULL
-        )""")
-        conn.execute("""CREATE TABLE IF NOT EXISTS port_events (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            ts TEXT NOT NULL,
-            event TEXT NOT NULL,
-            port INTEGER NOT NULL,
-            process TEXT DEFAULT '',
-            container TEXT DEFAULT '',
-            acknowledged INTEGER DEFAULT 0
-        )""")
-        conn.execute("""CREATE TABLE IF NOT EXISTS activity_log (
-            id      INTEGER PRIMARY KEY AUTOINCREMENT,
-            ts      TEXT NOT NULL,
-            source  TEXT NOT NULL DEFAULT 'system',
-            category TEXT NOT NULL DEFAULT 'general',
-            action  TEXT NOT NULL,
-            detail  TEXT DEFAULT '',
-            level   TEXT NOT NULL DEFAULT 'info'
-        )""")
-        conn.execute("""CREATE TABLE IF NOT EXISTS notes (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            category TEXT DEFAULT '',
-            key TEXT UNIQUE NOT NULL,
-            value TEXT,
-            updated TEXT
-        )""")
-        conn.execute("""CREATE TABLE IF NOT EXISTS issues (
-            id TEXT PRIMARY KEY,
-            service TEXT,
-            title TEXT,
-            body TEXT,
-            status TEXT DEFAULT 'open',
-            created INTEGER,
-            updated INTEGER
-        )""")
-        conn.execute("""CREATE TABLE IF NOT EXISTS incidents (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            title TEXT NOT NULL,
-            body TEXT,
-            severity TEXT DEFAULT 'info',
-            created_at TEXT DEFAULT (datetime('now'))
-        )""")
-        # Seed default admin if no users exist
-        row = conn.execute("SELECT COUNT(*) as c FROM users").fetchone()
-        if row['c'] == 0:
-            h = hashlib.sha256(b'admin').hexdigest()
-            conn.execute("INSERT INTO users (username,display,password_hash,role,created) VALUES (?,?,?,?,?)",
-                ('admin','Administrator',h,'admin',datetime.now().isoformat()))
-        conn.commit()
-        conn.close()
-    except Exception as e:
-        print(f'  DB init error: {e}')
+# KERNEL: db_ensure_tables moved to kernel/db.py
 
 # ── Activity Logger ───────────────────────────────────────────────────────────
-
-# 20200307  log_activity — append to activity_log, never raises
-def log_activity(action, source='system', category='general', detail='', level='info'):
-    """Write one line to the activity log. Universal — always safe to call."""
-    try:
-        conn = db_conn()
-        conn.execute(
-            "INSERT INTO activity_log (ts,source,category,action,detail,level) VALUES (?,?,?,?,?,?)",
-            (datetime.now().isoformat(timespec='seconds'), source, category, action, detail, level)
-        )
-        conn.commit()
-        conn.close()
-    except Exception:
-        pass  # never crash the caller
-
-# 20200308  activity_recent — SELECT recent activity_log rows
-def activity_recent(limit=100, category=None):
-    try:
-        conn = db_conn()
-        if category:
-            rows = conn.execute(
-                "SELECT * FROM activity_log WHERE category=? ORDER BY id DESC LIMIT ?",
-                (category, limit)).fetchall()
-        else:
-            rows = conn.execute(
-                "SELECT * FROM activity_log ORDER BY id DESC LIMIT ?", (limit,)).fetchall()
-        conn.close()
-        return [dict(r) for r in rows]
-    except Exception:
-        return []
-
-# ── Docker Event Watcher ──────────────────────────────────────────────────────
-
-_docker_watcher_running = False
-
-# 20206301  _docker_event_loop — stream docker events; write activity_log; ntfy on die/start
-def _docker_event_loop():
-    """Stream docker events and write to activity log. Restarts on failure."""
-    global _docker_watcher_running
-    import shutil
-    if not shutil.which('docker'):
-        return  # Docker not installed — skip silently
-    while True:
-        try:
-            proc = subprocess.Popen(
-                ['docker', 'events', '--format', '{{json .}}'],
-                stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
-                text=True, bufsize=1
-            )
-            _docker_watcher_running = True
-            for line in proc.stdout:
-                line = line.strip()
-                if not line:
-                    continue
-                try:
-                    ev = json.loads(line)
-                    etype  = ev.get('Type', '')
-                    action = ev.get('Action', '')
-                    actor  = ev.get('Actor', {})
-                    name   = actor.get('Attributes', {}).get('name', actor.get('ID', '')[:12])
-                    image  = actor.get('Attributes', {}).get('image', '')
-
-                    if etype == 'container':
-                        if action in ('start', 'die', 'create', 'destroy', 'restart'):
-                            level = 'warn' if action in ('die', 'destroy') else 'info'
-                            log_activity(
-                                action   = f'Container {action}: {name}',
-                                source   = 'docker',
-                                category = 'container',
-                                detail   = image,
-                                level    = level
-                            )
-                            # ntfy for significant events
-                            if action == 'die':
-                                _ntfy_send(f'🔴 Container died: {name}', image or '', 'high', 'whale,rotating_light')
-                            elif action == 'start' and name not in ('watchtower',):
-                                _ntfy_send(f'🟢 Container started: {name}', image or '', 'min', 'whale')
-                    elif etype == 'image' and action == 'pull':
-                        img = actor.get('Attributes', {}).get('name', name)
-                        log_activity(f'Image pulled: {img}', 'docker', 'image', '', 'info')
-                    elif etype == 'network':
-                        pass  # too noisy — skip
-                except Exception:
-                    continue
-            proc.wait()
-        except Exception:
-            pass
-        _docker_watcher_running = False
-        time.sleep(10)  # wait before reconnecting
-
-# 20206302  _ntfy_send — POST push notification to ntfy
-def _ntfy_send(title, body, priority='default', tags='server'):
-    """Send ntfy push notification. Reads config from ~/.server-alerts.conf or env."""
-    try:
-        conf_path = os.path.expanduser('~/.server-alerts.conf')
-        url = os.environ.get('HUB_NTFY_URL', 'http://localhost:8085')
-        topic = os.environ.get('HUB_NTFY_TOPIC', 'server-alerts')
-        token = ''
-        if os.path.exists(conf_path):
-            for line in open(conf_path):
-                line = line.strip()
-                if line.startswith('NTFY_URL='):    url   = line.split('=',1)[1].strip()
-                if line.startswith('NTFY_TOPIC='):  topic = line.split('=',1)[1].strip()
-                if line.startswith('NTFY_TOKEN='):  token = line.split('=',1)[1].strip()
-        headers = {'Title': title, 'Priority': priority, 'Tags': tags}
-        if token: headers['Authorization'] = f'Bearer {token}'
-        req = urllib.request.Request(
-            f'{url}/{topic}', data=body.encode(),
-            headers=headers, method='POST')
-        urllib.request.urlopen(req, timeout=5, context=_ssl_ctx)
-    except Exception:
-        pass
+# KERNEL: log_activity, activity_recent, _ntfy_send, _docker_event_loop moved to kernel/log.py
 
 # ── Server Receipt ────────────────────────────────────────────────────────────
 
@@ -1200,7 +986,7 @@ def build_receipt():
                 sync_issues.append({'service': svc['name'], 'port': svc['port'], 'issue': 'not running'})
 
     # Recent activity
-    recent = activity_recent(20)
+    recent = activity_recent(db_conn, 20)
 
     return {
         'generated': now,
@@ -2029,99 +1815,13 @@ def get_integrations():
 
     return results
 
-# 20200304  check_auth — validate session token from header or query param
-def check_auth(handler):
-    token = handler.headers.get('X-Hub-Token','')
-    if not token:
-        # Also accept from query string
-        qs = handler.path.split('?',1)[1] if '?' in handler.path else ''
-        for part in qs.split('&'):
-            if part.startswith('token='):
-                token = part[6:]
-    with _users_lock:
-        return _sessions.get(token)
+# KERNEL: check_auth moved to kernel/auth.py
 
 # ── TOTP ──────────────────────────────────────────────────────────────────────
-
-# 20205303  _totp_hotp — raw HOTP: base32 secret + counter → 6-digit code
-def _totp_hotp(secret, counter):
-    try:
-        key = base64.b32decode(secret.upper().replace(' ', ''))
-        msg = struct.pack('>Q', counter)
-        h = hmac.new(key, msg, hashlib.sha1).digest()
-        offset = h[-1] & 0x0f
-        code = struct.unpack('>I', bytes(h[offset:offset+4]))[0] & 0x7fffffff
-        return str(code % 1_000_000).zfill(6)
-    except Exception:
-        return ''
-
-# 20205304  totp_verify — verify code ±1 time-step against saved totp_secret
-def totp_verify(code):
-    secret = config_get('totp_secret', '')
-    if not secret:
-        return False
-    t = int(time.time()) // 30
-    code = str(code).strip().zfill(6)
-    return any(_totp_hotp(secret, t + d) == code for d in (-1, 0, 1))
-
-# 20205305  totp_new_secret — generate 20-byte random base32 secret
-def totp_new_secret():
-    # Generate only — does NOT save to DB.
-    # Caller must call /api/totp/confirm with a valid code to activate.
-    return base64.b32encode(os.urandom(20)).decode()
-
-# 20205306  totp_verify_secret — verify code against any given secret
-def totp_verify_secret(secret, code):
-    """Verify a code against any given secret (not necessarily the saved one)."""
-    if not secret:
-        return False
-    t = int(time.time()) // 30
-    code = str(code).strip().zfill(6)
-    return any(_totp_hotp(secret, t + d) == code for d in (-1, 0, 1))
-
-# 20205307  totp_uri — build otpauth://totp/ URI for QR display
-def totp_uri(secret, account='admin'):
-    import urllib.parse as _up
-    params = _up.urlencode({'secret': secret, 'issuer': 'ServerHub',
-                            'algorithm': 'SHA1', 'digits': '6', 'period': '30'})
-    return f'otpauth://totp/ServerHub%3A{account}?{params}'
+# KERNEL: _totp_hotp, totp_verify, totp_new_secret, totp_verify_secret, totp_uri moved to kernel/auth.py
 
 # ── Gate sessions ─────────────────────────────────────────────────────────────
-
-_gate_sessions = {}
-_gate_lock     = threading.Lock()
-
-# 20200306  gate_create — mint gate token with level + expiry
-def gate_create(level, user, duration_s=1800):
-    token   = secrets.token_hex(24)
-    expires = time.time() + duration_s
-    with _gate_lock:
-        now = time.time()
-        stale = [k for k, v in _gate_sessions.items() if v['expires'] < now]
-        for k in stale:
-            del _gate_sessions[k]
-        _gate_sessions[token] = {'level': level, 'user': user, 'expires': expires}
-    return token, expires
-
-# 20200305  gate_check — return True if TOTP not configured or valid gate token
-def gate_check(headers, required_level=3):
-    """Return True if TOTP not configured OR valid gate token found at required_level+."""
-    if not config_get('totp_secret', ''):
-        return True
-    token = headers.get('X-Gate-Token', '')
-    if not token:
-        return False
-    with _gate_lock:
-        g = _gate_sessions.get(token)
-    if not g:
-        return False
-    if g['level'] < required_level:
-        return False
-    if time.time() > g['expires']:
-        with _gate_lock:
-            _gate_sessions.pop(token, None)
-        return False
-    return True
+# KERNEL: _gate_sessions, _gate_lock, gate_create, gate_check moved to kernel/auth.py
 
 # ── Tunnel management ─────────────────────────────────────────────────────────
 _tunnel_url    = ''
@@ -2534,7 +2234,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
             qs = parse_qs(urlparse(self.path).query)
             limit = int(qs.get('limit', ['100'])[0])
             cat   = qs.get('category', [None])[0]
-            self.send_json({'ok': True, 'events': activity_recent(limit, cat)})
+            self.send_json({'ok': True, 'events': activity_recent(db_conn, limit, cat)})
 
         elif p == '/api/receipt':  # 20302713  GET /api/receipt
             self.send_json(build_receipt())
@@ -2695,21 +2395,6 @@ class Handler(http.server.BaseHTTPRequestHandler):
             except Exception as e:
                 self.send_json({'ok': False, 'error': str(e)}, 500)
 
-        elif p == '/api/sitemap':
-            self.send_json({'ok': True, 'endpoints': [
-                'GET  /api/incidents', 'POST /api/incidents',
-                'GET  /api/issues', 'GET  /api/journal', 'POST /api/journal',
-                'GET  /api/activity', 'POST /api/activity',
-                'GET  /api/receipt', 'GET  /api/sync', 'GET  /api/context',
-                'GET  /api/federation', 'GET  /api/identity',
-                'GET  /api/status', 'GET  /api/info',
-                'POST /api/run', 'POST /api/service/install',
-                'POST /api/tunnel/start', 'POST /api/tunnel/stop',
-                'POST /api/update', 'POST /api/users',
-                'POST /api/totp/confirm', 'POST /api/totp/verify', 'POST /api/totp/disable',
-                'GET  /api/peers', 'POST /api/peer/register',
-            ]})
-
         else:
             self.send_response(404)
             self.end_headers()
@@ -2723,7 +2408,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
             if not cmd:
                 self.send_json({'error': 'No command provided'}, 400)
                 return
-            if not gate_check(self.headers, required_level=3):
+            if not gate_check(self.headers, 3, db_conn):
                 self.send_json({'error': 'gate_required', 'layer': 3,
                                 'message': 'Shell access requires TOTP verification'}, 403)
                 return
@@ -2735,7 +2420,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
             if blob is None:
                 self.send_json({'ok': False, 'error': 'No blob'}, 400)
                 return
-            if not gate_check(self.headers, required_level=2):
+            if not gate_check(self.headers, 2, db_conn):
                 self.send_json({'error': 'gate_required', 'layer': 2,
                                 'message': 'Vault writes require TOTP verification'}, 403)
                 return
@@ -2769,7 +2454,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
             self.send_json({'ok': True})
 
         elif p == '/api/config':  # 20304706  POST /api/config
-            if not gate_check(self.headers, required_level=2):
+            if not gate_check(self.headers, 2, db_conn):
                 self.send_json({'error': 'gate_required', 'layer': 2,
                                 'message': 'Config writes require TOTP verification'}, 403)
                 return
@@ -2807,7 +2492,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
             if peer_url not in peers:
                 peers.append(peer_url)
                 config_set('peers', json.dumps(peers))
-                log_activity(f'Peer registered: {peer_url}', 'system', 'federation', '', 'info')
+                log_activity(db_conn, f'Peer registered: {peer_url}', 'system', 'federation', '', 'info')
             # Echo back — register ourselves on the peer (one level deep, no infinite loop)
             echo = body.get('echo', True)
             if echo:
@@ -2853,7 +2538,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 full_msg = f'[Server context: {ctx}]\n\n{full_msg}'
             result = ai_chat(full_msg, image_b64, image_type)
             # Also log the chat interaction
-            log_activity(f'AI chat: {message[:80]}', 'user', 'aichat', result.get('provider',''), 'info')
+            log_activity(db_conn, f'AI chat: {message[:80]}', 'user', 'aichat', result.get('provider',''), 'info')
             self.send_json(result)
 
         elif p == '/api/ai/config':  # 20307703  POST /api/ai/config
@@ -2883,7 +2568,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
             code = str(body.get('code', '')).strip()
             level = max(1, min(4, int(body.get('level', 3))))
             duration = int(body.get('duration_s', 1800))
-            if not totp_verify(code):
+            if not totp_verify(code, db_conn):
                 self.send_json({'ok': False, 'error': 'Invalid or expired code'}, 401)
                 return
             sess = check_auth(self)
@@ -2900,7 +2585,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
 
         elif p == '/api/totp/disable':  # 20305710  POST /api/totp/disable
             code = str(body.get('code', '')).strip()
-            if not totp_verify(code):
+            if not totp_verify(code, db_conn):
                 self.send_json({'ok': False, 'error': 'Invalid code'}, 401)
                 return
             config_set('totp_secret', '')
@@ -2927,7 +2612,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
             self.send_json({'ok': result.get('exitcode',1)==0, 'output': result.get('output',''), 'error': result.get('error','')})
 
         elif p == '/api/tunnel/start':  # 20308701  POST /api/tunnel/start
-            if not gate_check(self.headers, required_level=2):
+            if not gate_check(self.headers, 2, db_conn):
                 self.send_json({'error': 'gate_required', 'layer': 2,
                                 'message': 'Tunnel control requires TOTP verification'}, 403)
                 return
@@ -2935,7 +2620,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
             self.send_json({'ok': ok})
 
         elif p == '/api/tunnel/stop':  # 20308702  POST /api/tunnel/stop
-            if not gate_check(self.headers, required_level=2):
+            if not gate_check(self.headers, 2, db_conn):
                 self.send_json({'error': 'gate_required', 'layer': 2,
                                 'message': 'Tunnel control requires TOTP verification'}, 403)
                 return
@@ -2964,7 +2649,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
 
         elif p == '/api/update':  # 20310702  POST /api/update
             # git pull + restart hub service
-            if not gate_check(self.headers, required_level=3):
+            if not gate_check(self.headers, 3, db_conn):
                 self.send_json({'error': 'gate_required', 'layer': 3,
                                 'message': 'Hub update requires TOTP verification'}, 403)
                 return
@@ -2978,7 +2663,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
 
         elif p == '/api/setup/generate-claude-md':  # 20310703  POST /api/setup/generate-claude-md
             # Write a filled-in CLAUDE.md to the hub directory on the server
-            if not gate_check(self.headers, required_level=3):
+            if not gate_check(self.headers, 3, db_conn):
                 self.send_json({'error': 'gate_required', 'layer': 3,
                                 'message': 'Generating CLAUDE.md requires TOTP verification'}, 403)
                 return
@@ -3167,10 +2852,10 @@ if __name__ == '__main__':
     _scan_thread = threading.Thread(target=_port_scan_loop, daemon=True)
     _scan_thread.start()
     # Start Docker event watcher
-    _docker_thread = threading.Thread(target=_docker_event_loop, daemon=True)
+    _docker_thread = threading.Thread(target=_docker_event_loop, args=(db_conn, ssh_run, _ntfy_send), daemon=True)
     _docker_thread.start()
     # Log startup
-    log_activity('Hub started', 'hub', 'startup', f'port={PORT}', 'info')
+    log_activity(db_conn, 'Hub started', 'hub', 'startup', f'port={PORT}', 'info')
     print(f'\n  Server Hub API  —  http://localhost:{PORT}')
     print(f'  SSH: {SSH_HOST}  |  DB: {DB_PATH}\n')
     class ThreadedServer(socketserver.ThreadingMixIn, http.server.HTTPServer):
