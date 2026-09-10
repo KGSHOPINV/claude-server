@@ -19,7 +19,7 @@ PORT = int(os.environ.get('HUB_PORT', 8765))
 
 # One function per route. Each takes (handler, path, params) for GET,
 # (handler, path, params, body) for POST.
-# Complex helpers still in server.py are lazy-imported via `import server as _srv`.
+# Complex helpers still in server.py are lazy-imported via `from kernel import collect as _srv`.
 # TODO: move those helpers to kernel/ or a dedicated service module in Phase 3+.
 
 
@@ -27,33 +27,33 @@ PORT = int(os.environ.get('HUB_PORT', 8765))
 
 def get_status(handler, path, params):
     """# 20302701  GET /api/status -- aggregated server info (60s cache)"""
-    import server as _srv  # noqa: PLC0415
+    from kernel import collect as _srv  # noqa: PLC0415
     force = 'force' in handler.path
     handler.send_json(_srv.get_status(force=force))
 
 
 def get_setup_status(handler, path, params):
     """# 20302702  GET /api/setup/status -- setup step completion status"""
-    import server as _srv  # noqa: PLC0415
+    from kernel import collect as _srv  # noqa: PLC0415
     handler.send_json(_srv.get_setup_status())
 
 
 def get_containers(handler, path, params):
     """# 20302703  GET /api/containers -- Docker container list (30s cache)"""
-    import server as _srv  # noqa: PLC0415
+    from kernel import collect as _srv  # noqa: PLC0415
     force = 'force' in handler.path
     handler.send_json(_srv.get_containers(force=force))
 
 
 def get_services(handler, path, params):
     """# 20302704  GET /api/services -- known services enriched with live Docker state"""
-    import server as _srv  # noqa: PLC0415
+    from kernel import collect as _srv  # noqa: PLC0415
     handler.send_json(_srv.build_services())
 
 
 def get_ports(handler, path, params):
     """# 20302705  GET /api/ports -- active port map + lane classification + events"""
-    import server as _srv  # noqa: PLC0415
+    from kernel import collect as _srv  # noqa: PLC0415
     force = 'force' in handler.path
     if force:
         try:
@@ -90,43 +90,43 @@ def get_ports(handler, path, params):
 
 def get_storage(handler, path, params):
     """# 20302706  GET /api/storage -- disk/storage info (df + lsblk + docker df)"""
-    import server as _srv  # noqa: PLC0415
+    from kernel import collect as _srv  # noqa: PLC0415
     handler.send_json(_srv.api_storage_info())
 
 
 def get_docker_images(handler, path, params):
     """# 20302707  GET /api/docker/images -- Docker image list"""
-    import server as _srv  # noqa: PLC0415
+    from kernel import collect as _srv  # noqa: PLC0415
     handler.send_json(_srv.api_docker_images())
 
 
 def get_docker_volumes(handler, path, params):
     """# 20302708  GET /api/docker/volumes -- Docker volumes with sizes"""
-    import server as _srv  # noqa: PLC0415
+    from kernel import collect as _srv  # noqa: PLC0415
     handler.send_json(_srv.api_docker_volumes())
 
 
 def get_docker_stats(handler, path, params):
     """# 20302709  GET /api/docker/stats -- per-container CPU/RAM snapshot"""
-    import server as _srv  # noqa: PLC0415
+    from kernel import collect as _srv  # noqa: PLC0415
     handler.send_json(_srv.api_docker_stats())
 
 
 def get_docker_diagnostics(handler, path, params):
     """# 20302710  GET /api/docker/diagnostics -- interpreted diagnostic findings"""
-    import server as _srv  # noqa: PLC0415
+    from kernel import collect as _srv  # noqa: PLC0415
     handler.send_json(_srv.api_docker_diagnostics())
 
 
 def get_integrations(handler, path, params):
     """# 20302711  GET /api/integrations -- live health: Redis, SurrealDB, n8n"""
-    import server as _srv  # noqa: PLC0415
+    from kernel import collect as _srv  # noqa: PLC0415
     handler.send_json(_srv.get_integrations())
 
 
 def get_manifest(handler, path, params):
     """# 20302712  GET /api/manifest -- service manifest BOM (downloadable JSON)"""
-    import server as _srv  # noqa: PLC0415
+    from kernel import collect as _srv  # noqa: PLC0415
     data = _srv.get_manifest()
     body = json.dumps(data, default=str, indent=2).encode()
     handler.send_response(200)
@@ -142,13 +142,13 @@ def get_manifest(handler, path, params):
 
 def get_receipt(handler, path, params):
     """# 20302713  GET /api/receipt -- full server snapshot / hardware overview"""
-    import server as _srv  # noqa: PLC0415
+    from kernel import collect as _srv  # noqa: PLC0415
     handler.send_json(_srv.build_receipt())
 
 
 def get_sync(handler, path, params):
     """# 20302714  GET /api/sync -- quick sync check: expected vs running containers"""
-    import server as _srv  # noqa: PLC0415
+    from kernel import collect as _srv  # noqa: PLC0415
     receipt = _srv.build_receipt()
     handler.send_json({
         'ok': True,
@@ -160,7 +160,7 @@ def get_sync(handler, path, params):
 
 def get_context(handler, path, params):
     """# 20302715  GET /api/context -- hub context payload (HANDOFF_SERVERHUB spec)"""
-    import server as _srv  # noqa: PLC0415
+    from kernel import collect as _srv  # noqa: PLC0415
     handler.send_json(_srv.build_context())
 
 
@@ -240,7 +240,7 @@ def get_sitemap(handler, path, params):
 
 def get_cutsheet(handler, path, params):
     """# 20302717  GET /cutsheet -- self-contained port cut-sheet HTML (no auth)"""
-    import server as _srv  # noqa: PLC0415
+    from kernel import collect as _srv  # noqa: PLC0415
     with _srv._port_cache_lock:
         ports = list(_srv._port_cache['ports'])
         ts    = _srv._port_cache['ts']
@@ -269,7 +269,7 @@ def get_cutsheet(handler, path, params):
 
 def post_refresh(handler, path, params, body):
     """# 20302718  POST /api/refresh -- force status + container cache refresh"""
-    import server as _srv  # noqa: PLC0415
+    from kernel import collect as _srv  # noqa: PLC0415
     _srv.get_status(force=True)
     _srv.get_containers(force=True)
     handler.send_json({'ok': True})
@@ -308,7 +308,7 @@ def post_docker_action(handler, path, params, body):
 
 def post_ports_ack(handler, path, params, body):
     """# 20302721  POST /api/ports/ack -- acknowledge port alert events"""
-    import server as _srv  # noqa: PLC0415
+    from kernel import collect as _srv  # noqa: PLC0415
     event_ids = body.get('ids', [])
     ack_all   = body.get('all', False)
     conn = db_conn()

@@ -51,7 +51,7 @@ def _ai_system_prompt():
     """Build a concise server-aware system prompt from live state."""
     # Reach into server's live cache for current stats; degrade gracefully if unavailable.
     try:
-        import server as _srv
+        from kernel import collect as _srv
         status     = _srv._cache.get('status') or {}
         containers = _srv._cache.get('containers') or []
     except Exception:

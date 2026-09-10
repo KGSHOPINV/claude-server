@@ -112,7 +112,7 @@ def get_identity(handler, path, params):
     # Identity beacon — used by peer mesh registration and discovery
     # get_server_info lives in server.py; lazy import avoids circular load at module time.
     # TODO: move get_server_info to kernel/ssh.py in a later phase.
-    import server as _srv  # noqa: PLC0415
+    from kernel import collect as _srv  # noqa: PLC0415
     si      = _srv.get_server_info()
     cfg     = _config_get_all()
     ts_ip   = si.get('tailscale_ip', '')
@@ -135,5 +135,5 @@ def get_access(handler, path, params):
     """# 20301707  GET /api/access"""
     # get_access_info lives in server.py; lazy import avoids circular load at module time.
     # TODO: move get_access_info to kernel/ in a later phase.
-    import server as _srv  # noqa: PLC0415
+    from kernel import collect as _srv  # noqa: PLC0415
     handler.send_json(_srv.get_access_info())
