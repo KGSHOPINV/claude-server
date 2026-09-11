@@ -10,7 +10,13 @@ Two servers, one codebase. A Python stdlib HTTP server (`hub/server.py`) runs on
 It handles status, federation, auth, Docker info, logging, AI chat, and incidents.
 The frontend is a single HTML file (`hub/app.html`) with an embedded workspace/pane UI.
 
-**This is a monolith.** See `docs/refactor-plan.md` for the migration plan.
+**No longer a monolith.** `hub/server.py` is a 122-line bootstrap. Routes live in
+`hub/kernel/router.py` (dispatch table), request handling in `hub/handlers/` (one
+file per domain), shared machinery in `hub/kernel/`. Dependencies flow one way:
+server -> router -> handlers -> kernel. No handler imports server.py.
+
+The frontend is still a single 6,518-line file. That is Phase 3.
+See `docs/refactor-plan.md`.
 
 ---
 
@@ -31,7 +37,13 @@ Connection details for this work PC session are in `CLAUDE.md` (also gitignored)
 ```
 claude-server/
   hub/
-    server.py          — 3,119 lines. Python stdlib HTTPServer. THE backend.
+    server.py          — 122 lines. Bootstrap only: HTTP shell, dispatch, threads.
+    kernel/
+      router.py        — route table (66 routes) + dispatch
+      collect.py       — system-state collectors (Docker, ports, storage, proxy)
+      db.py auth.py ssh.py log.py
+    handlers/          — one file per domain. Imports kernel/ only.
+      identity status federation config users events ai tunnel proxy ops
     app.html           — 6,518 lines. Single-file SPA frontend.
     mobile.html        — Mobile shell (lower priority)
     db/server.db       — SQLite. gitignored. Tables: hub_config, activity_log, incidents
@@ -79,7 +91,7 @@ Gate levels: 0=public, 1=user, 2=admin, 3=TOTP.
 
 ---
 
-## Known kernel primitives (scattered in server.py, Phase 1 extracts them)
+## Kernel primitives (extracted — Phase 1 complete)
 
 | Function | Line (approx) | Target |
 |----------|--------------|--------|
@@ -89,8 +101,10 @@ Gate levels: 0=public, 1=user, 2=admin, 3=TOTP.
 | `ssh_run()` | ~200 | kernel/ssh.py |
 | `log_activity()` | ~250 | kernel/log.py |
 
-Route dispatch is a flat if/elif chain in `do_GET` (~35 branches) and `do_POST` (~25 branches).
-Target is a dispatch table in `kernel/router.py`.
+Route dispatch is a table in `kernel/router.py`. The if/elif chain is gone.
+Gate enforcement is evaluated at dispatch but NOT applied: the table gates 52 of 66
+routes while app.html sends a token on 16 calls. `HUB_ENFORCE_GATES=1` arms it;
+`router.shadow_report()` shows what would break first.
 
 ---
 
@@ -113,8 +127,6 @@ Full service list with compose paths: `knowledge/registry.json` under `services[
 
 ## Things NOT YET BUILT (don't assume these exist)
 
-- `kernel/` directory (Phase 1)
-- `handlers/` directory (Phase 2)
 - `hub/ui/` directory (Phase 3)
 - `/api/hub-context` endpoint
 - FV MCP server

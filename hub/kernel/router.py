@@ -20,7 +20,8 @@ Gate levels: 0=public 1=user 2=admin 3=totp
 ROUTES = [
     # ── Identity ─────────────────────────────────────────────────────────────
     {"code": "20301701", "method": "GET",  "path": "/",                           "prefix": False, "gate": 0, "handler": "serve_app",            "module": "identity"},
-    {"code": "20301702", "method": "GET",  "path": "/mobile",                     "prefix": False, "gate": 0, "handler": "serve_mobile",          "module": "identity"},
+    {"code": "20301702", "method": "GET",  "path": "/mobile",                     "prefix": False, "gate": 0, "handler": "serve_app",             "module": "identity"},
+    {"code": "20301708", "method": "GET",  "path": "/desktop",                    "prefix": False, "gate": 0, "handler": "serve_app",             "module": "identity"},
     {"code": "20301703", "method": "GET",  "path": "/manifest.json",              "prefix": False, "gate": 0, "handler": "serve_manifest",         "module": "identity"},
     {"code": "20301704", "method": "GET",  "path": "/sw.js",                      "prefix": False, "gate": 0, "handler": "serve_sw",               "module": "identity"},
     {"code": "20301705", "method": "GET",  "path": "/api/my-ip",                  "prefix": False, "gate": 0, "handler": "get_my_ip",              "module": "identity"},
@@ -100,7 +101,7 @@ ROUTES = [
     # ── Ops ───────────────────────────────────────────────────────────────────
     {"code": "20310701", "method": "POST", "path": "/api/run",                    "prefix": False, "gate": 3, "handler": "post_run",               "module": "ops"},
     {"code": "20310702", "method": "POST", "path": "/api/update",                 "prefix": False, "gate": 3, "handler": "post_update",            "module": "ops"},
-    {"code": "20310703", "method": "POST", "path": "/api/setup/generate-claude-md", "prefix": False, "gate": 3, "handler": "post_generate_claude_md", "module": "ops"},
+    {"code": "20310703", "method": "POST", "path": "/api/setup/generate-claude-md", "prefix": False, "gate": 3, "handler": "post_setup_generate_claude_md", "module": "ops"},
     {"code": "20310704", "method": "POST", "path": "/api/service/install",        "prefix": False, "gate": 2, "handler": "post_service_install",   "module": "ops"},
 ]
 
@@ -130,3 +131,122 @@ def routes_by_module() -> dict:
     for r in ROUTES:
         result.setdefault(r["module"], []).append(r)
     return result
+
+
+# ── Dispatch ──────────────────────────────────────────────────────────────────
+# 20200007  kernel.router.dispatch — resolve a request to a handler and call it.
+#
+# Handler contract:
+#   GET   fn(handler, path, params)
+#   POST  fn(handler, path, params, body)
+# Handlers write the response themselves via handler.send_json / handler.wfile.
+
+import importlib
+import os
+import threading
+
+# Gate enforcement is OFF by default. The route table declares the target
+# posture (52 of 65 routes gated) but the current UI only sends a token on a
+# handful of calls, so enforcing here would lock out the app. Shadow mode
+# records what WOULD have been denied; flip HUB_ENFORCE_GATES=1 once the UI
+# sends X-Hub-Token / X-Gate-Token on every gated call.
+ENFORCE_GATES = os.environ.get('HUB_ENFORCE_GATES', '0').lower() not in ('0', 'false', '')
+
+_SHADOW_MAX = 500
+_shadow_denials = []
+_shadow_lock = threading.Lock()
+
+_handler_cache = {}
+_cache_lock = threading.Lock()
+
+_EXACT = {}
+_PREFIX = []
+
+
+def _build_index():
+    """Split ROUTES into an exact-match dict and a longest-first prefix list."""
+    _EXACT.clear()
+    del _PREFIX[:]
+    for r in ROUTES:
+        if r.get('prefix'):
+            _PREFIX.append(r)
+        else:
+            _EXACT[(r['method'], r['path'])] = r
+    _PREFIX.sort(key=lambda r: len(r['path']), reverse=True)
+
+
+_build_index()
+
+
+def resolve(method, path):
+    """Return the route entry for method+path, or None."""
+    r = _EXACT.get((method, path))
+    if r is not None:
+        return r
+    for r in _PREFIX:
+        if path.startswith(r['path']):
+            return r
+    return None
+
+
+def _load(module):
+    """Import handlers.<module> once and cache it."""
+    with _cache_lock:
+        mod = _handler_cache.get(module)
+        if mod is None:
+            mod = importlib.import_module('handlers.' + module)
+            _handler_cache[module] = mod
+        return mod
+
+
+def _gate_allows(handler, route, db_conn_fn):
+    """Evaluate the route's declared gate. Returns (allowed, reason)."""
+    level = route.get('gate', 0)
+    if level <= 0:
+        return True, ''
+    from kernel.auth import check_auth, gate_check
+    if level >= 1 and check_auth(handler) is None:
+        return False, 'no_session'
+    if level >= 2 and not gate_check(handler.headers, level, db_conn_fn):
+        return False, 'gate_required'
+    return True, ''
+
+
+def shadow_report():
+    """What gate enforcement would have blocked. Diagnostic for the flip."""
+    with _shadow_lock:
+        return list(_shadow_denials)
+
+
+def dispatch(handler, method, path, params=None, body=None, db_conn_fn=None):
+    """Route one request. Returns True if handled, False to fall through."""
+    route = resolve(method, path)
+    if route is None:
+        return False
+    try:
+        fn = getattr(_load(route['module']), route['handler'], None)
+    except Exception as e:
+        handler.send_json({'ok': False, 'error': 'handler_import_failed',
+                           'module': route['module'], 'detail': str(e)}, 500)
+        return True
+    if fn is None:
+        return False
+
+    allowed, reason = _gate_allows(handler, route, db_conn_fn)
+    if not allowed:
+        if ENFORCE_GATES:
+            handler.send_json({'error': reason, 'layer': route.get('gate', 0),
+                               'code': route['code']}, 403)
+            return True
+        with _shadow_lock:
+            if len(_shadow_denials) < _SHADOW_MAX:
+                _shadow_denials.append({'code': route['code'], 'method': method,
+                                        'path': path, 'reason': reason})
+
+    if params is None:
+        params = {}
+    if method == 'POST':
+        fn(handler, path, params, body or {})
+    else:
+        fn(handler, path, params)
+    return True
