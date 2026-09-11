@@ -57,7 +57,7 @@ ui/
 
 ## Migration phases
 
-### Phase 0 — Freeze & Map (THIS SESSION)
+### Phase 0 — Freeze & Map — COMPLETE
 **No code changes.** Create the knowledge layer.
 
 Deliverables:
@@ -65,13 +65,13 @@ Deliverables:
 - [x] `docs/refactor-plan.md` — this file
 - [x] `knowledge/registry.json` — machine-readable manifest
 - [x] `knowledge/decisions.sql` — architecture decisions
-- [ ] `knowledge/servers.json` — device UUIDs (needs dmidecode on both servers)
+- [x] `knowledge/servers.json` — device UUIDs (from /etc/machine-id)
 
 **Rule:** Phase 1 does not start until registry.json is correct and both server UUIDs are populated.
 
 ---
 
-### Phase 1 — Kernel Extraction
+### Phase 1 — Kernel Extraction — COMPLETE (merged, PR #9)
 **Identical behavior. Zero new features.**
 
 Extract the 5 kernel primitives from server.py into separate modules.
@@ -91,7 +91,7 @@ Ship this as: branch `refactor/phase-1-kernel`, PR to master, verify all endpoin
 
 ---
 
-### Phase 2 — Handler Split
+### Phase 2 — Handler Split — COMPLETE (branch refactor/phase-2)
 **Identical behavior. server.py becomes a bootstrap.**
 
 Split the 60-branch elif chain into domain handler files.
@@ -110,7 +110,7 @@ Migrate one domain at a time, ship each separately:
 
 ---
 
-### Phase 3 — UI Modularization
+### Phase 3 — UI Modularization — NEXT
 **app.html stays as the entry point. Script block moves to modules.**
 
 - `S = {}` global → `hub/ui/state.js` with get/set/subscribe
@@ -156,4 +156,20 @@ The kernel reads and writes the registry. FV is the authority that keeps it curr
 
 ---
 
-*Last updated: 2026-09-09*
+## Phase 2 as actually built
+
+The plan assumed handlers would be self-contained once split. They were not:
+`status.py` imported server.py back 19 times, `identity.py` twice, `ai.py` once —
+22 lazy `import server as _srv` calls into 22 module-level helpers, making
+server.py a dependency of its own handlers.
+
+Fixed by adding `kernel/collect.py` (not in the original plan): the 1,888-line
+collector region moved out of server.py. Handlers now import `kernel.collect`.
+server.py went 2,890 -> 122 lines.
+
+Verified against production on fks-services: 41 GET routes status-identical,
+14 endpoints byte-identical against a copy of the live DB.
+
+---
+
+*Last updated: 2026-09-10*
