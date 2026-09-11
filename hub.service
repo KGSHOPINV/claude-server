@@ -5,15 +5,14 @@ After=network.target docker.service
 [Service]
 Type=simple
 User=admin1
-WorkingDirectory=/home/admin1/hub
-ExecStart=/usr/bin/python3 /home/admin1/hub/server.py
+WorkingDirectory=/home/admin1/hub/hub
+ExecStart=/usr/bin/python3 /home/admin1/hub/hub/server.py
 Restart=on-failure
 RestartSec=5
 Environment=HUB_LOCAL=1
-Environment=HUB_DB=/home/admin1/hub/db/server.db
-Environment=HUB_GUIDES=/home/admin1/hub/guides
-Environment=HUB_SERVER_IP=192.168.1.229
 Environment=HUB_PORT=8765
+Environment=HUB_SSH_HOST=localhost
+Environment=HUB_DB=/home/admin1/hub/db/server.db
 
 [Install]
 WantedBy=multi-user.target
