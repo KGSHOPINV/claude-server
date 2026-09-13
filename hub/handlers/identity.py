@@ -15,6 +15,15 @@ PORT        = int(os.environ.get('HUB_PORT', 8765))
 _BASE_DIR   = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))  # hub/
 APP_PATH    = os.path.join(_BASE_DIR, 'app.html')
 MOBILE_PATH = os.path.join(_BASE_DIR, 'mobile.html')
+UI_DIR      = os.path.join(_BASE_DIR, 'ui')
+
+# Only these extensions are ever served from ui/. No wildcard static hosting.
+_UI_TYPES = {
+    '.js':   'application/javascript; charset=utf-8',
+    '.mjs':  'application/javascript; charset=utf-8',
+    '.css':  'text/css; charset=utf-8',
+    '.json': 'application/json; charset=utf-8',
+}
 
 
 # ── Local helpers ─────────────────────────────────────────────────────────────
@@ -94,6 +103,47 @@ def serve_sw(handler, path, params):
     handler.send_header('Content-Length', str(len(sw)))
     handler.end_headers()
     handler.wfile.write(sw)
+
+
+def serve_ui_asset(handler, path, params):
+    """# 20301709  GET /ui/* — serve UI modules from hub/ui/
+
+    Phase 3 splits app.html into modules. Those files have to be reachable, and
+    the hub previously served exactly three: app.html, manifest.json, sw.js.
+
+    This is deliberately NOT general static hosting: the resolved path must stay
+    inside ui/, and the extension must be in the allowlist. Anything else 404s.
+    """
+    rel = path[len('/ui/'):].split('?')[0]
+    root = os.path.abspath(UI_DIR)
+    full = os.path.abspath(os.path.join(root, rel))
+
+    # Path traversal guard: the resolved path must live under ui/
+    if full != root and not full.startswith(root + os.sep):
+        handler.send_response(404)
+        handler.end_headers()
+        return
+
+    ctype = _UI_TYPES.get(os.path.splitext(full)[1].lower())
+    if ctype is None or not os.path.isfile(full):
+        handler.send_response(404)
+        handler.end_headers()
+        return
+
+    try:
+        with open(full, 'rb') as f:
+            content = f.read()
+    except OSError:
+        handler.send_response(404)
+        handler.end_headers()
+        return
+
+    handler.send_response(200)
+    handler.send_header('Content-Type', ctype)
+    handler.send_header('Content-Length', str(len(content)))
+    handler.send_header('Cache-Control', 'no-cache')
+    handler.end_headers()
+    handler.wfile.write(content)
 
 
 def get_my_ip(handler, path, params):
