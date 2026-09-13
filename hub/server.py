@@ -45,6 +45,11 @@ from kernel.collect import PORT, _port_scan_loop
 # HUB_ROUTER=legacy falls back to the original if/elif chain below.
 ROUTER_MODE = os.environ.get('HUB_ROUTER', 'dispatch').lower()
 
+# HUB_LOG_REQUESTS=1 logs every request with its source address and any
+# Cloudflare Access identity headers. Off by default -- the hub has never logged
+# requests, which is why 'is Cloudflare even reaching the origin' was unanswerable.
+LOG_REQUESTS = os.environ.get('HUB_LOG_REQUESTS', '0').lower() not in ('0', 'false', '')
+
 
 def _route(handler, method, path, body=None):
     """Try the kernel dispatch table. Returns False to fall through to legacy."""
@@ -58,9 +63,26 @@ def _route(handler, method, path, body=None):
 
 
 class Handler(http.server.BaseHTTPRequestHandler):
-    # 20200309  Handler.log_message — suppress default access logging
+    # 20200309  Handler.log_message — access logging, off unless HUB_LOG_REQUESTS=1
     def log_message(self, fmt, *args):
-        pass
+        if not LOG_REQUESTS:
+            return
+        try:
+            src = self.client_address[0]
+        except Exception:
+            src = '?'
+        email = jwt = '-'
+        try:
+            if self.headers:
+                email = self.headers.get('Cf-Access-Authenticated-User-Email', '-') or '-'
+                jwt = 'yes' if self.headers.get('Cf-Access-Jwt-Assertion') else '-'
+        except Exception:
+            pass
+        try:
+            msg = fmt % args
+        except Exception:
+            msg = str(fmt)
+        print('REQ src=%s cf_email=%s cf_jwt=%s :: %s' % (src, email, jwt, msg), flush=True)
 
     # 20200310  Handler.send_json — serialize + write JSON response with CORS
     def send_json(self, data, status=200):

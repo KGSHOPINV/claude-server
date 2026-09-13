@@ -19,6 +19,22 @@ _users_lock = threading.Lock()
 _gate_sessions = {}     # token → {level, user, expires}
 _gate_lock = threading.Lock()
 
+# ── Cloudflare Access (FlareHub door) ──────────────────────────────────────────
+# Two doors, one identity:
+#   LAN / Tailscale  -> hub username + password (always available, never disabled)
+#   Cloudflare tunnel -> Access already verified the user with Google
+#
+# The email header is trusted ONLY on requests arriving from the tunnel's own
+# address. Anything reaching the hub over Tailscale or LAN can forge that header,
+# so path is what makes it safe, not the header itself.
+#
+# Unset HUB_CF_TRUST_IP (the default) disables all of this -- zero behavior change.
+CF_TRUST_IP = os.environ.get('HUB_CF_TRUST_IP', '').strip()
+CF_HEADER   = 'Cf-Access-Authenticated-User-Email'
+CF_EMAILS   = [e.strip().lower() for e in os.environ.get('HUB_CF_EMAILS', '').split(',') if e.strip()]
+CF_ROLE     = os.environ.get('HUB_CF_ROLE', 'admin')
+
+
 # ── Internal helpers ───────────────────────────────────────────────────────────
 
 def _config_get(key, default, db_conn_fn):
@@ -33,6 +49,30 @@ def _config_get(key, default, db_conn_fn):
 
 # ── Auth ───────────────────────────────────────────────────────────────────────
 
+# 20200312  access_identity — Cloudflare Access email, trusted only via the tunnel
+def access_identity(handler):
+    """Return the Access-verified email, or None.
+
+    Returns None unless HUB_CF_TRUST_IP is set AND the request arrived from that
+    address. The trust is in the network path: cloudflared only forwards requests
+    Access has already approved.
+    """
+    if not CF_TRUST_IP:
+        return None
+    try:
+        src = handler.client_address[0]
+    except Exception:
+        return None
+    if src != CF_TRUST_IP:
+        return None
+    email = (handler.headers.get(CF_HEADER, '') or '').strip().lower()
+    if not email:
+        return None
+    if CF_EMAILS and email not in CF_EMAILS:
+        return None
+    return email
+
+
 # 20200304  check_auth — validate session token from header or query param
 def check_auth(handler):
     token = handler.headers.get('X-Hub-Token','')
@@ -43,7 +83,16 @@ def check_auth(handler):
             if part.startswith('token='):
                 token = part[6:]
     with _users_lock:
-        return _sessions.get(token)
+        sess = _sessions.get(token)
+    if sess:
+        return sess
+    # Second door: Cloudflare Access already vetted this user with Google, so do
+    # not ask for a password again. Grants a user-level session only -- gate 2/3
+    # operations (vault, shell, TOTP) still demand the stronger proof.
+    email = access_identity(handler)
+    if email:
+        return {'user': email, 'role': CF_ROLE, 'via': 'cf-access'}
+    return None
 
 # ── TOTP ──────────────────────────────────────────────────────────────────────
 
