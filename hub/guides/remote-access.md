@@ -74,6 +74,97 @@ Browser → Cloudflare Edge → Access auth check → Tunnel → your service
 
 ---
 
+## Two Doors, Two Logins
+
+Transport is only half of remote access. The other half is *which credential each
+path asks for* — and they should not be the same. The rule: **the login should
+match the trust the path already established.**
+
+| Path | What you already proved | Login it should ask for |
+|------|------------------------|-------------------------|
+| LAN / Tailscale | You are on an enrolled device inside a private network | hub username + password |
+| Cloudflare tunnel | Nothing — it is the open internet | Cloudflare Access → Google |
+
+Without this, the Cloudflare path asks **twice**: Access verifies you with Google,
+then the hub demands a password anyway. That is checking ID twice in one doorway.
+
+**The fail-safe rule:** the local login must always work, must never be disabled,
+and must never depend on anything external. When Cloudflare is down, Google is
+having a bad day, or an Access session expires at 2am, you get on Tailscale (or
+walk to the machine) and you are in. This is why you do not collapse to
+Google-only even though it sounds simpler. The local door is the break-glass.
+
+**Enabling the Cloudflare door** — set these on the hub service unit:
+
+```
+Environment=HUB_CF_TRUST_IP=172.19.0.3     # the cloudflared container's address
+Environment=HUB_CF_EMAILS=you@gmail.com    # optional allowlist
+Environment=HUB_CF_ROLE=admin              # role mapped to Access identities
+Environment=HUB_LOG_REQUESTS=1             # log source + Access headers
+```
+
+Leave `HUB_CF_TRUST_IP` unset and the whole feature is off — behavior is unchanged.
+
+**Security: the trust is the path, not the header.** The hub accepts
+`Cf-Access-Authenticated-User-Email` *only* on requests arriving from the tunnel's
+own address, because `cloudflared` only forwards requests Access already approved.
+Anything reaching the hub over Tailscale or LAN can forge that header trivially, so
+a request that did not come through the tunnel is never trusted. Find the address
+with `docker inspect <tunnel> --format '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}'`.
+Note it can change if the container is recreated — if the Access door silently
+starts asking for a password again, re-check it.
+
+**Access gets you in the building, not into the safe.** The Access door grants a
+user-level session. Gate 2 and gate 3 routes — vault, shell, TOTP — still demand
+the stronger proof no matter which door you came through.
+
+**Side benefit:** the Cloudflare door is stateless. It re-derives identity from the
+header on every request, so a hub restart never logs you out of it. The local
+login uses an in-memory session dict and *is* cleared by every restart.
+
+---
+
+## Browsers Get SSO, Apps Get Tokens
+
+**Do not put Cloudflare Access in front of ntfy.** Access authenticates with a
+browser redirect to Google. The ntfy mobile app has no browser and holds a
+long-lived subscription — put Access in front of it and push notifications stop
+dead, and it will look like ntfy broke.
+
+Split auth by **client type**, not by service:
+
+| Service | Client | Auth | Why |
+|---------|--------|------|-----|
+| `hub.<domain>` | browser | Cloudflare Access → Google | browsers can do SSO redirects |
+| `ntfy.<domain>` | mobile app | ntfy's own token ACL | apps carry tokens, not sessions |
+
+Same tunnel for both — Cloudflare still does the transport job (no open ports,
+TLS, stable hostname). What differs is who checks identity.
+
+**ntfy setup (public endpoint, private topics):**
+
+```bash
+# default-deny so anonymous users cannot read or publish
+ntfy access --everyone <topic> deny
+ntfy user add --role=user hub
+ntfy access hub <topic> rw
+ntfy token add hub          # use this token from the server
+```
+
+Verify it worked — an anonymous poll must be refused:
+
+```bash
+curl -s -o /dev/null -w '%{http_code}
+' "https://ntfy.<domain>/<topic>/json?poll=1"
+# expect 403
+```
+
+The hub reads its ntfy credentials from `~/.server-alerts.conf`. **Nothing checks
+the response** — if that token is missing or wrong, notifications silently 403 and
+you will never be told. Test a publish by hand after changing ntfy auth.
+
+---
+
 ## Headscale — Self-Hosted Tailscale Coordination
 
 Tailscale's mesh is WireGuard. The only part that touches Tailscale's servers is the coordination layer (device discovery + key exchange). Headscale replaces that with your own server.
