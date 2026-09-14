@@ -16,8 +16,12 @@
  * function out of global scope and break the page. This publishes a global and
  * changes nothing about how the rest of the file works.
  *
+ * file: true   -> load ui/views/<key>.js, which sets mount on this entry
  * mount: null  -> render via the legacy switch in app.html (not yet migrated)
  * mount: fn    -> render via ui/views/<key>.js  (migrated)
+ *
+ * Adding a view is therefore one file plus one entry here. app.html is never
+ * touched: the loader below injects the script tag.
  * Views migrate one at a time and each one is independently reversible.
  */
 window.HUB_VIEWS = {
@@ -27,10 +31,10 @@ window.HUB_VIEWS = {
   docs:       {icon:'📚', title:'Docs',       mount:null},
   map:        {icon:'🗺', title:'Infra Map',  mount:null},
   vault:      {icon:'🔐', title:'Vault',      mount:null},
-  issues:     {icon:'⚑',  title:'Issues',     mount:null},
+  issues:     {icon:'⚑',  title:'Issues',     mount:null, file:true},
   network:    {icon:'🌐', title:'Network',    mount:null},
   chat:       {icon:'🤖', title:'AI Chat',    mount:null},
-  browser:    {icon:'🌐', title:'Browser',    mount:null},
+  browser:    {icon:'🌐', title:'Browser',    mount:null, file:true},
   settings:   {icon:'⚙',  title:'Settings',   mount:null},
   storage:    {icon:'💾', title:'Storage',    mount:null},
   dockermgr:  {icon:'🐳', title:'Docker',     mount:null},
@@ -49,3 +53,18 @@ window.HUB_VIEW_MOUNT = function (viewType) {
   const def = window.HUB_VIEWS[viewType];
   return (def && typeof def.mount === 'function') ? def.mount : null;
 };
+
+/* 20404704  view loader — pull in every migrated view's file.
+ *
+ * async=false keeps execution order without blocking the parser. A view whose
+ * file has not finished loading simply still has mount:null, so it renders from
+ * the legacy switch for that one render. The fallback makes the race harmless. */
+(function () {
+  Object.keys(window.HUB_VIEWS).forEach(function (key) {
+    if (!window.HUB_VIEWS[key].file) return;
+    var s = document.createElement('script');
+    s.src = '/ui/views/' + key + '.js';
+    s.async = false;
+    document.head.appendChild(s);
+  });
+})();
