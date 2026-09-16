@@ -22,17 +22,47 @@
 | Hub Survey view | 🔍 Survey in nav — one-click full health report: containers, disk, RAM, load, maintenance |
 | Alert system → ntfy | `hub-alert.timer` every 15 min — state-change alerts only (down + recovery). `hub-daily.timer` 7am morning brief |
 | n8n Disk Alert workflow | Imported + activated — checks disk via Netdata every 2h, ntfy alert at 72%/85% |
+| **Phase 1 — kernel extraction** | `db/auth/ssh/log/router` split out of server.py. Merged PR #9 |
+| **Phase 2 — handler split** | 11 handlers + `kernel/collect.py`. **server.py 2,890 → 122 lines.** Cycle broken: handlers no longer import server.py. Merged `ab02c2f` |
+| **Deploy path repaired** | `update.sh` copied the app where its imports failed — broken since Phase 1, which is why fks sat 15 commits behind. Fixed + tested on both servers |
+| **Both servers current** | fks-services and ksgcohub both on `ab02c2f`, 41/41 routes verified against a copy of the prod DB |
+| **Two-door auth built** | Cloudflare Access identity accepted only from the tunnel address; local login stays the break-glass. Off by default — see `guides/remote-access.md` |
+| **Phase 3 started** | `/ui/` static route + `ui/registry.js`. Adding a view = one file + one registry entry. 2 of 19 views migrated |
+| **Deployment landscape documented** | `guides/deployment.md` + 6 rows in `knowledge/decisions.sql` |
 
 ---
 
 ## 🔵 Up Next
 
+**Needs the user — sudo or a browser, cannot be automated:**
+
 | Task | Notes |
 |------|-------|
-| **Service tokens** | Named long-lived tokens with role scope — separate AI/n8n identity from human TOTP sessions |
-| **Uptime Kuma → ntfy** | Add ntfy notification channel in Uptime Kuma UI (Settings → Notifications → ntfy) |
-| **Wire AI key into setup** | Install script prompts for API key, stores in `hub_config` — AI chat works out of the box |
-| **Vaultwarden** | Self-hosted Bitwarden on port 8083 — browser extension + mobile app password manager |
+| 🔴 **Rotate the sudo password** | `1234qwerR` is in **public** git history (`a34a8f1`). Check reuse on Portainer, NPM, n8n, Uptime Kuma |
+| **Merge PR #11** | 7 commits: security fix, two-door auth, docs, Phase 3 |
+| **Tailnet re-auth on fks-services** | `sudo tailscale up --force-reauth` as `ksg.co.hub@gmail.com`. Fixes the mesh — both hubs already have each other as peers but sit on different tailnets |
+| **Remove stale system unit** | `/etc/systemd/system/hub.service` is enabled and points at a deleted file |
+
+**Ready to build:**
+
+| Task | Notes |
+|------|-------|
+| **Phase 3 — remaining 17 views** | Next ones aren't static stubs: `dashboard`, `network`, `terminal`, `logs` call helpers still in app.html |
+| **Enable two-door auth** | Built and tested; needs `HUB_CF_TRUST_IP` on ksgcohub's unit |
+| **Login events → ntfy** | The hub records **no logins at all**, successful or failed. ntfy only fires on container events |
+| **UUID in `/api/identity`** | Peers are keyed by URL, so an address change kills the peer. Machine-ids are stable and already recorded |
+| **Fix `_users_list()`** | Returns `[]` on any exception — `/api/users` currently lies on ksgcohub |
+| **Persist sessions** | In-memory dict; every hub restart logs everyone out |
+| **Service tokens** | Named long-lived tokens with role scope — separate AI/n8n identity from human sessions |
+| **Uptime Kuma → ntfy** | Add ntfy channel in Uptime Kuma (Settings → Notifications) |
+| **Vaultwarden** | Self-hosted Bitwarden on 8083 |
+
+**Deliberately not done:**
+
+| Task | Why |
+|------|-----|
+| Gate enforcement | 52 of 66 routes gated in the table; app.html sends a token on 16 calls. Arming it locks the UI out |
+| Vault view link | Hardcodes `192.168.1.229:7779` — wrong when the hub runs on ksgcohub |
 
 ---
 
@@ -57,13 +87,15 @@
 - Auth: TOTP or Cloudflare service token
 - Enables Claude to act on server from any session without SSH
 
-### HQ/Node Pairing
+### HQ/Node Pairing  *(partly built — `/api/peer/register` exists and both
+servers already list each other as peers; blocked only by the tailnet split)*
 - /api/pair endpoint -- accepts one-time token + node identity
 - /api/peers endpoint -- returns all nodes with live status
 - HQ dashboard peer view -- see all servers in one UI
 - Pairing token generator in hub config UI
 
-### Cloudflare Tunnel Setup
+### Cloudflare Tunnel Setup  *(live on ksgcohub — hub.ksgco.app, ntfy.ksgco.app,
+fks.ksgdev.com. fks-services has no tunnel at all)*
 - cloudflared service routing hub.domain.com -> localhost:8765
 - ntfy.domain.com -> localhost:8085 (phone alerts without Tailscale)
 - Cloudflare Access policy (email OTP gate)
@@ -80,10 +112,16 @@
 
 ```
 hub/
-  server.py       # Python HTTP server (stdlib only) — all API routes
-  app.html        # Desktop UI — multi-pane workspace, tabs, vault, TOTP
-  mobile.html     # Mobile UI — swipe tabs, gate modal, ntfy
+  server.py       # 122 lines. Bootstrap only: HTTP shell, dispatch, threads
+  kernel/         # router (66 routes) · collect · db · auth · ssh · log
+  handlers/       # one file per domain — identity status federation config
+                  # users events ai tunnel proxy ops. Imports kernel/ only
+  ui/             # registry.js + views/ (Phase 3 — 2 of 19 migrated)
+  app.html        # Desktop UI — 6,518 lines, still one file
+  mobile.html     # Mobile UI
   maintenance.py  # Nightly maintenance agent
+
+# Dependencies flow one way: server -> router -> handlers -> kernel
 
 db/
   server.db       # SQLite — hub_config, users, journal, vault blob (gitignored)
