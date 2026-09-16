@@ -4,6 +4,23 @@
 
 ---
 
+## Read these first, in this order
+
+| File | What it gives you |
+|------|-------------------|
+| `TASKS.md` | the live roadmap — what's done, what's next, and what needs the user rather than an agent |
+| `docs/session-log-2026-09.md` | what actually happened and why, Sep 10-16. Read before assuming anything is broken |
+| `knowledge/decisions.sql` | 34 architecture decisions with context and consequence |
+| `hub/guides/deployment.md` | the five questions for deploying anything, anywhere |
+| `hub/guides/remote-access.md` | the two-door auth model, Tailscale vs Cloudflare, ntfy tokens |
+
+**The standing warning:** every failure in the Sep 10-16 session was a *record*
+disagreeing with the *machine*, not a code bug. Before acting on anything written
+here, check it against the live system. `/api/status`, `/api/ports` and
+`registry.json` are derived from the machine; prose files are not.
+
+---
+
 ## What this repo is
 
 Two servers, one codebase. A Python stdlib HTTP server (`hub/server.py`) runs on each node.
