@@ -52,6 +52,9 @@ ROUTES = [
     {"code": "20302720", "method": "POST", "path": "/api/docker/action/",         "prefix": True,  "gate": 2, "handler": "post_docker_action",     "module": "status"},
     {"code": "20302721", "method": "POST", "path": "/api/ports/ack",              "prefix": False, "gate": 1, "handler": "post_ports_ack",         "module": "status"},
 
+    # ── Node self-description (module 11) ────────────────────────────────────
+    {"code": "20311701", "method": "GET",  "path": "/api/node",                   "prefix": False, "gate": 1, "handler": "get_node",              "module": "node"},
+
     # ── Federation ───────────────────────────────────────────────────────────
     {"code": "20303701", "method": "GET",  "path": "/api/federation",             "prefix": False, "gate": 1, "handler": "get_federation",         "module": "federation"},
     {"code": "20303702", "method": "POST", "path": "/api/federation",             "prefix": False, "gate": 1, "handler": "post_federation",        "module": "federation"},

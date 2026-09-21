@@ -45,6 +45,15 @@ def _config_get_all():
 #   path    = the parsed URL path string
 #   params  = dict of query params
 
+
+# 20204314  _machine_id — stable node key for peer identity
+def _machine_id():
+    try:
+        with open('/etc/machine-id', encoding='utf-8') as f:
+            return f.read().strip()
+    except Exception:
+        return ''
+
 def serve_app(handler, path, params):
     """# 20301701  GET / /mobile /desktop — serve app.html or mobile.html"""
     ua = handler.headers.get('User-Agent', '')
@@ -178,6 +187,9 @@ def get_identity(handler, path, params):
         'local_ip':     si.get('local_ip', ''),
         'tailscale_ip': ts_ip,
         'version':      '1.0',
+        # Stable node key. Peers keyed by machine_id survive an address change;
+        # peers keyed by URL simply die when the address moves.
+        'machine_id':   _machine_id(),
     })
 
 
