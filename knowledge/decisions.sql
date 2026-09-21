@@ -97,3 +97,51 @@ INSERT INTO decisions (date, title, context, decision, consequence, status) VALU
  'Use dmidecode system-uuid as the primary key for the servers table in registry.json.',
  'UUIDs must be populated in registry.json and knowledge/servers.json. Currently marked POPULATE_VIA_dmidecode.',
  'active');
+
+-- ── Deployment + access landscape (session 2026-09-10..14) ───────────────────
+-- Every failure found in this session was documentation disagreeing with the
+-- machine, not a code bug. These rows record the rules that came out of it.
+
+INSERT INTO decisions (date, title, context, decision, consequence, status) VALUES
+
+('2026-09-14',
+ 'Login matches the trust the path already established (two-door auth)',
+ 'Reaching the hub through Cloudflare asked twice: Access verified the user with Google, then the hub demanded its own username and password anyway.',
+ 'Private paths (LAN, Tailscale) already proved identity by how you got there, so a local credential is enough. The public path proves nothing, so the door authenticates: Cloudflare Access with Google. The hub trusts Cf-Access-Authenticated-User-Email ONLY from the tunnel address (HUB_CF_TRUST_IP) -- the trust is the network path, not the header, because anything on the tailnet can forge a header.',
+ 'One login per path instead of two. The local login must always work, never be disabled and depend on nothing external -- it is the break-glass when Cloudflare or Google is down. Access grants user-level only; gate 2/3 routes still demand stronger proof.',
+ 'active'),
+
+('2026-09-14',
+ 'Browsers get SSO, apps get tokens -- never put Access in front of an app endpoint',
+ 'Cloudflare Access is a browser redirect flow. ntfy is consumed by a mobile app holding a long-lived subscription, with no browser to redirect.',
+ 'Split auth by CLIENT TYPE, not by service. Browser-facing hostnames get Access + SSO. App/machine endpoints (ntfy, federation, MCP) use their own token ACLs behind the same tunnel.',
+ 'Putting Access in front of ntfy silently kills push notifications and looks like ntfy broke. Cloudflare still does the transport job either way; only the identity check differs.',
+ 'active'),
+
+('2026-09-14',
+ 'Cloudflare proxy carries HTTP/HTTPS only -- SSH goes over Tailscale',
+ 'A session spent hours retrying SSH to fks.ksgdev.com, concluding the server was rebooting. That hostname resolves to Cloudflare.',
+ 'Never attempt SSH, SCP or any non-HTTP protocol against a Cloudflare-proxied hostname. Use the Tailscale address. A host that answers HTTP while SSH hangs is the signature of a proxied hostname, not a firewall.',
+ 'Three paths with different reach: LAN (same network, any protocol), Tailscale (your devices anywhere, any protocol), public hostname (whole internet, HTTP only). Choosing the wrong one wastes hours and looks like an outage.',
+ 'active'),
+
+('2026-09-14',
+ 'Every deployable splits into code, config and state',
+ 'fksinv could not be stood up on a second server: its code lives only on the machine that runs it, with no git repo.',
+ 'Code comes from git and is disposable. Config is per-node, secret, never committed. State is the only irreplaceable part and must be backed up. A project that cannot be rebuilt on a fresh box in minutes has one of the three not separated.',
+ 'When code is not in git the running server IS the source of truth, so there is no rollback and no way to detect drift. That is how fks-services sat 15 commits behind unnoticed.',
+ 'active'),
+
+('2026-09-14',
+ 'If a build step exists, copying files is not deploying',
+ 'fks-ui has no bind mounts -- the React app compiles into the image. SCP to disk changes nothing on the live site.',
+ 'Establish per service whether source is served directly or compiled. Hub serves app.html straight off disk; fks-ui requires docker compose build. Deploy scripts must include the build so it cannot be forgotten.',
+ 'Skipping the rebuild makes scp exit 0 while the old bundle keeps serving -- a silent success that looks like broken code. Same failure mode as update.sh appearing to work while doing nothing.',
+ 'active'),
+
+('2026-09-14',
+ 'Deploy defaults must fail loudly, never silently substitute',
+ 'docker-compose.yml falls back to DOMAIN=fks.ksgdev.us when .env is missing. Live is .com; the fallback only fires on a fresh deploy.',
+ 'Use ${VAR:?message} rather than ${VAR:-wrong-default} for anything environment-critical. A missing value should stop the deploy with a clear error instead of producing a half-working stack.',
+ 'Silent wrong defaults are the hardest class of bug to find because nothing errors. Prefer a loud failure at deploy time over a quiet misconfiguration in production.',
+ 'active');

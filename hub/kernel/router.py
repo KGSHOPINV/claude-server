@@ -21,6 +21,7 @@ ROUTES = [
     # ── Identity ─────────────────────────────────────────────────────────────
     {"code": "20301701", "method": "GET",  "path": "/",                           "prefix": False, "gate": 0, "handler": "serve_app",            "module": "identity"},
     {"code": "20301702", "method": "GET",  "path": "/mobile",                     "prefix": False, "gate": 0, "handler": "serve_app",             "module": "identity"},
+    {"code": "20301709", "method": "GET",  "path": "/ui/",                       "prefix": True,  "gate": 0, "handler": "serve_ui_asset",      "module": "identity"},
     {"code": "20301708", "method": "GET",  "path": "/desktop",                    "prefix": False, "gate": 0, "handler": "serve_app",             "module": "identity"},
     {"code": "20301703", "method": "GET",  "path": "/manifest.json",              "prefix": False, "gate": 0, "handler": "serve_manifest",         "module": "identity"},
     {"code": "20301704", "method": "GET",  "path": "/sw.js",                      "prefix": False, "gate": 0, "handler": "serve_sw",               "module": "identity"},
@@ -50,6 +51,9 @@ ROUTES = [
     {"code": "20302719", "method": "POST", "path": "/api/docker/prune",           "prefix": False, "gate": 2, "handler": "post_docker_prune",      "module": "status"},
     {"code": "20302720", "method": "POST", "path": "/api/docker/action/",         "prefix": True,  "gate": 2, "handler": "post_docker_action",     "module": "status"},
     {"code": "20302721", "method": "POST", "path": "/api/ports/ack",              "prefix": False, "gate": 1, "handler": "post_ports_ack",         "module": "status"},
+
+    # ── Node self-description (module 11) ────────────────────────────────────
+    {"code": "20311701", "method": "GET",  "path": "/api/node",                   "prefix": False, "gate": 1, "handler": "get_node",              "module": "node"},
 
     # ── Federation ───────────────────────────────────────────────────────────
     {"code": "20303701", "method": "GET",  "path": "/api/federation",             "prefix": False, "gate": 1, "handler": "get_federation",         "module": "federation"},

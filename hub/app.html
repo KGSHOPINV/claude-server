@@ -1265,6 +1265,7 @@ body.desk-mode #desk-exit { display:flex; align-items:center; gap:6px; }
   </div>
 </div>
 
+<script src="/ui/registry.js"></script>
 <script>
 'use strict';
 const API = window.location.origin;  // works from any host — localhost, Tailscale IP, LAN IP
@@ -1842,27 +1843,8 @@ function renderPane(wsId, pane) {
   </div>`;
 }
 
-const VIEW_DEFS = {
-  dashboard: {icon:'⊞', title:'Dashboard'},
-  terminal:  {icon:'⌨', title:'Terminal'},
-  logs:      {icon:'📋', title:'Logs'},
-  docs:      {icon:'📚', title:'Docs'},
-  map:       {icon:'🗺', title:'Infra Map'},
-  vault:     {icon:'🔐', title:'Vault'},
-  issues:    {icon:'⚑',  title:'Issues'},
-  network:   {icon:'🌐', title:'Network'},
-  chat:      {icon:'🤖', title:'AI Chat'},
-  browser:   {icon:'🌐', title:'Browser'},
-  settings:  {icon:'⚙', title:'Settings'},
-  storage:   {icon:'💾', title:'Storage'},
-  dockermgr: { title: 'Docker', icon: '🐳' },
-  files:     {icon:'📁', title:'Files'},
-  journal:   {icon:'📓', title:'Journal'},
-  runbooks:  {icon:'▶',  title:'Runbooks'},
-  iframe:    {icon:'🔗', title:'Service'},
-  blank:     {icon:'○',  title:'New Pane'},
-  federation:{icon:'🛰', title:'Federation'},
-};
+// 20404702  VIEW_DEFS — now sourced from ui/registry.js (single registration point)
+const VIEW_DEFS = window.HUB_VIEWS;
 
 function splitPane(wsId, paneId, dir) {
   const ws = S.workspaces.find(w=>w.id===wsId);
@@ -2005,6 +1987,10 @@ function setPaneView(wsId, paneId, viewType, viewConfig={}) {
 // ── MOUNT CONTENT INTO A PANE ─────────────────────────────────────────────────
 function mountPaneContent(wsId, paneId, viewType, viewConfig, body) {
   const key = wsId + '-' + paneId;
+  // 20404703  migrated views render from ui/views/<key>.js; the rest fall
+  // through to the legacy switch below. Set mount:null in the registry to revert.
+  const mount = window.HUB_VIEW_MOUNT && window.HUB_VIEW_MOUNT(viewType);
+  if (mount) { mount(wsId, paneId, viewConfig, body, key); return; }
   switch(viewType) {
     case 'dashboard':
       body.innerHTML = `<div class="view-dash" id="dash-${key}"></div>`;
