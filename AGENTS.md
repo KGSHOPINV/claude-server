@@ -12,6 +12,7 @@
 | `docs/session-log-2026-09.md` | what actually happened and why, Sep 10-16. Read before assuming anything is broken |
 | `knowledge/decisions.sql` | 34 architecture decisions with context and consequence |
 | `hub/guides/deployment.md` | the five questions for deploying anything, anywhere |
+| `docs/flareshub-blueprint.md` | FlareSHub — layers, enrollment, auth, notifications, build order |
 | `hub/guides/remote-access.md` | the two-door auth model, Tailscale vs Cloudflare, ntfy tokens |
 
 **The standing warning:** every failure in the Sep 10-16 session was a *record*
