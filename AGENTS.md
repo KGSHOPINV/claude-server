@@ -14,6 +14,7 @@
 | `hub/guides/deployment.md` | the five questions for deploying anything, anywhere |
 | `docs/flareshub-blueprint.md` | FlareSHub — layers, enrollment, auth, notifications, build order |
 | `docs/flareshub-checklists.md` | login / installer / cross-connect sequences, each step marked built or not |
+| `docs/flareshub-frontend-dag.md` | how one app serves any server on any device, and the rules that keep it non-monolithic |
 | `hub/guides/remote-access.md` | the two-door auth model, Tailscale vs Cloudflare, ntfy tokens |
 
 **The standing warning:** every failure in the Sep 10-16 session was a *record*
