@@ -105,6 +105,48 @@ def beat(payload_fn):
     return None, last_err
 
 
+# 20200345  register — announce this node to central before the first beat
+def register(payload_fn):
+    """The spec is register -> heartbeat. Without this the first beat creates
+    the record implicitly and ENROLLING never happens, so central cannot tell
+    a node that just joined from one that has always been there.
+
+    Best-effort and idempotent: central flags a re-registration rather than
+    rejecting it, so retrying on every start is safe.
+    """
+    targets = [(l, u.replace('/api/heartbeat', '/api/mesh/register'))
+               for l, u in _targets()]
+    if not targets:
+        return None, 'no central address'
+    try:
+        p = payload_fn()
+    except Exception as e:
+        return None, str(e)
+    body = {
+        'server_id':    _id.server_id(),
+        'name':         _id.node_name(),
+        'machine_id':   _id.machine_id(),
+        'reachability': [k for k, v in (('lan', p.get('local_ip')),
+                                        ('tailscale', p.get('tailscale_ip')),
+                                        ('public', p.get('public'))) if v],
+    }
+    token = ''
+    try:
+        token = _id.issue(_id.server_id() or 'node', 'operator', ttl=120)
+    except Exception:
+        pass
+    last = None
+    for label, url in targets:
+        try:
+            status, _b = _post(url, body, token)
+            if 200 <= status < 300:
+                return label, status
+            last = f'{label}: HTTP {status}'
+        except Exception as e:
+            last = f'{label}: {type(e).__name__}'
+    return None, last
+
+
 # 20200344  loop — background emitter, node mode only
 def loop(payload_fn, log_fn=None):
     """Started from the bootstrap. Exits immediately in central mode —
@@ -112,6 +154,14 @@ def loop(payload_fn, log_fn=None):
     if _id.is_central():
         return
     prev_path = None
+    # Announce before the first beat so central sees ENROLLING -> HEALTHY
+    # rather than a node appearing already healthy out of nowhere.
+    try:
+        path, info = register(payload_fn)
+        if log_fn:
+            log_fn(f'mesh register via {path}' if path else f'mesh register failed: {info}')
+    except Exception:
+        pass
     while True:
         try:
             path, info = beat(payload_fn)

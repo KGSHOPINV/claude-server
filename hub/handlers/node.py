@@ -109,7 +109,10 @@ def node_payload():
         # ── identity ────────────────────────────────────────────────────────
         'machine_id': _machine_id(),
         'hostname':   si.get('hostname', ''),
-        'node':       (enrolled or {}).get('node', si.get('hostname', '')),
+        # identity file is authoritative for the name; enroll.sh's node.json
+        # and the hostname are only fallbacks. Reported the wrong name until
+        # the two-instance test caught it.
+        'node':       _idm.node_name() or (enrolled or {}).get('node') or si.get('hostname', ''),
 
         # ── reachability ────────────────────────────────────────────────────
         'local_ip':     si.get('local_ip', ''),
