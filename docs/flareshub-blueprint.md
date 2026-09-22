@@ -8,6 +8,29 @@ marked as such.
 
 ---
 
+## 0. Requirements (stated, non-negotiable)
+
+These are the user's constraints. Any design that fails one of them is wrong,
+however elegant.
+
+**ONE DOMAIN ENTRY.** The domain is configured once, fleet-wide — not per
+server. Every node derives its hostname from it. After the first time, the
+domain is never typed again.
+
+**BILATERAL FRONTEND.** One frontend works against any server. Not a UI per
+node — the same build talks to whichever node.
+
+**THE INSTALLER FINISHES THE JOB.** Running it ends with the server already
+having a live domain name. Not "installed, now go configure Cloudflare."
+`install → hostname → reachable` is one operation from the user's point of view.
+
+**Where the current build fails this:** `enroll.sh` takes `--zone` on every run
+(violates one-entry) and is a separate step from `bootstrap.sh` (violates
+installer-finishes). Target: one flow, zone from fleet config, node name derived
+from machine-id/hostname.
+
+---
+
 ## 1. The three layers
 
 Each owns something the others cannot do well. Put the seam anywhere else and
