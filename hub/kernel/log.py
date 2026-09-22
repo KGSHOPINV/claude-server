@@ -50,6 +50,30 @@ def activity_recent(db_conn_fn, limit=100, category=None):
         return []
 
 # 20206302  _ntfy_send — POST push notification to ntfy
+# 20206303  _ntfy_state — is the notification path actually working?
+# It previously swallowed every error, so a hub whose pushes were all being
+# refused looked identical to one delivering them. An alerting system that
+# fails silently is worse than none: you believe you are covered.
+_ntfy_state = {'last_ok': None, 'last_error': None, 'sent': 0, 'failed': 0,
+               'error_since': None}
+
+
+def _record_ntfy_failure(reason):
+    first = _ntfy_state.get('last_error') is None
+    _ntfy_state['last_error'] = reason
+    _ntfy_state['failed'] += 1
+    if first:
+        _ntfy_state['error_since'] = time.time()
+
+
+def ntfy_state():
+    """Exposed so the node can report its own broken notifications rather than
+    waiting for someone to notice alerts stopped arriving."""
+    d = dict(_ntfy_state)
+    d['healthy'] = d['last_error'] is None and d['sent'] > 0
+    return d
+
+
 def _ntfy_send(title, body, priority='default', tags='server'):
     """Send ntfy push notification. Reads config from ~/.server-alerts.conf or env."""
     try:
@@ -68,9 +92,21 @@ def _ntfy_send(title, body, priority='default', tags='server'):
         req = urllib.request.Request(
             f'{url}/{topic}', data=body.encode(),
             headers=headers, method='POST')
-        urllib.request.urlopen(req, timeout=5, context=_ssl_ctx)
-    except Exception:
-        pass
+        with urllib.request.urlopen(req, timeout=5, context=_ssl_ctx) as r:
+            if 200 <= r.status < 300:
+                _ntfy_state.update({'last_ok': time.time(), 'last_error': None})
+                _ntfy_state['sent'] += 1
+                return True
+            _record_ntfy_failure(f'HTTP {r.status}')
+    except urllib.error.HTTPError as e:
+        # The case this was written for: ntfy's ACL denies anonymous publish
+        # (403) because no token is configured. Previously invisible.
+        _record_ntfy_failure(f'HTTP {e.code}'
+                             + (' — no NTFY_TOKEN configured' if e.code in (401, 403)
+                                and not token else ''))
+    except Exception as e:
+        _record_ntfy_failure(type(e).__name__)
+    return False
 
 # 20206301  _docker_event_loop — stream docker events; write activity_log; ntfy on die/start
 def _docker_event_loop(db_conn_fn, ssh_run_fn, ntfy_send_fn):

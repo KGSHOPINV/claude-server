@@ -88,6 +88,21 @@ def _projects():
     return projects
 
 
+# 20204318  _ntfy_health — is the notification path actually delivering?
+def _ntfy_health():
+    try:
+        from kernel.log import ntfy_state  # noqa: PLC0415
+        st = ntfy_state()
+    except Exception:
+        return {'healthy': None, 'error': 'unavailable'}
+    return {
+        'healthy': st['healthy'],
+        'sent': st['sent'],
+        'failed': st['failed'],
+        'error': st['last_error'],
+    }
+
+
 # 20204317  node_payload — the self-description, as data
 def node_payload():
     """Shared by GET /api/node and the heartbeat emitter, so what a node
@@ -134,6 +149,9 @@ def node_payload():
             'unassigned_containers': [c['name'] for c in unassigned],
             'projects_without_ksg_label': [p['project'] for p in unclaimed],
             'not_enrolled': enrolled is None,
+            # A silently-failing alerting system is worse than none: you
+            # believe you are covered. Report it as a fact about this node.
+            'notifications': _ntfy_health(),
         },
     }
 
