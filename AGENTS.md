@@ -10,7 +10,7 @@
 |------|-------------------|
 | `TASKS.md` | the live roadmap — what's done, what's next, and what needs the user rather than an agent |
 | `docs/session-log-2026-09.md` | what actually happened and why, Sep 10-16. Read before assuming anything is broken |
-| `knowledge/decisions.sql` | 34 architecture decisions with context and consequence |
+| `knowledge/decisions.sql` | 18 architecture decisions with context and consequence |
 | `hub/guides/deployment.md` | the five questions for deploying anything, anywhere |
 | `docs/flareshub-blueprint.md` | FlareSHub — layers, enrollment, auth, notifications, build order |
 | `docs/flareshub-checklists.md` | login / installer / cross-connect sequences, each step marked built or not |
