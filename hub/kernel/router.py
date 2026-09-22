@@ -17,6 +17,28 @@ Gate levels: 0=public 1=user 2=admin 3=totp
 #   "module":  "status",          # which handler file owns this
 # }
 
+# ── Namespace reservations ───────────────────────────────────────────────────
+# Telescope module numbers and URL prefixes are a shared namespace across the
+# federation. Reserving them costs nothing now; discovering a collision after
+# both sides have shipped costs a migration.
+#
+#   00-19   ServerHub.    In use: 00 kernel, 01 identity, 02 status,
+#                         03 federation, 04 config, 05 users, 06 events,
+#                         07 ai, 08 tunnel, 09 proxy, 10 ops, 11 node,
+#                         12 mesh.  Free: 13-19.
+#   20-29   FlareVault.   Endpoints the hub implements on FV's behalf.
+#                         None yet — reserved so FV can claim without asking.
+#   30-39   Metaforge.    Same arrangement.
+#   40-49   local.        Per-deployment, never upstreamed.
+#
+# URL prefixes:
+#   /api/mesh/*      shared contract, changes need both sides to agree
+#   /api/node        this node describing itself — ServerHub owns it
+#   /api/admit       boundaries for a project landing here — ServerHub owns it
+#   /api/vault/*     RESERVED AND DELIBERATELY UNIMPLEMENTED. Doctrine: the hub
+#                    stores pointers, never credentials. If this prefix ever
+#                    appears here, something has gone wrong.
+#
 ROUTES = [
     # ── Identity ─────────────────────────────────────────────────────────────
     {"code": "20301701", "method": "GET",  "path": "/",                           "prefix": False, "gate": 0, "handler": "serve_app",            "module": "identity"},
