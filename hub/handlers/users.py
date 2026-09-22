@@ -11,6 +11,8 @@ import time
 from datetime import datetime
 
 from kernel.db   import db_conn
+from kernel.db  import db_conn as _db_conn
+from kernel.log import log_activity as _log, _ntfy_send as _ntfy
 from kernel.auth import (
     check_auth, gate_check, gate_create,
     _totp_hotp, totp_verify, totp_new_secret, totp_verify_secret, totp_uri,
@@ -134,9 +136,36 @@ def get_totp_setup(handler, path, params):
 
 
 # 20305705  POST /api/auth/login — login with password
+# 20204505  _fail_tracker — consecutive failed logins, per username+source
+# In-memory and deliberately simple. This is a notification trigger, not a
+# lockout: Fail2Ban already owns blocking, and a hub that locks you out of
+# yourself is the failure mode this project exists to avoid.
+_fail_counts = {}
+_FAIL_ALERT_AT = 3
+
+
+def _client_ip(handler):
+    try:
+        return handler.client_address[0]
+    except Exception:
+        return '?'
+
+
+def _door(handler):
+    """Which door the request arrived through. A login over the public path is
+    a different event from one on the LAN, and the record should say which."""
+    try:
+        from kernel.auth import access_identity  # noqa: PLC0415
+        return 'cloudflare' if access_identity(handler) else 'local'
+    except Exception:
+        return 'local'
+
+
 def post_auth_login(handler, path, params, body):
     username = body.get('username', '').strip()
     password = body.get('password', '')
+    ip = _client_ip(handler)
+    door = _door(handler)
     user = _user_auth(username, password)
     if user:
         token = secrets.token_hex(32)
@@ -146,6 +175,18 @@ def post_auth_login(handler, path, params, body):
                 'role': user.get('role', 'admin'),
                 'created': datetime.now().isoformat(),
             }
+        # The hub previously recorded NOTHING about logins, successful or
+        # failed, on a box reachable from the internet. Both are now events.
+        prior_fails = _fail_counts.pop((username, ip), 0)
+        _log(_db_conn, f'login: {username} via {door}', 'auth', 'login',
+             f'ip={ip} role={user.get("role", "admin")}', 'info')
+        if prior_fails >= _FAIL_ALERT_AT:
+            _log(_db_conn, f'login succeeded after {prior_fails} failures: {username}',
+                 'auth', 'login', f'ip={ip}', 'warn')
+            _ntfy(f'Login after {prior_fails} failed attempts',
+                  f'{username} from {ip} via {door}', 'high', 'warning,key')
+        elif door == 'cloudflare':
+            _ntfy('Hub login', f'{username} from {ip} via Cloudflare', 'low', 'key')
         handler.send_json({
             'ok': True,
             'token': token,
@@ -153,6 +194,17 @@ def post_auth_login(handler, path, params, body):
             'role': user.get('role', 'admin'),
         })
     else:
+        key = (username, ip)
+        n = _fail_counts.get(key, 0) + 1
+        _fail_counts[key] = n
+        _log(_db_conn, f'FAILED login: {username or "(blank)"} via {door}', 'auth',
+             'login', f'ip={ip} attempt={n}', 'warn')
+        # Alert on the threshold only — one fat-fingered password is not an
+        # incident, three in a row from the same source is someone knocking.
+        if n == _FAIL_ALERT_AT:
+            _ntfy(f'{n} failed logins',
+                  f'user "{username or "(blank)"}" from {ip} via {door}',
+                  'high', 'rotating_light,lock')
         handler.send_json({'ok': False, 'error': 'Invalid username or password'}, 401)
 
 
@@ -160,7 +212,10 @@ def post_auth_login(handler, path, params, body):
 def post_auth_logout(handler, path, params, body):
     token = body.get('token', '')
     with _users_lock:
-        _sessions.pop(token, None)
+        sess = _sessions.pop(token, None)
+    if sess:
+        _log(_db_conn, f'logout: {sess.get("user", "?")}', 'auth', 'login',
+             f'ip={_client_ip(handler)}', 'info')
     handler.send_json({'ok': True})
 
 
