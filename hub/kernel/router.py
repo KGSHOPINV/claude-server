@@ -59,6 +59,11 @@ ROUTES = [
 
     {"code": "20311702", "method": "GET",  "path": "/api/admit",                  "prefix": False, "gate": 1, "handler": "get_admit",            "module": "node"},
 
+    # ── Mesh (module 12) — hub-and-spoke: nodes report UP, never laterally ──
+    {"code": "20312701", "method": "POST", "path": "/api/heartbeat",              "prefix": False, "gate": 0, "handler": "post_heartbeat",       "module": "mesh"},
+    {"code": "20312702", "method": "POST", "path": "/api/mesh/register",          "prefix": False, "gate": 0, "handler": "post_mesh_register",   "module": "mesh"},
+    {"code": "20312703", "method": "GET",  "path": "/api/mesh/fleet",             "prefix": False, "gate": 1, "handler": "get_mesh_fleet",       "module": "mesh"},
+
     # ── Federation ───────────────────────────────────────────────────────────
     {"code": "20303701", "method": "GET",  "path": "/api/federation",             "prefix": False, "gate": 1, "handler": "get_federation",         "module": "federation"},
     {"code": "20303702", "method": "POST", "path": "/api/federation",             "prefix": False, "gate": 1, "handler": "post_federation",        "module": "federation"},

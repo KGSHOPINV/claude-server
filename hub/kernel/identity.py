@@ -85,6 +85,9 @@ def load(refresh=False):
     # A self-issued secret until the vault provisions one. Per-node, not shared.
     data.setdefault('jwt_secret', hashlib.sha256(
         (mid + '|flareshub').encode()).hexdigest())
+    # Where home is. Everything a node needs to find central is in one file.
+    for k in ('central_url', 'central_tailscale', 'central_lan'):
+        data.setdefault(k, '')
 
     _cache = data
     return data
