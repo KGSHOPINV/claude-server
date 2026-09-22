@@ -55,6 +55,8 @@ ROUTES = [
     # ── Node self-description (module 11) ────────────────────────────────────
     {"code": "20311701", "method": "GET",  "path": "/api/node",                   "prefix": False, "gate": 1, "handler": "get_node",              "module": "node"},
 
+    {"code": "20311702", "method": "GET",  "path": "/api/admit",                  "prefix": False, "gate": 1, "handler": "get_admit",            "module": "node"},
+
     # ── Federation ───────────────────────────────────────────────────────────
     {"code": "20303701", "method": "GET",  "path": "/api/federation",             "prefix": False, "gate": 1, "handler": "get_federation",         "module": "federation"},
     {"code": "20303702", "method": "POST", "path": "/api/federation",             "prefix": False, "gate": 1, "handler": "post_federation",        "module": "federation"},
