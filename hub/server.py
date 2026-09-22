@@ -131,6 +131,21 @@ if __name__ == '__main__':
     # Start Docker event watcher
     _docker_thread = threading.Thread(target=_docker_event_loop, args=(db_conn, ssh_run, _ntfy_send), daemon=True)
     _docker_thread.start()
+    # Identity + mesh. NODE mode emits heartbeats to central; CENTRAL receives
+    # them. Same codebase — server.identity.json decides which.
+    from kernel import identity as _identity
+    from kernel import heartbeat as _heartbeat
+    from handlers.node import node_payload
+    _identity.ensure_file()
+    print(f'  identity: {_identity.server_id()} ({_identity.node_name()}) mode={_identity.mode()}')
+    if not _identity.is_central():
+        _heartbeat.start(
+            node_payload,
+            lambda m: log_activity(db_conn, m, 'mesh', 'heartbeat', '', 'info'))
+        print('  heartbeat: emitting to central every %ds' % _heartbeat.INTERVAL)
+    else:
+        print('  mode: CENTRAL — receiving heartbeats')
+
     # Log startup
     log_activity(db_conn, 'Hub started', 'hub', 'startup', f'port={PORT}', 'info')
     print(f'\n  Server Hub API  —  http://localhost:{PORT}')

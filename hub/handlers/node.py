@@ -88,9 +88,11 @@ def _projects():
     return projects
 
 
-# 20311701  GET /api/node — full node self-description
-def get_node(handler, path, params):
-    """# 20311701  GET /api/node"""
+# 20204317  node_payload — the self-description, as data
+def node_payload():
+    """Shared by GET /api/node and the heartbeat emitter, so what a node
+    reports to central is byte-identical to what it reports to a browser.
+    Two builders would drift; one cannot."""
     si = _srv.get_server_info()
     projects = _projects()
     enrolled = _enrollment()
@@ -98,8 +100,11 @@ def get_node(handler, path, params):
     unassigned = projects.get('unassigned', {}).get('containers', [])
     unclaimed = [p for p in projects.values() if not p['claimed'] and p['project'] != 'unassigned']
 
-    handler.send_json({
+    from kernel import identity as _idm  # noqa: PLC0415
+    return {
         'generated':  datetime.now().isoformat(timespec='seconds'),
+        'server_id':  _idm.server_id(),
+        'mode':       _idm.mode(),
 
         # ── identity ────────────────────────────────────────────────────────
         'machine_id': _machine_id(),
@@ -127,7 +132,13 @@ def get_node(handler, path, params):
             'projects_without_ksg_label': [p['project'] for p in unclaimed],
             'not_enrolled': enrolled is None,
         },
-    })
+    }
+
+
+# 20311701  GET /api/node — full node self-description
+def get_node(handler, path, params):
+    """# 20311701  GET /api/node"""
+    handler.send_json(node_payload())
 
 # ── Admission ────────────────────────────────────────────────────────────────
 # A project asking "what are my boundaries here?" should get a live answer, not
