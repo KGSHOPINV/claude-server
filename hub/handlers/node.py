@@ -171,8 +171,12 @@ RESERVED = {
     22:   'ssh',
     80:   'http', 443: 'https',
 }
-BAND_SIZE = 10
-BAND_FLOOR, BAND_CEIL = 10020, 10990   # project bands live above the 10000 line
+# The band is the kernel's to define, not this handler's. It was briefly
+# declared here as 10020-10990, which sits inside the Supabase stack lane —
+# /api/admit was handing out ports another service already owns. One source.
+BAND_FLOOR = _srv.PROJECT_BAND_FLOOR
+BAND_CEIL  = _srv.PROJECT_BAND_CEIL
+BAND_SIZE  = _srv.PROJECT_BAND_SIZE
 
 
 # 20204315  _ports_in_use — every bound TCP port on the host

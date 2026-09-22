@@ -49,6 +49,17 @@ GUIDES_DIR= os.environ.get('HUB_GUIDES', os.path.join(BASE_DIR, 'guides'))
 
 HTTPS_PORTS = {9443, 9090}
 
+# ── Project port space ───────────────────────────────────────────────────────
+# The one place the project band is defined. /api/admit hands these out and the
+# node receipt advertises what is free inside them, so a project is never told
+# two different things about where it may bind.
+#
+# 7100-7899 because it is the only wide stretch no PORT_LANE claims. It must
+# stay that way: anything above 10000 collides with the Supabase stack lane.
+PROJECT_BAND_FLOOR = 7100
+PROJECT_BAND_CEIL  = 7899
+PROJECT_BAND_SIZE  = 20
+
 _ssl_ctx = ssl.create_default_context()
 _ssl_ctx.check_hostname = False
 _ssl_ctx.verify_mode = ssl.CERT_NONE
@@ -456,6 +467,7 @@ PORT_LANES = [
     {'name': 'AI',             'color': 'purple',  'ranges': [(11000, 11999)]},
     {'name': 'Tools',          'color': 'blue',    'ranges': [(8000, 8999)]},
     {'name': 'Supabase Stack', 'color': 'teal',    'ranges': [(10000, 10999)]},
+    {'name': 'Projects',       'color': 'green',   'ranges': [(7100, 7899)]},
 ]
 
 # Flat port → service name registry for quick lookup
@@ -1072,16 +1084,17 @@ def build_context():
     if receipt.get("tailscale") and receipt["tailscale"] not in ("", "none"):
         network_interfaces.append({"name": "tailscale", "ip": receipt["tailscale"], "type": "tailscale"})
 
-    # Available port ranges — project space 7100-7899, 20-port blocks, skip bound ports
+    # Available port ranges — project space, in blocks, skipping bound ports
     try:
         with _port_cache_lock:
             bound = {p["port"] for p in _port_cache["ports"]}
     except Exception:
         bound = set()
     available_port_ranges = []
-    for base in range(7100, 7900, 20):
-        if not any(p in bound for p in range(base, base + 20)):
-            available_port_ranges.append({"start": base, "end": base + 19})
+    for base in range(PROJECT_BAND_FLOOR, PROJECT_BAND_CEIL + 1, PROJECT_BAND_SIZE):
+        if not any(p in bound for p in range(base, base + PROJECT_BAND_SIZE)):
+            available_port_ranges.append({"start": base,
+                                          "end": base + PROJECT_BAND_SIZE - 1})
         if len(available_port_ranges) >= 10:
             break
 
