@@ -193,6 +193,27 @@ def get_identity(handler, path, params):
     })
 
 
+def get_auth_provider(handler, path, params):
+    """# 20301710  GET /api/auth/provider
+
+    Who issued the token this node trusts. Starts "self"; flips to
+    "flarevault" when the vault provisions server.identity.json. FlareVault
+    reads this to know whether a node has been adopted yet. One field, no
+    refactor on either side.
+    """
+    from kernel import identity as _id  # noqa: PLC0415
+    handler.send_json({
+        'provider':   _id.jwt_issuer(),        # self | flarevault
+        'algorithm':  'HS256',                 # stdlib-only; RS256 is not available
+        'server_id':  _id.server_id(),
+        'machine_id': _id.machine_id(),
+        'name':       _id.node_name(),
+        'mode':       _id.mode(),              # node | central
+        'roles':      list(_id.ROLES),
+        'identity_file_present': __import__('os').path.exists(_id.IDENTITY_FILE),
+    })
+
+
 def get_access(handler, path, params):
     """# 20301707  GET /api/access"""
     # get_access_info lives in server.py; lazy import avoids circular load at module time.
