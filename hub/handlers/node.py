@@ -128,3 +128,101 @@ def get_node(handler, path, params):
             'not_enrolled': enrolled is None,
         },
     })
+
+# ── Admission ────────────────────────────────────────────────────────────────
+# A project asking "what are my boundaries here?" should get a live answer, not
+# a wiki page someone last edited in March. Everything below is computed from
+# the machine at call time.
+
+RESERVED = {
+    8765: 'hub — reserved on every node, never reassign',
+    22:   'ssh',
+    80:   'http', 443: 'https',
+}
+BAND_SIZE = 10
+BAND_FLOOR, BAND_CEIL = 10020, 10990   # project bands live above the 10000 line
+
+
+# 20204315  _ports_in_use — every bound TCP port on the host
+def _ports_in_use():
+    r = ssh_run("ss -tln | awk 'NR>1{print $4}' | grep -oE '[0-9]+$' | sort -n -u")
+    if not r.get('online'):
+        return []
+    out = []
+    for line in (r.get('output') or '').splitlines():
+        line = line.strip()
+        if line.isdigit():
+            out.append(int(line))
+    return out
+
+
+# 20204316  _free_band — first unused contiguous block, so two projects cannot collide
+def _free_band(used):
+    taken = set(used)
+    start = BAND_FLOOR
+    while start + BAND_SIZE - 1 <= BAND_CEIL:
+        if not any(p in taken for p in range(start, start + BAND_SIZE)):
+            return [start, start + BAND_SIZE - 1]
+        start += BAND_SIZE
+    return None
+
+
+# 20311702  GET /api/admit — the boundaries a new project must work inside
+def get_admit(handler, path, params):
+    """# 20311702  GET /api/admit?project=<name>
+
+    ServerHub owns the port landscape and knows every container. So rather than
+    a project guessing — or a human remembering — it asks, and gets the live
+    answer: what name is free, what band it may bind, what it must never touch.
+    """
+    wanted = (params.get('project') or '').strip().lower()
+    used = _ports_in_use()
+    projects = _projects()
+    existing = sorted(k for k in projects if k != 'unassigned')
+
+    band = _free_band(used)
+    collision = wanted in projects if wanted else None
+
+    handler.send_json({
+        'node':        (_enrollment() or {}).get('node', ''),
+        'machine_id':  _machine_id(),
+        'project':     wanted or None,
+        'name_available': (not collision) if wanted else None,
+        'existing_projects': existing,
+
+        'assigned_band': band,          # [lo, hi] — bind only inside this
+        'ports_in_use':  used,
+
+        # The contract. Same words every project, so the fleet stays queryable.
+        'contract': {
+            'directory': '/srv/docker/<project>',
+            'network':   '<project>-net, declared in the compose file',
+            'container': '<project>-<NN>-<service>-<version>',
+            'labels': {
+                'com.ksg.project': '<project>',
+                'com.ksg.owner':   '<owner>',
+                'com.ksg.role':    '<api|ui|db|worker>',
+                'com.ksg.data':    '/srv/docker/<project>/data',
+            },
+            'data':      'one bind mount at ./data — the only thing needing backup',
+            'secrets':   '.env, gitignored, generated fresh. Never copied between projects.',
+            'git':       'its own repo. The server is never the source of truth.',
+        },
+
+        'forbidden': {
+            'ports':  RESERVED,
+            'rules': [
+                'do not bind outside the assigned band',
+                "do not join the docker network of another project",
+                "do not open the database of another project — cross-project data moves over HTTP",
+                'do not write outside /srv/docker/<project>',
+                "do not reuse secrets belonging to another project",
+                'no docker run — every container comes from a compose file in the project directory',
+            ],
+        },
+
+        # The test. If deleting the project disturbs anything else, it was not isolated.
+        'acceptance': "docker ps --filter label=com.ksg.project=<project> returns "
+                      "every container you own and nothing else; deleting your "
+                      "directory and those containers disturbs nothing else on the host",
+    })
