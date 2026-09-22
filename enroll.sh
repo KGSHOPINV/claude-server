@@ -1,5 +1,9 @@
 #!/usr/bin/env bash
 # ─────────────────────────────────────────────────────────────────────────────
+# STOPGAP — will be replaced by FlareVault provision_node().
+# Provisions Cloudflare from the node, which means the node holds the CF token
+# during the run. Wrong shape long term: FlareVault should provision on the
+# node's behalf against a one-time join token. Use until provision_node() ships.
 # enroll.sh — admit this node to the fleet and give it one public entry point.
 #
 # bootstrap.sh gets the hub running on :8765. This gives the node an identity

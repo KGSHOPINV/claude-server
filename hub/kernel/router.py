@@ -29,6 +29,8 @@ ROUTES = [
     {"code": "20301706", "method": "GET",  "path": "/api/identity",               "prefix": False, "gate": 0, "handler": "get_identity",           "module": "identity"},
     {"code": "20301707", "method": "GET",  "path": "/api/access",                 "prefix": False, "gate": 1, "handler": "get_access",             "module": "identity"},
 
+    {"code": "20301710", "method": "GET",  "path": "/api/auth/provider",          "prefix": False, "gate": 0, "handler": "get_auth_provider",    "module": "identity"},
+
     # ── Status / Docker ───────────────────────────────────────────────────────
     {"code": "20302701", "method": "GET",  "path": "/api/status",                 "prefix": False, "gate": 1, "handler": "get_status",             "module": "status"},
     {"code": "20302702", "method": "GET",  "path": "/api/setup/status",           "prefix": False, "gate": 1, "handler": "get_setup_status",       "module": "status"},
