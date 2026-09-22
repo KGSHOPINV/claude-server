@@ -24,6 +24,11 @@
  * touched: the loader below injects the script tag.
  * Views migrate one at a time and each one is independently reversible.
  */
+/* hidden: true  -> renders, but is not offered in nav or the command palette.
+ * Two reasons a view is hidden: it is a shell (blank, iframe), or it is a
+ * TOMBSTONE — a retired view kept only so a saved workspace holding that pane
+ * still renders an explanation instead of an empty box. Deleting a tombstone
+ * breaks old layouts silently, which is worse than carrying three lines. */
 window.HUB_VIEWS = {
   dashboard:  {icon:'⊞',  title:'Dashboard',  mount:null},
   terminal:   {icon:'⌨',  title:'Terminal',   mount:null},
@@ -41,9 +46,27 @@ window.HUB_VIEWS = {
   files:      {icon:'📁', title:'Files',      mount:null},
   journal:    {icon:'📓', title:'Journal',    mount:null},
   runbooks:   {icon:'▶',  title:'Runbooks',   mount:null},
-  iframe:     {icon:'🔗', title:'Service',    mount:null},
-  blank:      {icon:'○',  title:'New Pane',   mount:null},
+  iframe:     {icon:'🔗', title:'Service',    mount:null, hidden:true},
+  blank:      {icon:'○',  title:'New Pane',   mount:null, hidden:true},
   federation: {icon:'🛰', title:'Federation', mount:null},
+
+  /* Registered 2026-09-22. All nine rendered from the switch but had no entry
+   * here, so a third of what the app can display was unreachable from the nav
+   * — findable only by already knowing the view key. */
+  survey:     {icon:'🔍', title:'Survey',       mount:null},
+  guide:      {icon:'📖', title:'Guide',        mount:null},
+  ports:      {icon:'🔌', title:'Ports',        mount:null},
+  remote:     {icon:'🌍', title:'Remote Access',mount:null},
+  activity:   {icon:'📜', title:'Activity',     mount:null},
+  receipt:    {icon:'🧾', title:'Receipt',      mount:null},
+  /* Two separate chat implementations, both live and both working: `chat`
+   * (sendChat) and `aichat` (sendAiChat). Registering both rather than
+   * silently picking one — which survives is a product decision. */
+  aichat:     {icon:'💬', title:'Hub AI',       mount:null},
+
+  /* Tombstones — retired, hidden from nav, still render their explanation. */
+  platform:   {icon:'🔮', title:'Platform',    mount:null, hidden:true},
+  tasks:      {icon:'📋', title:'Task Docket', mount:null, hidden:true},
 };
 
 /* Resolve a migrated view's mount function, or null to fall back to the

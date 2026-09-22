@@ -1888,7 +1888,7 @@ function reRenderWorkspace(wsId) {
 function openPicker(wsId, paneId, btn) {
   S.pickerTarget = {wsId, paneId};
   const picker = document.getElementById('picker');
-  const viewList = Object.entries(VIEW_DEFS).filter(([k])=>k!=='blank').map(([k,v])=>
+  const viewList = Object.entries(VIEW_DEFS).filter(([,v])=>!v.hidden).map(([k,v])=>
     `<div class="pick-item" onclick="setPaneView('${wsId}','${paneId}','${k}')">${v.icon} ${v.title}</div>`
   ).join('');
   const svcsHtml = S.services.filter(s=>s.installed!==false&&!s.noui).slice(0,8).map(s => {
@@ -2069,19 +2069,6 @@ function mountPaneContent(wsId, paneId, viewType, viewConfig, body) {
     case 'browser':
       body.innerHTML = `<div class="stub-view"><div class="stub-icon">🌐</div><div class="stub-title">Browser</div><div class="stub-msg">Use your real browser. Services are accessible via the Services nav — click any to open in an iframe pane.</div></div>`;
       break;
-    case '_browser_old':
-      body.innerHTML = `<div style="display:flex;flex-direction:column;height:100%">
-        <div style="display:flex;gap:4px;padding:4px 6px;background:var(--panel2);border-bottom:1px solid var(--border);flex-shrink:0;align-items:center">
-          <button onclick="browserNav('${key}','back')"  class="btn" style="padding:2px 8px;font-size:12px">←</button>
-          <button onclick="browserNav('${key}','fwd')"   class="btn" style="padding:2px 8px;font-size:12px">→</button>
-          <button onclick="browserNav('${key}','reload')" class="btn" style="padding:2px 8px;font-size:12px">↻</button>
-          <input id="burl-${key}" value="${viewConfig.url||''}" placeholder="https://… or :PORT for local" style="flex:1;background:var(--bg);border:1px solid var(--border2);border-radius:3px;color:var(--text);font-family:var(--mono);font-size:11px;padding:3px 8px;min-width:0" onkeydown="if(event.key==='Enter')loadBrowser('${key}')">
-          <button onclick="loadBrowser('${key}')" class="btn p" style="padding:3px 10px;font-size:11px">Go</button>
-        </div>
-        <iframe id="bframe-${key}" style="flex:1;border:none;background:#fff" sandbox="allow-same-origin allow-scripts allow-forms allow-popups allow-pointer-lock"></iframe>
-      </div>`;
-      if (viewConfig.url) loadBrowser(key);
-      break;
     case 'survey':
       body.innerHTML = `<div class="view-survey">
         <div class="sv-hdr">
@@ -2158,16 +2145,6 @@ function mountPaneContent(wsId, paneId, viewType, viewConfig, body) {
 
     case 'journal':
       body.innerHTML = `<div class="stub-view"><div class="stub-icon">📓</div><div class="stub-title">Journal</div><div class="stub-msg">Use the Activity view instead — it already captures everything that happens on the server and supports manual notes.</div><button class="btn p" onclick="openView('activity')" style="margin-top:12px">Open Activity →</button></div>`;
-      break;
-    case '_journal_old':
-      body.innerHTML = `<div class="view-journal">
-        <div class="jnl-bar">
-          <input id="jnl-inp-${key}" class="vs-inp" placeholder="Add a journal entry…" style="flex:1" onkeydown="if(event.key==='Enter')addJournalEntry('${key}')">
-          <button onclick="addJournalEntry('${key}')" class="btn p" style="padding:3px 12px">Add</button>
-        </div>
-        <div id="jnl-list-${key}" style="overflow-y:auto;flex:1;padding:4px 0"></div>
-      </div>`;
-      loadJournal(key);
       break;
 
     case 'runbooks':
@@ -4307,34 +4284,7 @@ async function runWTerm(id) {
   out.scrollTop = out.scrollHeight;
 }
 
-// ── BROWSER PANE ─────────────────────────────────────────────────────────────
-function loadBrowser(key) {
-  let url = document.getElementById(`burl-${key}`)?.value?.trim(); if (!url) return;
-  // Short form: :3000 → route as local service
-  if (/^:\d+/.test(url)) { const port=url.slice(1).split('/')[0]; url=`http://${SRV}:${port}/${url.slice(port.length+1)}`; }
-  if (!url.startsWith('http')) url='https://'+url;
-  document.getElementById(`burl-${key}`).value = url;
-  const frame = document.getElementById(`bframe-${key}`); if (!frame) return;
-  try {
-    const u = new URL(url);
-    const isLocal = u.hostname===SRV||u.hostname==='localhost'||u.hostname==='127.0.0.1'||u.hostname===(S.server_info?.local_ip||'');
-    if (isLocal) {
-      const port = u.port || (u.protocol==='https:'?'443':'80');
-      frame.src = `${API}/proxy/${port}/${u.pathname.slice(1)}${u.search}`;
-    } else {
-      frame.src = '';
-      frame.srcdoc = `<html><body style="background:#0d1117;color:#cdd9e5;font-family:system-ui;display:flex;height:100%;align-items:center;justify-content:center;flex-direction:column;gap:12px;margin:0;padding:20px;text-align:center"><p style="opacity:.6;font-size:13px;max-width:320px">External sites block embedding (X-Frame-Options). Use the link below to open it.</p><a href="${url}" target="_blank" style="background:#238636;color:#fff;padding:8px 18px;border-radius:6px;text-decoration:none;font-size:13px">Open ${u.hostname} in new tab ↗</a></body></html>`;
-    }
-  } catch { frame.src = url; }
-}
-function browserNav(key, dir) {
-  const f = document.getElementById(`bframe-${key}`); if (!f) return;
-  if (dir==='back')   try{f.contentWindow.history.back();}catch{}
-  if (dir==='fwd')    try{f.contentWindow.history.forward();}catch{}
-  if (dir==='reload') try{f.contentWindow.location.reload();}catch{f.src=f.src;}
-}
-
-// ── LOG TAIL WIDGET ───────────────────────────────────────────────────────────
+// ──────────────────────────────────────────────────────────
 async function tailLog(id) {
   const name = document.getElementById(`ltname-${id}`)?.value?.trim(); if (!name) return;
   const lines = document.getElementById(`ltlines-${id}`)?.value || '50';
@@ -5369,31 +5319,13 @@ function filesNav(key, rel) {
   else loadFiles(key, cur+'/'+rel);
 }
 
-// ── JOURNAL ───────────────────────────────────────────────────────────────────
-async function loadJournal(key) {
-  const el = document.getElementById(`jnl-list-${key}`); if(!el) return;
-  const r = await fetch(API+'/api/journal'); const entries = await r.json();
-  if(!entries.length){el.innerHTML='<div style="padding:16px;color:var(--muted);font-size:11px;text-align:center">No journal entries yet</div>';return;}
-  el.innerHTML = entries.map(e=>`<div class="jnl-row">
-    <div class="jnl-ts">${(e.ts||'').replace('T',' ').slice(0,16)}${e.user?' · '+e.user:''}</div>
-    <span class="jnl-type ${e.type}">${e.type}</span>
-    <span class="jnl-body">${e.body}</span>
-  </div>`).join('');
-}
-
-async function addJournalEntry(key) {
-  const inp = document.getElementById(`jnl-inp-${key}`); if(!inp||!inp.value.trim()) return;
-  await fetch(API+'/api/journal',{method:'POST',headers:{'Content-Type':'application/json','X-Hub-Token':HUB_TOKEN},body:JSON.stringify({type:'manual',body:inp.value.trim(),user:HUB_USER})});
-  inp.value=''; loadJournal(key);
-}
-
-// ── COMMAND PALETTE ───────────────────────────────────────────────────────────
+// ──────────────────────────────────────────────────────────
 let _cpActive = 0, _cpFiltered = [];
 
 function buildCmdIndex() {
   const items = [];
   // Views
-  Object.entries(VIEW_DEFS).filter(([k])=>k!=='blank'&&k!=='iframe').forEach(([k,v])=>{
+  Object.entries(VIEW_DEFS).filter(([,v])=>!v.hidden).forEach(([k,v])=>{
     items.push({grp:'Views', icon:v.icon, label:`Open ${v.title}`, hint:'view', action:()=>openView(k), kw:[k,v.title.toLowerCase()]});
   });
   // Services
@@ -5929,240 +5861,7 @@ function renderGuideView(body) {
   window._guideAct = GUIDE_FEATURES.map(f=>f.action);
 }
 
-// ── PLATFORM VIEW ─────────────────────────────────────────────────────────────
-async function renderPlatformView(key) {
-  const root = document.getElementById('vpf-' + key);
-  if (!root) return;
 
-  // ── 1. vigil-node presence — check port data for :7777 ──────────────────
-  let vigilLive = false;
-  let vigilPort = null;
-  try {
-    const pd = await fetch(API+'/api/ports', {headers:{'X-Hub-Token':HUB_TOKEN}}).then(r=>r.json());
-    vigilPort = (pd.ports||[]).find(p => p.port===7777);
-    vigilLive = !!vigilPort;
-  } catch {}
-
-  // ── 2. metaforge instances — scan service list and docker ps ────────────
-  const svcs    = S.services || [];
-  const mfSvcs  = svcs.filter(s => {
-    const n = (s.name||'').toLowerCase();
-    return n.includes('metaforge') || n.includes('mforge') || n.startsWith('mf-');
-  });
-  // also check running containers name from docker ps via /api/run
-  let mfExtra = [];
-  try {
-    const r = await fetch(API+'/api/run', {
-      method:'POST',
-      headers:{'Content-Type':'application/json','X-Hub-Token':HUB_TOKEN},
-      body: JSON.stringify({cmd:"docker ps --format '{{.Names}}\t{{.Ports}}\t{{.Status}}' | grep -i metaforge || echo ''"})
-    });
-    if (r.ok) {
-      const d = await r.json();
-      const lines = (d.output||'').trim().split('\n').filter(l=>l&&!l.startsWith('TOTP'));
-      mfExtra = lines.map(l => {
-        const parts = l.split('\t');
-        return {name: parts[0]||'', ports: parts[1]||'', status: parts[2]||''};
-      }).filter(x=>x.name);
-    }
-  } catch {}
-
-  const allMf = [...mfSvcs.map(s=>({name:s.name, ports:s.port?`:${s.port}`:'', status:s.running?'running':'stopped'})), ...mfExtra];
-  // dedup by name
-  const seenMf = new Set();
-  const mfInstances = allMf.filter(m => { if (seenMf.has(m.name)) return false; seenMf.add(m.name); return true; });
-
-  // ── render ───────────────────────────────────────────────────────────────
-  const escH = s => (s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
-
-  const vigilStatus = vigilLive
-    ? `<span class="pf-dot pf-dot-live"></span> vigil-node live · port 7777`
-    : `<span class="pf-dot pf-dot-off"></span> not detected`;
-
-  const mfStatus = mfInstances.length > 0
-    ? `<span class="pf-dot pf-dot-live"></span> ${mfInstances.length} instance${mfInstances.length!==1?'s':''} found`
-    : `<span class="pf-dot pf-dot-off"></span> no instances`;
-
-  const mfInstancesHtml = mfInstances.length > 0
-    ? mfInstances.map(m => `
-        <div class="pf-inst-row">
-          <span class="pf-dot ${m.status==='running'?'pf-dot-live':'pf-dot-off'}"></span>
-          <span class="pf-inst-name">${escH(m.name)}</span>
-          <span class="pf-inst-port">${escH(m.ports)}</span>
-          <span style="font-size:10px;color:var(--muted);margin-left:auto">${escH(m.status)}</span>
-        </div>`).join('')
-    : `<div class="pf-none">No Metaforge containers detected on this server</div>`;
-
-  root.innerHTML = `
-    <div class="pf-header">
-      <div class="pf-hdr-left">
-        <span style="font-size:20px">🔮</span>
-        <span class="pf-title">Platform Tools</span>
-        <span class="pf-mode">standalone mode</span>
-      </div>
-      <button class="btn btn-sm" onclick="renderPlatformView('${key}')">↺ Refresh</button>
-    </div>
-
-    <div class="pf-notice">
-      <span class="pf-notice-icon">ℹ</span>
-      <span>Hub is running in standalone mode. FlareVault provides the port authority + topology layer when connected.
-      Metaforge can be deployed from this panel. Both integrate when live — hub honors what they report.</span>
-    </div>
-
-    <div class="pf-grid">
-
-      <!-- ── FLAREVAULT ─────────────────────────────────── -->
-      <div class="pf-card">
-        <div class="pf-card-hdr">
-          <div class="pf-card-name"><span class="pf-card-icon">🔒</span> FlareVault</div>
-          <div class="pf-card-status">${vigilStatus}</div>
-        </div>
-        <div class="pf-desc">
-          Portable encrypted vault + Cloudflare protocol layer + living topology map.
-          Runs from USB or any machine with Python 3.11+. Nothing cloud-dependent to unlock it.
-        </div>
-        <div class="pf-tags">
-          <span class="pf-tag">AES-GCM vault</span>
-          <span class="pf-tag">CF tunnel</span>
-          <span class="pf-tag">topology map</span>
-          <span class="pf-tag">vigil-node</span>
-        </div>
-        <div class="pf-divider"></div>
-        <div class="pf-rows">
-          <div class="pf-row">
-            <span class="pf-row-label">Connection</span>
-            <span class="pf-row-value dim">not connected</span>
-          </div>
-          <div class="pf-row">
-            <span class="pf-row-label">vigil-node</span>
-            <span class="pf-row-value">${vigilLive?`7777 · ${escH(vigilPort?.service||'vigil-node')}`:'— not running'}</span>
-          </div>
-          <div class="pf-row">
-            <span class="pf-row-label">Port registry</span>
-            <span class="pf-row-value dim">FlareVault owns this when live</span>
-          </div>
-          <div class="pf-row">
-            <span class="pf-row-label">CF state</span>
-            <span class="pf-row-value dim">LOCAL → SERVER → TUNNEL → LIVE</span>
-          </div>
-        </div>
-        <div class="pf-divider"></div>
-        <div style="font-size:10px;color:var(--muted);font-weight:600;margin-bottom:3px;letter-spacing:.3px;text-transform:uppercase">Three port layers</div>
-        <div class="pf-rows">
-          <div class="pf-row">
-            <span class="pf-row-label">Docker internal</span>
-            <span class="pf-row-value dim">set by the app · never changes</span>
-          </div>
-          <div class="pf-row">
-            <span class="pf-row-label">Proxy (Traefik)</span>
-            <span class="pf-row-value dim">domain/path → Docker port</span>
-          </div>
-          <div class="pf-row">
-            <span class="pf-row-label">Node port bands</span>
-            <span class="pf-row-value dim">dedicated range per project · FV owns registry</span>
-          </div>
-        </div>
-        <div class="pf-actions">
-          <button class="btn btn-sm" onclick="openView('ports')" title="Open Port Landscape">📡 Port Landscape</button>
-          <a class="btn btn-sm" href="https://github.com/KGSHOPINV/flarevault" target="_blank" style="text-decoration:none">GitHub ↗</a>
-        </div>
-      </div>
-
-      <!-- ── METAFORGE ──────────────────────────────────── -->
-      <div class="pf-card">
-        <div class="pf-card-hdr">
-          <div class="pf-card-name"><span class="pf-card-icon">⚗</span> Metaforge</div>
-          <div class="pf-card-status">${mfStatus}</div>
-        </div>
-        <div class="pf-desc">
-          Universal system-building framework. Self-aware database.
-          One Postgres instance that knows everything about itself — 86 meta tables across 4 schemas.
-        </div>
-        <div class="pf-tags">
-          <span class="pf-tag">86 tables</span>
-          <span class="pf-tag">Postgres</span>
-          <span class="pf-tag">Redis</span>
-          <span class="pf-tag">SurrealDB</span>
-          <span class="pf-tag">multi-deploy</span>
-        </div>
-        <div class="pf-divider"></div>
-        <div class="pf-rows">
-          <div class="pf-row">
-            <span class="pf-row-label">Instances on server</span>
-            <span class="pf-row-value">${mfInstances.length > 0 ? mfInstances.length : '0'}</span>
-          </div>
-          <div class="pf-row">
-            <span class="pf-row-label">Deploy mode</span>
-            <span class="pf-row-value dim">multi-tenant · isolated · substrate</span>
-          </div>
-          <div class="pf-row">
-            <span class="pf-row-label">MCP endpoint</span>
-            <span class="pf-row-value dim">— planned</span>
-          </div>
-          <div class="pf-row">
-            <span class="pf-row-label">Wizard</span>
-            <span class="pf-row-value dim">python wizard/init.py</span>
-          </div>
-        </div>
-        <div class="pf-divider"></div>
-        <div style="font-size:10px;color:var(--muted);font-weight:600;margin-bottom:5px;letter-spacing:.3px;text-transform:uppercase">Instances</div>
-        <div class="pf-instances">${mfInstancesHtml}</div>
-        <div class="pf-actions">
-          <button class="btn btn-sm" title="Clone and run wizard/init.py — coming soon" onclick="alert('Deploy wizard coming soon. Clone github.com/KGSHOPINV/metaforge and run: python wizard/init.py')">🚀 Deploy Instance</button>
-          <a class="btn btn-sm" href="https://github.com/KGSHOPINV/metaforge" target="_blank" style="text-decoration:none">GitHub ↗</a>
-        </div>
-      </div>
-
-    </div>
-
-    <!-- ── ECOSYSTEM OVERVIEW ───────────────────────────── -->
-    <div class="pf-ecosystem">
-      <div class="pf-eco-label">Ecosystem</div>
-      <div class="pf-eco-nodes">
-        <div class="pf-eco-node live">
-          <span class="pf-dot pf-dot-live"></span>
-          <span>Hub</span>
-          <span style="font-size:9px;color:var(--muted)">windshield</span>
-        </div>
-        <span class="pf-eco-arrow">→</span>
-        <div class="pf-eco-node">
-          <span class="pf-dot pf-dot-off"></span>
-          <span>FlareVault</span>
-          <span style="font-size:9px;color:var(--muted)">port authority + topology</span>
-        </div>
-        <span class="pf-eco-arrow">→</span>
-        <div class="pf-eco-node ${mfInstances.length>0?'live':''}">
-          <span class="pf-dot ${mfInstances.length>0?'pf-dot-live':'pf-dot-off'}"></span>
-          <span>Metaforge</span>
-          <span style="font-size:9px;color:var(--muted)">data substrate</span>
-        </div>
-        <span class="pf-eco-arrow">→</span>
-        <div class="pf-eco-node">
-          <span class="pf-dot pf-dot-off"></span>
-          <span>server-kit</span>
-          <span style="font-size:9px;color:var(--muted)">install catalog</span>
-        </div>
-      </div>
-    </div>
-  `;};
-
-// ── TASKS / DOCKET VIEW ────────────────────────────────────────────────────────
-const TASK_DOCKET = [
-  { status:'done',  label:'Nightly Maintenance Agent',   desc:'Python agent runs nightly — checks containers, disk, cert expiry, sends ntfy alert with full report.', tags:['automation','monitoring'] },
-  { status:'done',  label:'TOTP Gate System',             desc:'2FA over all /api/run shell calls. Gate modal auto-pops on 403. 30-min sessions. Works on desktop + mobile.', tags:['security'] },
-  { status:'done',  label:'Adminer, Mailpit, Wiki.js',    desc:'All three services deployed and running. Marked as installed in hub services list.', tags:['services'] },
-  { status:'done',  label:'Portainer Fix',                desc:'Fresh DB reset — admin setup completed. Watchtower pinned to 1.7.1 with DOCKER_API_VERSION=1.41.', tags:['infra'] },
-  { status:'done',  label:'Hub as systemd Service',       desc:'Hub runs as systemd user service — auto-restarts on crash, survives SSH disconnection.', tags:['infra'] },
-  { status:'done',  label:'PWA + Desktop Shortcut',       desc:'Manifest.json served — hub installable as a PWA on Chrome/Edge. Desktop .url shortcut + launcher.', tags:['ux'] },
-  { status:'next',  label:'Service Tokens',               desc:'Named long-lived tokens with role scope — separate AI/n8n identity from human TOTP sessions.', tags:['security','ai'] },
-  { status:'next',  label:'Update Hub Button',            desc:'One-click git pull + hub restart from the browser Settings view.', tags:['ux','ops'] },
-  { status:'next',  label:'n8n Health Alert → ntfy',      desc:'n8n workflow that pings ntfy when any monitored service goes down.', tags:['automation','monitoring'] },
-  { status:'next',  label:'Wire AI Key into Setup',       desc:'Install script prompts for API key, stores in hub_config — AI chat works out of the box.', tags:['ai'] },
-  { status:'idea',  label:'Supabase Install',             desc:'Full Postgres + auth + realtime stack. Large install — spin up when needed.', tags:['db'] },
-  { status:'idea',  label:'MinIO Install',                desc:'S3-compatible object storage — useful for backups and AI asset storage.', tags:['storage'] },
-  { status:'idea',  label:'Tailscale Deep Integration',   desc:'Show Tailscale node map, peer list, and MagicDNS status in the hub Infra Map.', tags:['network'] },
-  { status:'idea',  label:'Mobile APK (TWA)',             desc:'Wrap mobile.html as a Trusted Web Activity APK for Android — proper homescreen app.', tags:['mobile'] },
-];
 
 // ── Remote Access view ────────────────────────────────────────────────────────
 async function renderRemoteView(body) {
@@ -6250,33 +5949,6 @@ async function remoteTunnelStop() {
 
 function remCopy(url) {
   navigator.clipboard.writeText(url).then(() => showToast('URL copied ✓'));
-}
-
-function renderTasksView(body) {
-  const ICONS = { done:'✅', next:'🔵', idea:'💡' };
-  const LABELS = { done:'Done', next:'Up Next', idea:'Ideas' };
-  const groups = ['done','next','idea'];
-  body.innerHTML = `<div class="guide-wrap">
-    <div class="guide-hero" style="padding:24px 0 20px">
-      <div class="guide-hero-icon">📋</div>
-      <div class="guide-hero-title">Task Docket</div>
-      <div class="guide-hero-sub">What's been built, what's coming, what's on the ideas list</div>
-    </div>
-    ${groups.map(g => {
-      const items = TASK_DOCKET.filter(t=>t.status===g);
-      return `<div class="guide-section-title">${ICONS[g]} ${LABELS[g]} — ${items.length} item${items.length===1?'':'s'}</div>
-        <div style="display:flex;flex-direction:column;gap:8px;margin-bottom:8px">
-          ${items.map(t=>`<div class="guide-netlify" style="cursor:default;opacity:${g==='done'?'0.75':'1'}">
-            <div style="font-size:20px">${ICONS[t.status]}</div>
-            <div style="flex:1">
-              <div style="font-size:12px;font-weight:600;color:var(--text)">${t.label}</div>
-              <div style="font-size:11px;color:var(--muted);margin-top:2px;line-height:1.5">${t.desc}</div>
-              <div class="guide-card-tags" style="margin-top:6px">${t.tags.map(tg=>`<span class="guide-tag">${tg}</span>`).join('')}</div>
-            </div>
-          </div>`).join('')}
-        </div>`;
-    }).join('')}
-  </div>`;
 }
 
 // ── SERVER INTELLIGENCE LAYER ─────────────────────────────────────────────────
