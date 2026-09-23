@@ -277,7 +277,11 @@ def get_status(force=False):
                 'uptime': parts[0].strip(),
                 'ram_used_mb': int(ram[0]),
                 'ram_total_mb': int(ram[1]),
-                # Root FS values kept for backward compat with header stat
+                # Root FS only. Kept under these names for backward compat with
+                # the header stat -- but on a machine with a second disk they
+                # describe one filesystem, not the machine. ksgcohub reported
+                # "98G" for months while carrying 556G, because nothing added
+                # up the mounts. The machine-wide figures are below.
                 'disk_used': disk[0],
                 'disk_total': disk[1],
                 'disk_pct': disk[2],
@@ -287,6 +291,21 @@ def get_status(force=False):
                 'disks': disks,
                 'unattached_drives': unattached,
             }
+            # Machine-wide storage, summed across REAL filesystems only.
+            # /api/storage was listing tmpfs, /run and /dev/shm alongside real
+            # disks, so even the detailed view could not be totalled honestly.
+            try:
+                from kernel import storage as _st
+                ms = _st.landscape()['mounts']
+                data['storage_total_gb'] = round(sum(m['size_gb'] for m in ms), 1)
+                data['storage_used_gb']  = round(sum(m['used_gb'] for m in ms), 1)
+                data['storage_avail_gb'] = round(sum(m['avail_gb'] for m in ms), 1)
+                data['storage_pct'] = (round(100 * data['storage_used_gb']
+                                             / data['storage_total_gb'])
+                                       if data['storage_total_gb'] else 0)
+                data['storage_mounts'] = ms
+            except Exception:
+                pass   # a missing total is better than a wrong one
         except Exception as e:
             data = {'online': True, 'parse_error': str(e), 'raw': r['output']}
 
