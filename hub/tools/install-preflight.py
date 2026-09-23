@@ -113,11 +113,19 @@ def check_backups_running():
 
 
 def check_reclamation():
-    rc, out = sh('systemctl list-timers --all --no-pager 2>/dev/null | '
-                 'grep -ciE "prune|docker-clean"')
-    if out.isdigit() and int(out) > 0:
-        return OK, 'a reclamation timer is registered'
-    rc, out = sh('crontab -l 2>/dev/null | grep -ciE "prune|docker system"')
+    """Checks BOTH scopes. The first version of this looked only at system
+    timers and matched only "prune" -- so it reported missing while a user
+    timer named hub-reclaim was installed and scheduled. The assertion was
+    wrong, not the machine, which is the failure mode assertions are supposed
+    to remove. Hence: both scopes, and match the words actually used."""
+    pat = 'prune|reclaim|docker-clean'
+    for scope in ('--user ', ''):
+        rc, out = sh('systemctl %slist-timers --all --no-pager 2>/dev/null | '
+                     'grep -ciE "%s"' % (scope, pat))
+        if out.isdigit() and int(out) > 0:
+            where = 'user' if scope else 'system'
+            return OK, 'a reclamation timer is registered (%s scope)' % where
+    rc, out = sh('crontab -l 2>/dev/null | grep -ciE "%s|docker system"' % pat)
     if out.isdigit() and int(out) > 0:
         return OK, 'a reclamation cron entry exists'
     cache = st.docker_storage()['build_cache']
