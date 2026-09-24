@@ -26,9 +26,20 @@
  */
 /* hidden: true  -> renders, but is not offered in nav or the command palette.
  * Two reasons a view is hidden: it is a shell (blank, iframe), or it is a
- * TOMBSTONE — a retired view kept only so a saved workspace holding that pane
- * still renders an explanation instead of an empty box. Deleting a tombstone
- * breaks old layouts silently, which is worse than carrying three lines. */
+ * TOMBSTONE -- a retired view kept so that opening its key still explains the
+ * retirement instead of showing an empty box.
+ *
+ * CORRECTION (2026-09-23): the original rationale here claimed tombstones
+ * protect "a saved workspace holding that pane". They do not, because layout
+ * is NOT persisted -- 18 localStorage keys in app.html cover theme, accent,
+ * bookmarks, stickies and the gate token, and none cover workspaces, panes or
+ * the active tab. Every session starts from createWorkspace('Home') at
+ * app.html:6166.
+ *
+ * A justification that names a mechanism which does not exist is the same
+ * defect as a document that disagrees with the machine -- it just hides in a
+ * comment. The tombstones still earn their three lines, for the honest reason
+ * above. Once layout IS persisted, the original reason becomes true too. */
 window.HUB_VIEWS = {
   dashboard:  {icon:'⊞',  title:'Dashboard',  mount:null},
   terminal:   {icon:'⌨',  title:'Terminal',   mount:null},
