@@ -13,6 +13,7 @@ from datetime import datetime
 from kernel.db   import db_conn
 from kernel.db  import db_conn as _db_conn
 from kernel.log import log_activity as _log, _ntfy_send as _ntfy
+from kernel import auth as _auth
 from kernel.auth import (
     check_auth, gate_check, gate_create,
     _totp_hotp, totp_verify, totp_new_secret, totp_verify_secret, totp_uri,
@@ -169,12 +170,10 @@ def post_auth_login(handler, path, params, body):
     user = _user_auth(username, password)
     if user:
         token = secrets.token_hex(32)
-        with _users_lock:
-            _sessions[token] = {
-                'user': username,
-                'role': user.get('role', 'admin'),
-                'created': datetime.now().isoformat(),
-            }
+        # Write-through to SQLite so the session survives a restart. This used
+        # to be a bare dict assignment, which is why every deploy logged
+        # everyone out.
+        _auth.session_put(token, username, user.get('role', 'admin'), via=door)
         # The hub previously recorded NOTHING about logins, successful or
         # failed, on a box reachable from the internet. Both are now events.
         prior_fails = _fail_counts.pop((username, ip), 0)
@@ -212,7 +211,7 @@ def post_auth_login(handler, path, params, body):
 def post_auth_logout(handler, path, params, body):
     token = body.get('token', '')
     with _users_lock:
-        sess = _sessions.pop(token, None)
+        sess = _auth.session_pop(token)
     if sess:
         _log(_db_conn, f'logout: {sess.get("user", "?")}', 'auth', 'login',
              f'ip={_client_ip(handler)}', 'info')

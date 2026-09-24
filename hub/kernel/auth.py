@@ -14,10 +14,108 @@ import threading
 import time
 
 # Shared session state
-_sessions = {}          # token → {user, created}
+_sessions = {}          # token → {user, role, created, expires}
 _users_lock = threading.Lock()
 _gate_sessions = {}     # token → {level, user, expires}
 _gate_lock = threading.Lock()
+
+# ── Session persistence ───────────────────────────────────────────────────────
+# _sessions used to be ONLY this dict, so every hub restart logged everyone out.
+# That is not a cosmetic annoyance: it is what made the Runbooks view -- 48
+# executable steps, the feature that exists so an operator can run routine work
+# without help -- unreachable in practice. You would land on the login screen
+# every time the hub was deployed or restarted and give up.
+#
+# The dict stays as the READ path, because a session check happens on nearly
+# every request and SQLite on each one would be silly. SQLite is the write-
+# through and the survivor: changes go to both, and the dict is rehydrated from
+# the table at startup.
+#
+# Gate tokens are deliberately NOT persisted. A gate is short-lived proof for a
+# dangerous operation (shell, vault, TOTP); surviving a restart is exactly what
+# it should not do.
+SESSION_TTL_DAYS = 30
+
+_loaded = False
+
+
+def _now():
+    return time.time()
+
+
+def _iso(ts):
+    return __import__('datetime').datetime.fromtimestamp(ts).isoformat()
+
+
+# 20200309  _session_load — hydrate the dict from SQLite, once
+def _session_load():
+    """Best effort. A hub that cannot read its session table must still serve
+    the login page, so every failure here degrades to 'no sessions' rather
+    than refusing to start."""
+    global _loaded
+    if _loaded:
+        return
+    _loaded = True
+    try:
+        from kernel.db import db_conn
+        conn = db_conn()
+        now = _iso(_now())
+        conn.execute("DELETE FROM sessions WHERE expires < ?", (now,))
+        rows = conn.execute(
+            "SELECT token, user, role, created, expires, via FROM sessions").fetchall()
+        conn.commit()
+        with _users_lock:
+            for r in rows:
+                _sessions[r['token']] = {
+                    'user': r['user'], 'role': r['role'],
+                    'created': r['created'], 'expires': r['expires'],
+                    'via': r['via'] or 'local',
+                }
+        conn.close()
+    except Exception:
+        pass
+
+
+# 20200310  session_put — create a session that survives a restart
+def session_put(token, user, role='admin', via='local'):
+    expires = _iso(_now() + SESSION_TTL_DAYS * 86400)
+    rec = {'user': user, 'role': role, 'created': _iso(_now()),
+           'expires': expires, 'via': via}
+    with _users_lock:
+        _sessions[token] = rec
+    try:
+        from kernel.db import db_conn
+        conn = db_conn()
+        conn.execute(
+            "INSERT OR REPLACE INTO sessions (token,user,role,created,expires,via) "
+            "VALUES (?,?,?,?,?,?)",
+            (token, user, role, rec['created'], expires, via))
+        conn.commit()
+        conn.close()
+    except Exception:
+        pass   # an unpersisted session still works until the next restart
+    return rec
+
+
+# 20200314  session_pop — end a session in both places
+def session_pop(token):
+    with _users_lock:
+        rec = _sessions.pop(token, None)
+    try:
+        from kernel.db import db_conn
+        conn = db_conn()
+        conn.execute("DELETE FROM sessions WHERE token = ?", (token,))
+        conn.commit()
+        conn.close()
+    except Exception:
+        pass
+    return rec
+
+
+def session_count():
+    _session_load()
+    with _users_lock:
+        return len(_sessions)
 
 # ── Cloudflare Access (FlareHub door) ──────────────────────────────────────────
 # Two doors, one identity:
@@ -82,9 +180,16 @@ def check_auth(handler):
         for part in qs.split('&'):
             if part.startswith('token='):
                 token = part[6:]
+    _session_load()            # first call after a restart refills the dict
     with _users_lock:
         sess = _sessions.get(token)
     if sess:
+        # An expired row that survived the startup sweep (a long-running
+        # process crossing the TTL) must not authenticate.
+        exp = sess.get('expires')
+        if exp and exp < _iso(_now()):
+            session_pop(token)
+            return None
         return sess
     # Second door: Cloudflare Access already vetted this user with Google, so do
     # not ask for a password again. Grants a user-level session only -- gate 2/3
