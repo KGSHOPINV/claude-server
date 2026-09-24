@@ -81,6 +81,15 @@ ROUTES = [
 
     {"code": "20311702", "method": "GET",  "path": "/api/admit",                  "prefix": False, "gate": 1, "handler": "get_admit",            "module": "node"},
 
+    # ── registry (module 13) — what a project talks to ───────────────────────
+    # Gate 1: a project must be authenticated to file a claim, but reading the
+    # registry is gate 1 too rather than 0 -- who runs what on a machine is not
+    # public information.
+    {"code": "20313701", "method": "GET",  "path": "/api/registry",               "prefix": False, "gate": 1, "handler": "get_registry",         "module": "registry"},
+    {"code": "20313702", "method": "GET",  "path": "/api/registry/",              "prefix": True,  "gate": 1, "handler": "get_registry_project", "module": "registry"},
+    {"code": "20313703", "method": "POST", "path": "/api/registry/",              "prefix": True,  "gate": 1, "handler": "post_registry_project","module": "registry"},
+    {"code": "20313704", "method": "POST", "path": "/api/ack/",                   "prefix": True,  "gate": 1, "handler": "post_ack",             "module": "registry"},
+
     # ── Mesh (module 12) — hub-and-spoke: nodes report UP, never laterally ──
     {"code": "20312701", "method": "POST", "path": "/api/heartbeat",              "prefix": False, "gate": 0, "handler": "post_heartbeat",       "module": "mesh"},
     {"code": "20312702", "method": "POST", "path": "/api/mesh/register",          "prefix": False, "gate": 0, "handler": "post_mesh_register",   "module": "mesh"},
@@ -214,8 +223,16 @@ def resolve(method, path):
     r = _EXACT.get((method, path))
     if r is not None:
         return r
+    # METHOD MATTERS HERE. This loop used to match on path alone, so a POST to
+    # a prefix declared GET dispatched into the GET handler -- which then blew
+    # up on arity, because GET handlers take (handler, path, params) and POST
+    # handlers take (handler, path, params, body).
+    #
+    # It went unnoticed because no prefix had both verbs until /api/registry/
+    # did. Every prefix route was effectively method-agnostic, including
+    # /proxy/ and /api/docker/action/.
     for r in _PREFIX:
-        if path.startswith(r['path']):
+        if r['method'] == method and path.startswith(r['path']):
             return r
     return None
 
