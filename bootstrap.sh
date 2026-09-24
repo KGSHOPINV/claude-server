@@ -8,6 +8,8 @@
 #   curl -fsSL https://raw.githubusercontent.com/KGSHOPINV/claude-server/master/bootstrap.sh | bash
 #   — or —
 #   git clone https://github.com/KGSHOPINV/claude-server ~/hub && bash ~/hub/bootstrap.sh
+#
+#   bash ~/hub/bootstrap.sh --check     is this node finished? changes nothing
 # ─────────────────────────────────────────────────────────────────────────────
 set -euo pipefail
 
@@ -28,6 +30,28 @@ ${BOLD}${CYAN}  ╔════════════════════�
   ║   Hub will be live at :8765          ║
   ╚══════════════════════════════════════╝${RESET}
 "
+
+# ── --check: converge, do not install ────────────────────────────────────────
+# An installer that can only run on a bare machine is a one-shot script. This
+# one answers "is this node finished?" on any box, at any time, changing
+# nothing -- so the gap between what was documented and what was done stops
+# being invisible.
+if [ "${1:-}" = "--check" ]; then
+  HUB_DIR="${HUB_DIR:-$HOME/hub}"
+  exec python3 "$HUB_DIR/hub/tools/install-preflight.py" "${2:---strict}"
+fi
+
+# ── interactive check ────────────────────────────────────────────────────────
+# This script asks for a password with `read -rp`. Under `set -euo pipefail`
+# and a piped stdin (curl | bash), that read hits EOF and the script dies --
+# AFTER installing Docker and cloning the repo, leaving a half-built machine.
+# Refuse up front instead, while nothing has been changed yet.
+if [ ! -t 0 ]; then
+  echo "bootstrap.sh needs an interactive terminal (it asks for an admin password)." >&2
+  echo "  Download first, then run it:" >&2
+  echo "    git clone https://github.com/KGSHOPINV/claude-server ~/hub && bash ~/hub/bootstrap.sh" >&2
+  exit 1
+fi
 
 # ── root check ────────────────────────────────────────────────────────────────
 [[ $EUID -eq 0 ]] && die "Don't run as root. Run as your normal user (with sudo access)."
@@ -114,8 +138,12 @@ if [ -f "$HUB_DIR/hub/requirements.txt" ]; then
   ok "Python deps installed"
 fi
 
-# Create db directory
-mkdir -p "$HOME/db"
+# The database directory the HUB ACTUALLY OPENS.
+# kernel/db.py:15 resolves DB_PATH as <repo>/db/server.db. This used to create
+# $HOME/db, one level too high, so the admin password seeded below went into a
+# file nothing ever read and every bootstrapped node silently stood on the
+# default credentials instead. Asserted now by tools/install-preflight.py.
+mkdir -p "$HUB_DIR/db"
 
 # ── Hub prompt ────────────────────────────────────────────────────────────────
 echo ""
@@ -140,7 +168,7 @@ done
 PW_HASH=$(python3 -c "import hashlib; print(hashlib.sha256('${HUB_PASSWORD}'.encode()).hexdigest())")
 
 # Write hub config
-cat > "$HOME/db/.hub_config" <<EOF
+cat > "$HUB_DIR/db/.hub_config" <<EOF
 SERVER_IP=${SERVER_IP}
 HUB_PORT=8765
 ADMIN_PW_HASH=${PW_HASH}
@@ -148,33 +176,32 @@ BOOTSTRAP_DATE=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
 EOF
 ok "Hub config written"
 
-# Seed the database with admin user
-python3 - <<PYEOF
-import sqlite3, os
-db = os.path.expanduser('~/db/server.db')
-c = sqlite3.connect(db)
-c.executescript("""
-  CREATE TABLE IF NOT EXISTS users (
-    id INTEGER PRIMARY KEY,
-    username TEXT UNIQUE NOT NULL,
-    password_hash TEXT NOT NULL,
-    created_at TEXT DEFAULT (datetime('now'))
-  );
-  CREATE TABLE IF NOT EXISTS hub_config (
-    key TEXT PRIMARY KEY,
-    value TEXT
-  );
-""")
-c.execute("INSERT OR REPLACE INTO users (username, password_hash) VALUES ('admin', ?)", ("${PW_HASH}",))
-c.execute("INSERT OR REPLACE INTO hub_config (key, value) VALUES ('server_ip', ?)", ("${SERVER_IP}",))
-c.commit()
-c.close()
-print("  Database seeded")
+# Seed the admin user THROUGH kernel.db, so the schema is defined in exactly
+# one place. This script used to CREATE its own users table with different
+# columns (id/username/password_hash/created_at) than the one db.py inserts
+# into (username/display/password_hash/role/created) -- two schemas for one
+# table, in a file the hub never opened anyway.
+PW_HASH="$PW_HASH" SERVER_IP="$SERVER_IP" python3 - "$HUB_DIR" <<'PYEOF'
+import os, sqlite3, sys
+sys.path.insert(0, os.path.join(sys.argv[1], 'hub'))
+from kernel.db import DB_PATH, db_ensure_tables
+
+db_ensure_tables()                       # the one schema definition
+conn = sqlite3.connect(DB_PATH)
+conn.execute("UPDATE users SET password_hash = ? WHERE username = 'admin'",
+             (os.environ['PW_HASH'],))
+if conn.total_changes == 0:
+    conn.execute("INSERT INTO users (username, display, password_hash, role, created) "
+                 "VALUES ('admin','Administrator',?,'admin',datetime('now'))",
+                 (os.environ['PW_HASH'],))
+conn.commit()
+conn.close()
+print("  Database seeded at %s" % DB_PATH)
 PYEOF
 
 # ── systemd service ───────────────────────────────────────────────────────────
 step 5 "Starting hub service"
-mkdir -p "$HOME/.config/systemd/user"
+mkdir -p "$HOME/.config/systemd/user" "$HOME/.local/bin"
 
 cat > "$HOME/.config/systemd/user/hub.service" <<EOF
 [Unit]
@@ -208,6 +235,75 @@ if systemctl --user is-active hub --quiet; then
 else
   warn "Hub may have failed to start — check: journalctl --user -u hub -n 30"
 fi
+
+# ── Storage, backups, reclamation ─────────────────────────────────────────────
+# These three were MASTER.md steps 6-8 and were never implemented. Commit
+# fdc4276 -- titled "the two steps bootstrap.sh never had" -- added the scripts
+# and did not touch this file, so a fresh node still received neither. Wiring
+# them here is the actual fix; the scripts were only ever half of it.
+
+step 6 "Checking storage"
+if python3 "$HUB_DIR/hub/tools/storage-preflight.py" 2>/dev/null; then
+  :
+else
+  warn "storage preflight could not run (older checkout?) — continuing"
+fi
+
+step 7 "Installing backups"
+# The destination is DERIVED by the script from this machine's disks: it must
+# be a different physical device from the one holding the data, or a single
+# disk failure takes both. Nothing is hardcoded here on purpose.
+install -m 755 "$HUB_DIR/hub/tools/backup.sh"  "$HOME/.local/bin/hub-backup.sh"  2>/dev/null || true
+install -m 755 "$HUB_DIR/hub/tools/reclaim.sh" "$HOME/.local/bin/hub-reclaim.sh" 2>/dev/null || true
+
+cat > "$HOME/.config/systemd/user/hub-backup.service" <<EOF
+[Unit]
+Description=ServerHub backup to a device that does not hold the data
+[Service]
+Type=oneshot
+ExecStart=%h/.local/bin/hub-backup.sh
+Nice=10
+IOSchedulingClass=idle
+EOF
+cat > "$HOME/.config/systemd/user/hub-backup.timer" <<EOF
+[Unit]
+Description=Daily ServerHub backup
+[Timer]
+OnCalendar=*-*-* 03:00:00
+RandomizedDelaySec=900
+Persistent=true
+[Install]
+WantedBy=timers.target
+EOF
+
+step 8 "Installing cache reclamation"
+cat > "$HOME/.config/systemd/user/hub-reclaim.service" <<EOF
+[Unit]
+Description=Reclaim Docker build cache older than a week
+[Service]
+Type=oneshot
+ExecStart=%h/.local/bin/hub-reclaim.sh
+Nice=15
+IOSchedulingClass=idle
+EOF
+cat > "$HOME/.config/systemd/user/hub-reclaim.timer" <<EOF
+[Unit]
+Description=Weekly Docker cache reclamation
+[Timer]
+OnCalendar=Sun *-*-* 04:00:00
+RandomizedDelaySec=1800
+Persistent=true
+[Install]
+WantedBy=timers.target
+EOF
+
+systemctl --user daemon-reload 2>/dev/null || true
+systemctl --user enable --now hub-backup.timer hub-reclaim.timer 2>/dev/null   && ok "backup (daily 03:00) and reclamation (Sun 04:00) scheduled"   || warn "timers written but not enabled — run: systemctl --user enable --now hub-backup.timer hub-reclaim.timer"
+
+# ── Finished? ─────────────────────────────────────────────────────────────────
+# The installer does not get to declare itself done. It asks.
+echo ""
+python3 "$HUB_DIR/hub/tools/install-preflight.py" 2>/dev/null || true
 
 # ── UFW ───────────────────────────────────────────────────────────────────────
 if command -v ufw &>/dev/null; then
