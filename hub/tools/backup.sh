@@ -95,6 +95,7 @@ LOG="$DEST_ROOT/backup.log"
 FAILED=0
 ATTEMPTED=0
 WROTE=0
+HOT=0
 
 say() { echo "$(date +%T) $*" | tee -a "$LOG" 2>/dev/null || echo "$(date +%T) $*"; }
 
@@ -129,6 +130,62 @@ for vol in $(docker volume ls -q 2>/dev/null); do
   else
     say "  FAIL vol $vol"; FAILED=1
   fi
+done
+
+# ── Bind-mounted project data ────────────────────────────────────────────────
+# Named volumes were the only thing backed up until 2026-09-24, which missed
+# every project that bind-mounts its data instead. On ksgcohub that was:
+#
+#   n8n        /srv/data/n8n
+#   surrealdb  /srv/data/surrealdb
+#   fks-api    /srv/docker/fksinv/data     (also hit by --exclude='*/data')
+#
+# and the run still LOOKED successful, because orphaned named volumes with
+# matching names (n8n_n8n-data, surrealdb_surrealdb-data, 0 links) were being
+# tarred instead. It backed up the dead copies and skipped the live ones.
+#
+# Worse, /api/admit tells every new project to put its data at
+# /srv/data/<project> -- a bind mount. The contract and the backup disagreed.
+#
+# So: ask Docker where every container actually keeps its data, and back that
+# up. Derived from the machine, like everything else here.
+SKIP_BINDS='^/(proc|sys|dev|etc|run|var/run|usr|lib|bin|sbin)($|/)'
+for src in $(docker ps -q 2>/dev/null | xargs -r -I{} docker inspect {} \
+      --format '{{range .Mounts}}{{if eq .Type "bind"}}{{.Source}}{{"\n"}}{{end}}{{end}}' \
+      2>/dev/null | sort -u); do
+  [ -n "$src" ] || continue
+  echo "$src" | grep -qE "$SKIP_BINDS" && continue    # docker.sock, /proc, /sys …
+  sudo -n test -d "$src" 2>/dev/null || continue      # a bind to a FILE is config, not data
+  ATTEMPTED=$((ATTEMPTED + 1))
+  name=$(echo "${src#/}" | tr '/' '-')
+  if [ "$DRY" = "1" ]; then
+    echo "  back  $src  (bind mount)"
+    continue
+  fi
+  # tar's exit codes are NOT the same failure. 1 means "a file changed while I
+  # was reading it" -- the archive exists but a live database copied that way
+  # may not restore. 2 is a real failure. Treating them alike either loses a
+  # usable backup or, worse, reports a hot-copied database as clean.
+  #
+  # SurrealDB is the live example: its write-ahead log changes mid-read, so
+  # /srv/data/surrealdb produced a valid-looking 18MB archive AND exit 1.
+  #
+  # This is where recognition would earn its keep -- a known database should be
+  # dumped by its own tool rather than tarred from underneath. Until then, say
+  # plainly that the copy is hot, instead of implying it is trustworthy.
+  sudo -n tar czf "$DEST/bind-$name.tar.gz" -C "$src" . 2>"$DEST/.tarerr" </dev/null
+  rc=$?
+  if [ "$rc" = "0" ]; then
+    say "  ok   bind $src"; WROTE=$((WROTE + 1))
+  elif [ "$rc" = "1" ]; then
+    changed=$(head -1 "$DEST/.tarerr" 2>/dev/null | sed 's/^tar: //')
+    say "  HOT  bind $src — captured, but written during the copy ($changed)"
+    say "       a live database copied this way may not restore"
+    WROTE=$((WROTE + 1)); HOT=$((HOT + 1))
+  else
+    say "  FAIL bind $src (tar exit $rc)"; FAILED=1
+  fi
+  rm -f "$DEST/.tarerr"
 done
 
 # ── Compose files and project configs ────────────────────────────────────────
@@ -178,6 +235,7 @@ fi
 
 SIZE=$(du -sh "$DEST" 2>/dev/null | cut -f1)
 say "=== backup done: $SIZE in $DEST"
+[ "$HOT" -gt 0 ] && say "    $HOT source(s) were written during the copy — see HOT lines above"
 
 # ── Retention ────────────────────────────────────────────────────────────────
 # Pruned only after a successful run, so a run of failures cannot quietly age
