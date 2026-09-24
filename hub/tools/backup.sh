@@ -22,7 +22,38 @@
 # ─────────────────────────────────────────────────────────────────────────────
 set -uo pipefail
 
-DEST_ROOT="${BACKUP_DEST:-/srv/data/backups}"
+# Derived, not hardcoded. The first version of this script defaulted to
+# /srv/data/backups -- which on ksgcohub is the SAME PHYSICAL DEVICE as the
+# data root, so one disk failure would have taken the data and its only backup
+# together. kernel/storage.py already knows which device holds the data and
+# which does not; ask it rather than guessing, the same way /api/admit derives
+# the data path instead of assuming one.
+_derive_dest() {
+  python3 - <<'PY' 2>/dev/null
+import os, sys
+# This script may be invoked from ~/.local/bin, from the repo, or from a
+# worktree, so locate the package rather than assuming one layout.
+for _p in (os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+           if '__file__' in dir() else '',
+           os.path.expanduser('~/hub/hub'),
+           os.path.expanduser('~/hub')):
+    if _p and os.path.isdir(os.path.join(_p, 'kernel')):
+        sys.path.insert(0, _p)
+        break
+try:
+    from kernel import storage as st
+    bt = st.backup_target()
+    print(bt['path'] if bt.get('dedicated') else '')
+except Exception:
+    print('')
+PY
+}
+DEST_ROOT="${BACKUP_DEST:-$(_derive_dest)}"
+if [ -z "$DEST_ROOT" ]; then
+  echo "no valid backup target: every mount shares a device with the data." >&2
+  echo "Set BACKUP_DEST explicitly if you accept that limitation." >&2
+  exit 1
+fi
 KEEP="${BACKUP_KEEP:-14}"
 HUB_DB="${HUB_DB:-$HOME/hub/db/server.db}"
 DOCKER_ROOT="${HUB_DOCKER_ROOT:-/srv/docker}"

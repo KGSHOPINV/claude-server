@@ -51,6 +51,18 @@ def main():
                       '' if dr['dedicated'] else
                       '   (no dedicated data disk — falling back to the OS disk)'))
 
+    if dr.get('note'):
+        print('  %s' % dr['note'])
+
+    bt = land.get('backup') or {}
+    print('\nBackups belong at')
+    if bt.get('dedicated'):
+        print('  %s   on %s%s'
+              % (bt['path'], bt['mount']['source'],
+                 '   (declared by its mount name)' if bt.get('declared') else ''))
+    else:
+        print('  %s' % (bt.get('note') or 'no valid target'))
+
     dk = land['docker']
     c = dk['build_cache']
     print('\nDocker')

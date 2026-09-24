@@ -43,6 +43,19 @@ UNUSED_DISK_PCT = 5
 
 REAL_FS = ('ext4', 'ext3', 'xfs', 'btrfs', 'zfs')
 
+# A mount NAMED for backups is a declaration of intent, and intent beats size.
+# Found the hard way: fks-services has a 4.4TB disk at /backup and a 1TB OS
+# disk, so "largest non-OS mount wins" confidently nominated the backup drive
+# as the place to put live project data. The operator already answered this
+# question when they chose the mount point; the code should read the answer
+# rather than re-decide it.
+BACKUP_HINTS = ('backup', 'backups', 'archive', 'snapshots')
+
+
+def _named_for_backup(target):
+    leaf = (target or '').rstrip('/').rsplit('/', 1)[-1].lower()
+    return any(h in leaf for h in BACKUP_HINTS)
+
 
 def _run(cmd, timeout=10):
     try:
@@ -153,10 +166,42 @@ def data_root(ms=None):
     others = [m for m in ms
               if m['target'] not in ('/', '/boot', '/boot/efi')
               and m['size_gb'] >= MIN_DATA_GB]
-    if others:
-        best = max(others, key=lambda m: m['size_gb'])
+    # Mounts declared for backups are excluded, however large. A 4.4TB drive
+    # called /backup is not an invitation to put live data on it.
+    candidates = [m for m in others if not _named_for_backup(m['target'])]
+    if candidates:
+        best = max(candidates, key=lambda m: m['size_gb'])
         return {'path': best['target'], 'mount': best, 'dedicated': True}
-    return {'path': '/srv/docker', 'mount': root, 'dedicated': False}
+    return {'path': '/srv/docker', 'mount': root, 'dedicated': False,
+            'note': ('the only large mounts are named for backups — live data '
+                     'stays on the OS disk') if others else ''}
+
+
+# 20200356  backup_target — where backups go, never the disk holding the data
+def backup_target(ms=None):
+    """A copy on the same physical device as the data survives a bad rm and
+    nothing else. findmnt reports the source device, so this is checked rather
+    than assumed.
+
+    Preference order: a mount the operator NAMED for backups, then any other
+    device by free space. Returns dedicated=False when nothing qualifies, which
+    is the honest answer on a single-disk box.
+    """
+    ms = ms if ms is not None else mounts()
+    dr = data_root(ms)
+    data_dev = (dr.get('mount') or {}).get('source', '')
+    usable = [m for m in ms
+              if m['source'] != data_dev and m['target'] not in ('/boot', '/boot/efi')]
+    if not usable:
+        return {'path': '', 'mount': None, 'dedicated': False,
+                'note': 'no second device — a backup here would not survive '
+                        'losing the disk'}
+    named = [m for m in usable if _named_for_backup(m['target'])]
+    best = max(named or usable, key=lambda m: m['avail_gb'])
+    return {'path': best['target'].rstrip('/') + '/backups' if not _named_for_backup(best['target'])
+                    else best['target'],
+            'mount': best, 'dedicated': True,
+            'declared': bool(named)}
 
 
 # 20200354  findings — what an operator should be told, with the fix
@@ -230,6 +275,7 @@ def landscape(refresh=False):
         'mounts':     ms,
         'docker':     dk,
         'data_root':  data_root(ms),
+        'backup':     backup_target(ms),
         'findings':   findings(ms, dk),
         'derived_at': int(now),
     }
