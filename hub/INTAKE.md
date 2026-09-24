@@ -96,3 +96,58 @@ Two notes:
 Four bespoke asks return four shapes and nothing can be compared. One shape
 means the replies stack into a matrix, and the matrix is the point — congruence
 is only visible across projects, never within one.
+
+---
+
+# The reply — what ServerHub sends back
+
+The intake above is one direction. This is the other. Paste this back into the
+project's session once I have verified its claim against its home server.
+
+Without this the loop is open: a project answers and hears nothing, which
+teaches it that answering does not matter.
+
+```
+Thanks — verified against <host>. Here is what the machine says versus what you
+claimed. This is not a rejection; nothing here has been changed.
+
+MATCHED
+  <things where your claim and the machine agree — listed, because agreement
+   is evidence too and it is the larger part>
+
+DIFFERENCES
+  <n>. <what you claimed>
+      machine: <what is actually true>
+      why it matters: <one line — or "cosmetic", if it is>
+      suggested: fix | accept | defer
+
+ASSIGNED TO YOU
+  <the port band, data paths, labels and acceptance test from /api/admit,
+   computed for YOUR host — these differ per machine by design>
+
+WHAT I NEED BACK
+  One disposition per difference: fix / accept / defer / hub-wrong.
+
+  "accept" is a real answer and needs no justification beyond being deliberate.
+  "hub-wrong" means the contract is wrong, not you — say why and I change the
+  contract. That has happened before: it handed out ports inside another
+  service's reserved lane for months.
+
+  You are not required to fix anything. A declared deviation is reconciled. An
+  undeclared one is the only failure state.
+```
+
+## Buckets and stages
+
+```
+inbox/      claims arriving, unverified        ← project writes
+working/    claim being verified against its host   ← me, one at a time
+outbox/     diffs sent, awaiting dispositions   ← project owes a reply
+closed/     every difference has a disposition  ← done
+```
+
+A project sits in `outbox/` indefinitely without blocking anything else. That is
+the holding pattern: state on disk, no timeout, no one waiting in a terminal.
+
+Stages exist so I can stop mid-flow and resume. Everything needed to continue is
+in the bucket — nothing is carried in a conversation.
