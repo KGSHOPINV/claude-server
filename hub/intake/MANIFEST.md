@@ -22,7 +22,7 @@ is. The gap is the deliverable.
 |---|---|---|---|---|---|
 | fksinv | ksgcohub | `awaiting` | — | — | — |
 | metaforge | fks-services | `awaiting` | — | — | 4 SQL migrations missing (found already) |
-| babyhelp | ksgcohub | `awaiting` | — | — | 4 known (labels, port, data path, compose location) |
+| babyhelp | ksgcohub | `awaiting` | — | 2026-09-24 | **4 open**, 0 disposed → `projects/babyhelp.md` |
 | flarevault | fks-services | `awaiting` | — | — | volume never backed up since 2026-07-27 |
 
 ## Layout
@@ -30,10 +30,25 @@ is. The gap is the deliverable.
 ```
 hub/intake/
   MANIFEST.md              this board
+  projects/<name>.md       THE STANDING RECORD — what a project refers back to
   claims/<project>.yaml    what the project SAID   (pasted verbatim, never edited)
   verified/<project>.json  what the MACHINE says   (derived, regenerable)
-  diffs/<project>.md       the reconciliation      (the actual deliverable)
+  diffs/<project>.md       one reconciliation event
 ```
+
+### The standing record
+
+`claims/`, `verified/` and `diffs/` are *events* — they happen once and are
+dated. `projects/<name>.md` is the **thing that persists**: the project's own
+ServerHub page, with its status points, its open differences and their
+dispositions, what is pending underneath it, and its history.
+
+A project asks one question forever — *what is my state on my home server* —
+and this is the answer. Intakes come and go; the record accumulates.
+
+It is scoped to ONE server by definition. `babyhelp.md` is a ksgcohub document;
+the same project on the other machine would be a different record with
+different derived values, and that is correct, not a duplicate.
 
 `claims/` is append-only and never corrected. A claim that turned out wrong is
 evidence, not a mistake to clean up — the whole point is the distance between
