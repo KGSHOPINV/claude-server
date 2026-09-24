@@ -10,7 +10,6 @@ reached back into them via `import server as _srv`, which made server.py a
 dependency of its own handlers. This module breaks that cycle.
 """
 import base64
-import hashlib
 import hmac
 import http.server
 import re
@@ -20,14 +19,11 @@ import os
 import secrets
 import shutil
 import sqlite3
-import ssl
 import struct
 import subprocess
 import threading
 import time
-import urllib.error
 import urllib.parse
-import urllib.request
 from datetime import datetime
 
 # ── Kernel imports ────────────────────────────────────────────────────────────
@@ -60,113 +56,13 @@ PROJECT_BAND_FLOOR = 7100
 PROJECT_BAND_CEIL  = 7899
 PROJECT_BAND_SIZE  = 20
 
-_ssl_ctx = ssl.create_default_context()
-_ssl_ctx.check_hostname = False
-_ssl_ctx.verify_mode = ssl.CERT_NONE
 DOCKER_ROOT = os.environ.get('HUB_DOCKER_ROOT', '/srv/docker')
 
-# ── Proxy cache ───────────────────────────────────────────────────────────────
-# HTML pages: 5s TTL (they change). JS/CSS/images: 60s TTL (static assets).
-
-_proxy_cache = {}
-_pcache_lock = threading.Lock()
-
-# 20209301  _pcache_get — proxy cache read, 5s HTML / 60s asset TTL
-def _pcache_get(key):
-    with _pcache_lock:
-        hit = _proxy_cache.get(key)
-    if not hit:
-        return None
-    content, ct, status, ts = hit
-    ttl = 5 if 'text/html' in ct else 60
-    return (content, ct, status) if time.time() - ts < ttl else None
-
-# 20209302  _pcache_put — proxy cache write, evict oldest when >400
-def _pcache_put(key, content, ct, status):
-    with _pcache_lock:
-        if len(_proxy_cache) > 400:
-            oldest = min(_proxy_cache, key=lambda k: _proxy_cache[k][3])
-            del _proxy_cache[oldest]
-        _proxy_cache[key] = (content, ct, status, time.time())
-
-# 20209303  _rewrite_proxy_html — rewrite src/href/action attrs through proxy
-def _rewrite_proxy_html(html, port):
-    """Rewrite absolute src/href/action attrs through proxy, then inject <base>."""
-    # Rewrite first so the injected <base> tag itself doesn't get double-processed
-    def _sub(m):
-        attr, q, path = m.group(1), m.group(2), m.group(3)
-        skip = ('http://', 'https://', '//', '#', 'data:', 'javascript:', 'mailto:')
-        return m.group(0) if any(path.startswith(s) for s in skip) else f'{attr}={q}/proxy/{port}{path}'
-    html = re.sub(r'((?:src|href|action|data-src))=(["\'])(/[^"\']*)', _sub, html)
-    # Now inject <base> so any remaining relative URLs (in JS etc.) also resolve through proxy
-    base_tag = f'<base href="/proxy/{port}/">'
-    if '<head>' in html:
-        html = html.replace('<head>', f'<head>\n  {base_tag}', 1)
-    elif '<head ' in html.lower():
-        idx = html.lower().index('<head')
-        end = html.index('>', idx)
-        html = html[:end+1] + f'\n  {base_tag}' + html[end+1:]
-    else:
-        html = f'<head>{base_tag}</head>' + html
-    return html
-
-# 20209304  _rewrite_proxy_css — rewrite url(/path) in CSS through proxy
-def _rewrite_proxy_css(css, port):
-    """Rewrite url(/path) references in CSS through proxy."""
-    def _sub(m):
-        path = m.group(1)
-        skip = ('http://', 'https://', '//', 'data:', '#')
-        return m.group(0) if any(path.startswith(s) for s in skip) else f'url("/proxy/{port}{path}")'
-    return re.sub(r'url\(["\']?(/[^"\')\s]+)["\']?\)', _sub, css)
-
 # ── Proxy ─────────────────────────────────────────────────────────────────────
-
-# 20209305  proxy_fetch — proxy HTTP/HTTPS request to local service
-def proxy_fetch(port, subpath, query=''):
-    """Proxy a request to a local service, stripping X-Frame-Options."""
-    cache_key = (port, subpath, query)
-    cached = _pcache_get(cache_key)
-    if cached:
-        return cached
-
-    scheme = 'https' if port in HTTPS_PORTS else 'http'
-    target = 'localhost' if LOCAL_MODE else SERVER_IP
-    url = f'{scheme}://{target}:{port}/{subpath}'
-    if query:
-        url += '?' + query
-    try:
-        req = urllib.request.Request(url)
-        req.add_header('User-Agent', 'Mozilla/5.0 ServerHub/1.0')
-        with urllib.request.urlopen(req, timeout=12, context=_ssl_ctx) as resp:
-            content = resp.read()
-            ct = resp.headers.get('Content-Type', 'text/html; charset=utf-8')
-            status = resp.status
-    except urllib.error.HTTPError as e:
-        content = e.read() or b'<h2>HTTP Error</h2>'
-        ct = e.headers.get('Content-Type', 'text/html')
-        status = e.code
-    except Exception as e:
-        content = f'<html><body style="background:#0d1117;color:#e6edf3;font-family:monospace;padding:40px"><h2>Proxy Error</h2><p>{e}</p><p>Service at port {port} may be down or unreachable.</p></body></html>'.encode()
-        ct = 'text/html; charset=utf-8'
-        status = 502
-
-    if status < 400:
-        if 'text/html' in ct:
-            try:
-                html = _rewrite_proxy_html(content.decode('utf-8', errors='replace'), port)
-                content = html.encode('utf-8')
-            except Exception:
-                pass
-        elif 'text/css' in ct:
-            try:
-                css = _rewrite_proxy_css(content.decode('utf-8', errors='replace'), port)
-                content = css.encode('utf-8')
-            except Exception:
-                pass
-
-    _pcache_put(cache_key, content, ct, status)
-    return content, ct, status
-
+# REMOVED (dead): _pcache_get, _pcache_put, _rewrite_proxy_html, _rewrite_proxy_css,
+# proxy_fetch, plus the _proxy_cache / _pcache_lock / _ssl_ctx state they owned.
+# handlers/proxy.py carries its own copies under the same telescope codes and is
+# what the /proxy/* routes dispatch to; nothing ever called the copies here.
 
 # ── SSH ────────────────────────────────────────────────────────────────────────
 # KERNEL: ssh_run moved to kernel/ssh.py
@@ -885,41 +781,8 @@ def get_setup_status():
         'kit_path': kit if kit_present else None,
     }
 
-# 20204304  vault_get — SELECT vault_blob from notes
-def vault_get():
-    try:
-        conn = db_conn()
-        row = conn.execute("SELECT value FROM notes WHERE key='vault_blob' LIMIT 1").fetchone()
-        conn.close()
-        return row['value'] if row else None
-    except Exception:
-        return None
-
-# 20204305  vault_put — UPSERT vault_blob in notes
-def vault_put(blob):
-    try:
-        conn = db_conn()
-        ts = datetime.now().isoformat()
-        row = conn.execute("SELECT id FROM notes WHERE key='vault_blob' LIMIT 1").fetchone()
-        if row:
-            conn.execute("UPDATE notes SET value=?, updated=? WHERE key='vault_blob'", (blob, ts))
-        else:
-            conn.execute("INSERT INTO notes (category, key, value, updated) VALUES ('vault','vault_blob',?,?)", (blob, ts))
-        conn.commit()
-        conn.close()
-        return True
-    except Exception as e:
-        return str(e)
-
-# 20204308  issues_get — SELECT all from issues
-def issues_get():
-    try:
-        conn = db_conn()
-        rows = conn.execute("SELECT * FROM issues ORDER BY id DESC").fetchall()
-        conn.close()
-        return [dict(r) for r in rows]
-    except Exception:
-        return []
+# REMOVED (dead): vault_get, vault_put, issues_get. handlers/config.py answers
+# /api/vault and /api/issues with its own inline queries; these had no caller.
 
 # KERNEL: db_ensure_tables moved to kernel/db.py
 
@@ -1412,106 +1275,12 @@ def api_docker_diagnostics():
 
 
 
-# 20204301  config_get — SELECT single value from hub_config
-def config_get(key, default=None):
-    try:
-        conn = db_conn()
-        row = conn.execute("SELECT value FROM hub_config WHERE key=?", (key,)).fetchone()
-        conn.close()
-        return row['value'] if row else default
-    except Exception:
-        return default
-
-# 20204302  config_set — UPSERT key/value in hub_config
-def config_set(key, value):
-    try:
-        conn = db_conn()
-        ts = datetime.now().isoformat()
-        conn.execute("INSERT INTO hub_config(key,value,updated) VALUES(?,?,?) ON CONFLICT(key) DO UPDATE SET value=?,updated=?",
-            (key, value, ts, value, ts))
-        conn.commit()
-        conn.close()
-        return True
-    except Exception as e:
-        return str(e)
-
-# 20204303  config_get_all — SELECT all hub_config as dict
-def config_get_all():
-    """Return all hub_config keys as a dict."""
-    try:
-        conn = db_conn()
-        rows = conn.execute("SELECT key,value FROM hub_config").fetchall()
-        conn.close()
-        return {r['key']: r['value'] for r in rows}
-    except Exception:
-        return {}
-
-# 20205301  users_list — SELECT all users (no password_hash)
-def users_list():
-    try:
-        conn = db_conn()
-        rows = conn.execute("SELECT id,username,display,role,created FROM users ORDER BY id").fetchall()
-        conn.close()
-        return [dict(r) for r in rows]
-    except Exception:
-        return []
-
-# 20205302  user_auth — SHA-256 password check, returns user row or None
-def user_auth(username, password):
-    try:
-        h = hashlib.sha256(password.encode()).hexdigest()
-        conn = db_conn()
-        row = conn.execute("SELECT * FROM users WHERE username=? AND password_hash=?", (username, h)).fetchone()
-        conn.close()
-        return dict(row) if row else None
-    except Exception:
-        return None
-
-# 20204306  journal_add — INSERT into journal
-def journal_add(type_, body, user=''):
-    try:
-        conn = db_conn()
-        conn.execute("INSERT INTO journal(ts,type,body,user) VALUES(?,?,?,?)",
-            (datetime.now().isoformat(), type_, body, user))
-        conn.commit()
-        conn.close()
-    except Exception:
-        pass
-
-# 20204307  journal_get — SELECT recent journal rows
-def journal_get(limit=100):
-    try:
-        conn = db_conn()
-        rows = conn.execute("SELECT * FROM journal ORDER BY id DESC LIMIT ?", (limit,)).fetchall()
-        conn.close()
-        return [dict(r) for r in rows]
-    except Exception:
-        return []
-
-# 20202310  get_storage_info — SSH-based df + docker volumes
-def get_storage_info():
-    results = {}
-    # Disk usage
-    r = ssh_run("df -h / /srv 2>/dev/null | tail -n +2")
-    results['disk'] = r.get('output','') if r.get('online') else ''
-    # Docker volumes
-    r2 = ssh_run("docker system df 2>/dev/null")
-    results['docker_df'] = r2.get('output','') if r2.get('online') else ''
-    # Key directory sizes
-    r3 = ssh_run(f"du -sh {DOCKER_ROOT} /srv/backups $HOME 2>/dev/null")
-    results['dirs'] = r3.get('output','') if r3.get('online') else ''
-    # Docker volumes list
-    r4 = ssh_run("docker volume ls --format '{{.Name}}' 2>/dev/null | head -30")
-    results['volumes'] = r4.get('output','') if r4.get('online') else ''
-    return results
-
-# 20209309  get_files — ls -lah via SSH for file browser
-def get_files(path):
-    safe = path.replace('..','').replace('~','').strip()
-    if not safe.startswith('/'):
-        safe = get_server_info().get('home_dir', os.path.expanduser('~'))
-    r = ssh_run(f"ls -lah --time-style=short-iso '{safe}' 2>&1 | head -60")
-    return {'path': safe, 'listing': r.get('output',''), 'error': r.get('error','') if not r.get('online') else ''}
+# REMOVED (dead): config_get, config_set, config_get_all, users_list, user_auth,
+# journal_add, journal_get — handlers/config.py and handlers/users.py each keep
+# private copies (_config_get, _config_set, _user_auth, _journal_add, ...).
+# Also removed get_storage_info (old SSH df + docker-df reader; api_storage_info
+# below is what /api/storage actually calls) and get_files (handlers/proxy.py
+# has _get_files for /api/files). None of the seven had a caller outside here.
 
 # 20202309  get_manifest — full manifest BOM: server info, services, docker df, git ref
 def get_manifest():
@@ -1579,242 +1348,11 @@ def get_manifest():
     }
 
 
-# 20209307  _substitute_guide_tokens — replace {{server.*}} tokens with live values
-def _substitute_guide_tokens(text):
-    """Replace {{server.*}} and {{hub.*}} template tokens with live values."""
-    si = get_server_info()
-    replacements = {
-        '{{server.hostname}}':    si.get('hostname', ''),
-        '{{server.local_ip}}':    si.get('local_ip', ''),
-        '{{server.tailscale_ip}}':si.get('tailscale_ip', 'none'),
-        '{{server.os}}':          si.get('os', ''),
-        '{{server.home_dir}}':    si.get('home_dir', os.path.expanduser('~')),
-        '{{server.ssh_user}}':    si.get('ssh_user', ''),
-        '{{server.cpu_cores}}':   str(si.get('cpu_cores', '')),
-        '{{hub.port}}':           str(PORT),
-        '{{hub.host}}':           SSH_HOST,
-    }
-    for token, val in replacements.items():
-        text = text.replace(token, val)
-    return text
-
-# 20209308  _build_this_server_doc — generate live Markdown from server state
-def _build_this_server_doc():
-    """Generate a live 'About this server' doc from current server state."""
-    si = get_server_info()
-    st = _cache.get('status') or {}
-    containers = _cache.get('containers') or []
-    running = [c['name'] for c in containers if c.get('running')]
-    stopped = [c['name'] for c in containers if not c.get('running')]
-
-    ram_gb = ''
-    if st.get('ram_total_mb'):
-        ram_gb = f"{round(st['ram_total_mb'] / 1024, 1)} GB"
-
-    disk_lines = ''
-    for d in st.get('disks', []):
-        disk_lines += f"- `{d['mount']}` — {d['used']} used of {d['total']} ({d['pct']}%)\n"
-    if not disk_lines:
-        disk_lines = f"- `/` — {st.get('disk_used','?')} used of {st.get('disk_total','?')} ({st.get('disk_pct','?')})\n"
-
-    unattached = st.get('unattached_drives', [])
-    unattached_lines = ''
-    for u in unattached:
-        unattached_lines += f"- `/dev/{u['name']}` — {u['size']} (unmounted, raw)\n"
-
-    ts_line = si.get('tailscale_ip', 'none')
-    ts_section = (
-        f"- Tailscale: `{ts_line}`\n"
-        if ts_line and ts_line != 'none' else
-        "- Tailscale: not connected\n"
-    )
-
-    now = datetime.now().strftime('%Y-%m-%d %H:%M')
-
-    doc = f"""# This Server
-
-> Auto-generated snapshot · {now}
-
----
-
-## Identity
-
-| Field | Value |
-|-------|-------|
-| Hostname | `{si.get('hostname','—')}` |
-| OS | {si.get('os','—')} |
-| SSH User | `{si.get('ssh_user','—')}` |
-| Home Dir | `{si.get('home_dir','—')}` |
-| CPU Cores | {si.get('cpu_cores','—')} |
-| RAM | {ram_gb or '—'} |
-
----
-
-## Network
-
-- Local IP: `{si.get('local_ip','—')}`
-{ts_section}
----
-
-## Disk
-
-### Mounted Volumes
-
-{disk_lines or '(no data — run a status refresh)'}
-"""
-
-    if unattached_lines:
-        doc += f"""
-### Unmounted Drives
-
-{unattached_lines}
-> These drives have no filesystem. Run `lsblk` to inspect. See `storage.md` for how to partition and mount them.
-"""
-
-    doc += f"""
----
-
-## Docker
-
-| Metric | Count |
-|--------|-------|
-| Running containers | {len(running)} |
-| Stopped containers | {len(stopped)} |
-
-"""
-    if running:
-        doc += "**Running:** " + ", ".join(f"`{c}`" for c in running[:20]) + "\n\n"
-    if stopped:
-        doc += "**Stopped:** " + ", ".join(f"`{c}`" for c in stopped[:20]) + "\n\n"
-
-    doc += f"""---
-
-## Hub
-
-- Port: `{PORT}`
-- SSH target: `{SSH_HOST}`
-- Mode: {'local (hub on this machine)' if LOCAL_MODE else 'remote SSH'}
-
----
-
-## Access Paths
-
-| Method | Address |
-|--------|---------|
-| Local | `http://{si.get('local_ip','?')}:{PORT}` |
-"""
-    ts_ip = si.get('tailscale_ip', 'none')
-    if ts_ip and ts_ip != 'none':
-        doc += f"| Tailscale | `http://{ts_ip}:{PORT}` |\n"
-
-    doc += "\nSee `remote-access.md` for full access topology.\n"
-    return doc
-
-# 20207301  ai_system_prompt — build server-aware system prompt from cached status
-def ai_system_prompt():
-    """Build a concise server-aware system prompt from live state."""
-    status = _cache.get('status') or {}
-    containers = _cache.get('containers') or []
-    running = [c['name'] for c in containers if c.get('running')]
-    lines = [
-        'You are an AI assistant with full context about this Linux server.',
-        f'Hostname: {SSH_HOST}  |  OS: Ubuntu  |  Mode: {"local" if LOCAL_MODE else "remote"}',
-        f'RAM: {status.get("ram_used_mb","?")}MB / {status.get("ram_total_mb","?")}MB  '
-        f'|  Disk: {status.get("disk_used","?")} / {status.get("disk_total","?")} ({status.get("disk_pct","?")})',
-        f'Load: {status.get("load","?")}  |  Uptime: {status.get("uptime","?")}',
-        f'Running containers ({len(running)}): {", ".join(running[:12]) or "none"}',
-        '',
-        'Answer concisely. For server tasks suggest shell commands. '
-        'If shown a photo, describe what you see and relate it to server/infrastructure context if relevant.',
-    ]
-    return '\n'.join(lines)
-
-# 20207302  ai_chat — dispatch to Claude/OpenAI/Gemini based on ai_provider config
-def ai_chat(message, image_b64=None, image_type='image/jpeg'):
-    """Call Claude or OpenAI depending on which key is configured."""
-    provider = config_get('ai_provider', 'claude')
-    api_key  = config_get('ai_api_key', os.environ.get('HUB_AI_KEY', ''))
-    if not api_key:
-        return {'error': 'No AI API key configured. Add one in Hub Settings → AI.'}
-
-    system = ai_system_prompt()
-
-    try:
-        if provider in ('claude', 'anthropic'):
-            content = []
-            if image_b64:
-                content.append({'type': 'image', 'source': {
-                    'type': 'base64', 'media_type': image_type, 'data': image_b64}})
-            content.append({'type': 'text', 'text': message})
-            payload = json.dumps({
-                'model': 'claude-opus-5-20251101',
-                'max_tokens': 1024,
-                'system': system,
-                'messages': [{'role': 'user', 'content': content}],
-            }).encode()
-            req = urllib.request.Request(
-                'https://api.anthropic.com/v1/messages',
-                data=payload,
-                headers={
-                    'x-api-key': api_key,
-                    'anthropic-version': '2023-06-01',
-                    'content-type': 'application/json',
-                }, method='POST')
-            with urllib.request.urlopen(req, timeout=30) as r:
-                data = json.loads(r.read())
-            return {'reply': data['content'][0]['text'], 'provider': 'claude'}
-
-        elif provider in ('openai', 'gpt'):
-            content = []
-            if image_b64:
-                content.append({'type': 'image_url', 'image_url': {
-                    'url': f'data:{image_type};base64,{image_b64}'}})
-            content.append({'type': 'text', 'text': message})
-            payload = json.dumps({
-                'model': 'gpt-4o',
-                'max_tokens': 1024,
-                'messages': [
-                    {'role': 'system', 'content': system},
-                    {'role': 'user', 'content': content if image_b64 else message},
-                ],
-            }).encode()
-            req = urllib.request.Request(
-                'https://api.openai.com/v1/chat/completions',
-                data=payload,
-                headers={
-                    'Authorization': f'Bearer {api_key}',
-                    'content-type': 'application/json',
-                }, method='POST')
-            with urllib.request.urlopen(req, timeout=30) as r:
-                data = json.loads(r.read())
-            return {'reply': data['choices'][0]['message']['content'], 'provider': 'openai'}
-
-        elif provider == 'gemini':
-            parts = []
-            if image_b64:
-                parts.append({'inline_data': {'mime_type': image_type, 'data': image_b64}})
-            parts.append({'text': message})
-            payload = json.dumps({
-                'system_instruction': {'parts': [{'text': system}]},
-                'contents': [{'parts': parts}],
-                'generationConfig': {'maxOutputTokens': 1024},
-            }).encode()
-            url = f'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key={api_key}'
-            req = urllib.request.Request(url, data=payload,
-                headers={'content-type': 'application/json'}, method='POST')
-            with urllib.request.urlopen(req, timeout=30) as r:
-                data = json.loads(r.read())
-            return {'reply': data['candidates'][0]['content']['parts'][0]['text'], 'provider': 'gemini'}
-
-        else:
-            return {'error': f'Unknown provider: {provider}'}
-
-    except urllib.error.HTTPError as e:
-        body = e.read().decode('utf-8', errors='replace')[:300]
-        return {'error': f'API error {e.code}: {body}'}
-    except Exception as e:
-        return {'error': str(e)}
-
+# REMOVED (dead): _substitute_guide_tokens, _build_this_server_doc — guide token
+# substitution and the live "this server" doc are served from handlers/proxy.py,
+# which owns the /docs/* routes.
+# REMOVED (dead): ai_system_prompt, ai_chat — handlers/ai.py has _ai_system_prompt
+# and _ai_chat and reaches back into this module only for _cache.
 
 # 20202316  get_integrations — live health: Redis PING, SurrealDB /health, n8n /healthz
 def get_integrations():
@@ -1864,24 +1402,11 @@ def get_integrations():
 # ── Tunnel management ─────────────────────────────────────────────────────────
 _tunnel_url    = ''
 _tunnel_lock_t = threading.Lock()
-_tunnel_thread = None
 
-# 20208301  _tunnel_watcher — background thread: poll docker logs for trycloudflare URL
-def _tunnel_watcher():
-    """Background thread: poll server-hub-tunnel logs to extract the public URL."""
-    global _tunnel_url
-    while True:
-        try:
-            r = subprocess.run(
-                ['docker', 'logs', '--tail', '80', 'server-hub-tunnel'],
-                capture_output=True, text=True, timeout=6
-            )
-            m = re.search(r'https://[a-z0-9\-]+\.trycloudflare\.com', r.stdout + r.stderr)
-            with _tunnel_lock_t:
-                _tunnel_url = m.group(0) if m else _tunnel_url
-        except Exception:
-            pass
-        time.sleep(4)
+# REMOVED (dead): _tunnel_watcher — handlers/tunnel.py runs the real watcher against
+# its own _tunnel_url. This module's watcher was never started, so the _tunnel_url
+# that tunnel_status() reads below has always been '' here. Deleting the watcher
+# changes nothing; the empty url is pre-existing and left alone deliberately.
 
 # 20208302  tunnel_status — docker inspect tunnel container; return {running, url}
 def tunnel_status():
@@ -1897,38 +1422,8 @@ def tunnel_status():
         url = _tunnel_url if running else ''
     return {'running': running, 'url': url}
 
-# 20208303  tunnel_start — docker run cloudflared; start watcher thread
-def tunnel_start():
-    global _tunnel_url, _tunnel_thread
-    try:
-        subprocess.run(['docker', 'rm', '-f', 'server-hub-tunnel'], capture_output=True, timeout=8)
-        r = subprocess.run(
-            ['docker', 'run', '-d', '--name', 'server-hub-tunnel', '--network', 'host',
-             'cloudflare/cloudflared:latest', 'tunnel', '--url', f'http://localhost:{PORT}'],
-            capture_output=True, text=True, timeout=30
-        )
-        if r.returncode == 0:
-            with _tunnel_lock_t:
-                _tunnel_url = ''
-            if _tunnel_thread is None or not _tunnel_thread.is_alive():
-                _tunnel_thread = threading.Thread(target=_tunnel_watcher, daemon=True)
-                _tunnel_thread.start()
-            return True
-        return False
-    except Exception:
-        return False
-
-# 20208304  tunnel_stop — docker stop + rm server-hub-tunnel
-def tunnel_stop():
-    global _tunnel_url
-    try:
-        subprocess.run(['docker', 'stop', 'server-hub-tunnel'], capture_output=True, timeout=15)
-        subprocess.run(['docker', 'rm', 'server-hub-tunnel'], capture_output=True, timeout=10)
-        with _tunnel_lock_t:
-            _tunnel_url = ''
-        return True
-    except Exception:
-        return False
+# REMOVED (dead): tunnel_start, tunnel_stop — handlers/tunnel.py owns the
+# /api/tunnel/start and /api/tunnel/stop routes and has its own copies.
 
 # 20201302  get_access_info — all hub URLs: local, Tailscale, tunnel
 def get_access_info():

@@ -189,8 +189,16 @@ def _get_files(path):
 
 # ── Doc helpers ───────────────────────────────────────────────────────────────
 
-# Module-level status cache mirror. Populated by server.py background threads when
-# this module is wired in; gracefully returns defaults when empty.
+# Module-level status cache mirror. NOTHING WRITES THIS -- the claim that
+# server.py's background threads populate it was true before the Phase 2 split
+# and is not true now (server.py never references this module). Consequence:
+# _build_this_server_doc() below always takes its empty-cache branches, so
+# this-server.md reports RAM "—", disk "? used of ?" and 0 running / 0 stopped
+# containers on a live box.
+# NOT DELETED: removing it means deleting the Disk and Docker sections of that
+# doc, which changes user-visible output. The fix is to populate it (or call
+# kernel.collect.build_status directly), which is a behaviour decision, not a
+# cleanup. Left for the owner.
 _cache = {'status': None, 'containers': None}
 
 

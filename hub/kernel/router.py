@@ -141,27 +141,23 @@ ROUTES = [
 ]
 
 
-def dispatch(method: str, path: str) -> dict | None:
-    """Find the matching route entry for a method + path.
-
-    Returns the route dict or None if no match.
-    Prefix routes match if path.startswith(route['path']).
-    Exact routes require path == route['path'].
-    """
-    for route in ROUTES:
-        if route["method"] != method:
-            continue
-        if route["prefix"]:
-            if path.startswith(route["path"]):
-                return route
-        else:
-            if path == route["path"]:
-                return route
-    return None
+# Removed here: an earlier `dispatch(method, path) -> dict | None` that did a
+# linear scan of ROUTES. It was rebound -- and so made unreachable -- by the
+# real `dispatch(handler, method, path, ...)` defined further down this same
+# module, and its lookup logic survives as `resolve()` below (same semantics,
+# but indexed). No caller ever reached it: the only call site in the repo is
+# server.py:_route, which uses the six-argument form.
 
 
 def routes_by_module() -> dict:
-    """Return ROUTES grouped by module name. Useful for /api/registry."""
+    """Return ROUTES grouped by module name.
+
+    KEPT DESPITE HAVING NO CALLERS. handlers/status.py:get_sitemap
+    (GET /api/sitemap) hand-maintains a second, parallel list of every route
+    with its description. That list is already drifting from ROUTES. This
+    function is the seam for generating the sitemap from the one real table --
+    deleting it would remove the only piece of the fix that already exists.
+    """
     result = {}
     for r in ROUTES:
         result.setdefault(r["module"], []).append(r)
