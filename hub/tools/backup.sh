@@ -64,11 +64,24 @@ DRY=0
 
 # Volumes live under root-owned paths, so this script needs passwordless sudo.
 # Check ONCE, loudly. The first version tested `sudo -n` per volume and fell
-# through to `continue` on failure: on a host where sudo prompts (fks-services),
-# every volume was skipped, the failure counter stayed 0, retention ran, and it
-# exited 0 having backed up nothing while deleting the oldest real backup.
-# That is the same defect as the metaforge script this one was written to
-# replace. A backup tool that cannot read its sources must say so and stop.
+# through to `continue` on failure, so on a host where sudo prompts every volume
+# was silently skipped.
+#
+# CORRECTION (2026-09-23): commit b5d9fb6's message overstated what followed.
+# It claimed the run then "exited 0 while deleting the oldest real backup".
+# A reviewing agent checked and it was wrong: /srv/docker exists on both real
+# servers (verified), so the configs tar would also fail, set FAILED=1, skip
+# retention and exit 1. The silent-success-then-prune path needs a host with no
+# /srv/docker AND no readable hub database — neither machine here.
+#
+# The real defect was smaller and still worth fixing: a run that backed up
+# almost nothing reported a specific failure rather than the actual problem
+# (it cannot read its sources at all), and it did that AFTER attempting every
+# volume instead of stopping at the first sign. Fail fast, say why.
+#
+# Recording the correction rather than quietly editing it: a commit message
+# that overstates a bug is still a record disagreeing with the machine, and
+# being harsh about my own code does not exempt it from being accurate.
 if [ "$DRY" = "0" ] && ! sudo -n true 2>/dev/null; then
   echo "backup.sh: passwordless sudo is required to read Docker volumes." >&2
   echo "  Docker volumes live under /var/lib/docker/volumes (root-owned)." >&2
