@@ -52,9 +52,34 @@ HTTPS_PORTS = {9443, 9090}
 #
 # 7100-7899 because it is the only wide stretch no PORT_LANE claims. It must
 # stay that way: anything above 10000 collides with the Supabase stack lane.
-PROJECT_BAND_FLOOR = 7100
-PROJECT_BAND_CEIL  = 7899
-PROJECT_BAND_SIZE  = 20
+# Moved off 7100-7899 (800 ports, 16 projects) on 2026-09-24. 12000-18999 is
+# 7000 unclaimed ports -- nothing between the Supabase lane and Monitoring --
+# which is 70 projects at 100 each with room to widen rather than shrink.
+#
+# MIGRATION, not a cutover. Existing projects keep their ports until they choose
+# to move; only new ones are held to this. fksinv sits at 10100/10101 and
+# babyhelp at 12080, and neither is urgent.
+PROJECT_BAND_FLOOR = 12000
+PROJECT_BAND_CEIL  = 18999
+# 100 per project. The band has to hold everything a project will ever publish,
+# because the alternative is what fksinv and babyhelp already are: ports picked
+# one at a time from whatever was free that day, leaving a project scattered
+# with no way to see where it starts or ends.
+#
+# 100 also makes the OFFSET meaningful. Within a band the last two digits can
+# carry the role, so a port number tells you what kind of thing it is without
+# looking anything up:
+#
+#     x00-x19   UI / frontend
+#     x20-x39   API / services
+#     x40-x59   data -- db, cache, search
+#     x60-x79   workers, jobs, queues
+#     x80-x99   dev, preview, debug, temporary
+#
+# Suggested, never enforced. The band is the boundary; the split inside it
+# belongs to the project, which knows its own shape better than the hub does.
+# Outgrowing 100 is a ticket, not a violation.
+PROJECT_BAND_SIZE  = 100
 
 DOCKER_ROOT = os.environ.get('HUB_DOCKER_ROOT', '/srv/docker')
 
@@ -382,7 +407,7 @@ PORT_LANES = [
     {'name': 'AI',             'color': 'purple',  'ranges': [(11000, 11999)]},
     {'name': 'Tools',          'color': 'blue',    'ranges': [(8000, 8999)]},
     {'name': 'Supabase Stack', 'color': 'teal',    'ranges': [(10000, 10999)]},
-    {'name': 'Projects',       'color': 'green',   'ranges': [(7100, 7899)]},
+    {'name': 'Projects',       'color': 'green',   'ranges': [(12000, 18999)]},
 ]
 
 # Flat port → service name registry for quick lookup
