@@ -56,6 +56,11 @@ if [ -z "$DEST_ROOT" ]; then
 fi
 KEEP="${BACKUP_KEEP:-14}"
 HUB_DB="${HUB_DB:-$HOME/hub/db/server.db}"
+# kernel/control.py keeps control.db beside server.db and reads this same
+# override, so a hub pointed at another file is still the file backed up here.
+# Derived the same way as HUB_DB rather than a second convention: two ways of
+# naming one file is how the backup ends up copying the database nobody uses.
+CONTROL_DB="${HUB_CONTROL_DB:-$HOME/hub/db/control.db}"
 DOCKER_ROOT="${HUB_DOCKER_ROOT:-/srv/docker}"
 VOL_ROOT=/var/lib/docker/volumes
 
@@ -82,12 +87,67 @@ DRY=0
 # Recording the correction rather than quietly editing it: a commit message
 # that overstates a bug is still a record disagreeing with the machine, and
 # being harsh about my own code does not exempt it from being accurate.
-if [ "$DRY" = "0" ] && ! sudo -n true 2>/dev/null; then
-  echo "backup.sh: passwordless sudo is required to read Docker volumes." >&2
-  echo "  Docker volumes live under /var/lib/docker/volumes (root-owned)." >&2
-  echo "  Grant NOPASSWD for tar, or run this script as root." >&2
-  exit 1
+CAN_SUDO=1
+if ! sudo -n true 2>/dev/null; then
+  CAN_SUDO=0
 fi
+
+# REVISED 2026-09-24. The previous version exited 1 here when sudo prompts,
+# which was right about not pretending and wrong about the consequence: on
+# fks-services it meant NOTHING was backed up at all while waiting for a sudo
+# grant -- including Metaforge's 45-file schema and two months of FlareVault
+# state, both of which are readable without root.
+#
+# Refusing entirely is only correct when nothing can be read. Otherwise: back
+# up what is reachable, and say loudly and specifically what is not. A partial
+# backup that names its own gaps beats no backup, and beats a full-looking one
+# that hides them.
+if [ "$CAN_SUDO" = "0" ] && [ "$DRY" = "0" ]; then
+  echo "backup.sh: no passwordless sudo — Docker NAMED VOLUMES cannot be read." >&2
+  echo "  Proceeding with readable sources only. Volumes will be listed as EXPOSED." >&2
+  # ${USER:-...} because this file runs under `set -u` and $USER is not always
+  # exported -- reproduced 2026-09-24: the script aborted on this very line,
+  # i.e. the advice line about a degraded run killed the degraded run.
+  echo "  To cover them:  echo '${USER:-$(id -un)} ALL=(ALL) NOPASSWD: /usr/bin/tar' | sudo tee /etc/sudoers.d/hub-backup" >&2
+fi
+
+# A helper image needs only tar and a shell. Prefer one already pulled, so a
+# backup never depends on the network: a node that cannot reach a registry must
+# still be able to protect its data.
+HELPER_IMAGE=""
+CAN_DOCKER_READ=0
+if [ "$CAN_SUDO" = "0" ] && docker ps -q >/dev/null 2>&1; then
+  for img in alpine:latest busybox:latest alpine busybox; do
+    if docker image inspect "$img" >/dev/null 2>&1; then
+      HELPER_IMAGE="$img"; CAN_DOCKER_READ=1; break
+    fi
+  done
+fi
+
+# read_dir — can this process read the directory, with or without sudo?
+read_dir() {
+  if [ "$CAN_SUDO" = "1" ]; then sudo -n test -d "$1" 2>/dev/null
+  else test -r "$1" -a -d "$1" 2>/dev/null; fi
+}
+# tar_dir — same call either way, so the callers below do not branch
+tar_dir() {
+  if [ "$CAN_SUDO" = "1" ]; then sudo -n tar czf "$1" -C "$2" . 2>"${3:-/dev/null}" </dev/null
+  else tar czf "$1" -C "$2" . 2>"${3:-/dev/null}" </dev/null; fi
+}
+# sqlite_copy — sqlite3's backup API rather than cp or tar. The hub is running
+# and writing while this runs, and a database file copied mid-write is corrupt
+# in a way that looks fine until the day you need it. One helper, so a second
+# database cannot end up copied by a weaker method than the first.
+sqlite_copy() {
+  python3 - "$1" "$2" <<'PY' 2>/dev/null
+import sqlite3, sys
+src = sqlite3.connect('file:%s?mode=ro' % sys.argv[1], uri=True)
+dst = sqlite3.connect(sys.argv[2])
+with dst:
+    src.backup(dst)
+dst.close(); src.close()
+PY
+}
 
 STAMP=$(date +%F)
 DEST="$DEST_ROOT/$STAMP"
@@ -96,6 +156,7 @@ FAILED=0
 ATTEMPTED=0
 WROTE=0
 HOT=0
+EXPOSED=0
 
 say() { echo "$(date +%T) $*" | tee -a "$LOG" 2>/dev/null || echo "$(date +%T) $*"; }
 
@@ -122,10 +183,31 @@ for vol in $(docker volume ls -q 2>/dev/null); do
   fi
   # An unreadable source is a FAILURE, not something to skip past. A volume
   # that exists and cannot be read is exactly the case worth shouting about.
-  if ! sudo -n test -d "$src" 2>/dev/null; then
+  if ! read_dir "$src"; then
+    # No host sudo: read the volume through a throwaway container instead.
+    # Docker mounts it as root inside, so the data is reachable without any
+    # privilege on the host — only membership of the docker group, which the
+    # hub user already needs to do its job.
+    #
+    # This was rejected earlier on the grounds that spawning a container
+    # pollutes the container list the hub reports about itself. That was a bad
+    # trade: it left 21 volumes on fks-services unbacked, including two months
+    # of FlareVault state, to keep `docker ps` tidy for a few seconds. The
+    # container is --rm and lives for the length of one tar.
+    if [ "$CAN_SUDO" = "0" ] && [ "$CAN_DOCKER_READ" = "1" ]; then
+      if docker run --rm -v "$vol":/src:ro -v "$DEST":/dst "$HELPER_IMAGE" \
+           tar czf "/dst/vol-$vol.tar.gz" -C /src . 2>/dev/null; then
+        say "  ok   vol $vol (via container)"; WROTE=$((WROTE + 1)); continue
+      fi
+      say "  FAIL vol $vol — container read failed"; FAILED=1; continue
+    fi
+    if [ "$CAN_SUDO" = "0" ]; then
+      say "  EXPOSED vol $vol — no sudo and no usable helper image, NOT backed up"
+      EXPOSED=$((EXPOSED + 1)); continue
+    fi
     say "  FAIL vol $vol — source unreadable at $src"; FAILED=1; continue
   fi
-  if sudo -n tar czf "$DEST/vol-$vol.tar.gz" -C "$src" . 2>/dev/null; then
+  if tar_dir "$DEST/vol-$vol.tar.gz" "$src"; then
     say "  ok   vol $vol"; WROTE=$((WROTE + 1))
   else
     say "  FAIL vol $vol"; FAILED=1
@@ -155,7 +237,7 @@ for src in $(docker ps -q 2>/dev/null | xargs -r -I{} docker inspect {} \
       2>/dev/null | sort -u); do
   [ -n "$src" ] || continue
   echo "$src" | grep -qE "$SKIP_BINDS" && continue    # docker.sock, /proc, /sys …
-  sudo -n test -d "$src" 2>/dev/null || continue      # a bind to a FILE is config, not data
+  read_dir "$src" || continue                         # a bind to a FILE is config, not data
   ATTEMPTED=$((ATTEMPTED + 1))
   name=$(echo "${src#/}" | tr '/' '-')
   if [ "$DRY" = "1" ]; then
@@ -173,7 +255,7 @@ for src in $(docker ps -q 2>/dev/null | xargs -r -I{} docker inspect {} \
   # This is where recognition would earn its keep -- a known database should be
   # dumped by its own tool rather than tarred from underneath. Until then, say
   # plainly that the copy is hot, instead of implying it is trustworthy.
-  sudo -n tar czf "$DEST/bind-$name.tar.gz" -C "$src" . 2>"$DEST/.tarerr" </dev/null
+  tar_dir "$DEST/bind-$name.tar.gz" "$src" "$DEST/.tarerr"
   rc=$?
   if [ "$rc" = "0" ]; then
     say "  ok   bind $src"; WROTE=$((WROTE + 1))
@@ -201,23 +283,38 @@ if [ -d "$DOCKER_ROOT" ]; then
 fi
 
 # ── Hub database ─────────────────────────────────────────────────────────────
-# sqlite3's backup API rather than cp: the hub is running and writing, and a
-# copied file mid-write is a corrupt file that looks fine until you need it.
 if [ -f "$HUB_DB" ]; then
+  ATTEMPTED=$((ATTEMPTED + 1))
   if [ "$DRY" = "1" ]; then
     echo "  back  $HUB_DB (hot backup via sqlite3 API)"
-  elif python3 - "$HUB_DB" "$DEST/hub-server.db" <<'PY' 2>/dev/null
-import sqlite3, sys
-src = sqlite3.connect('file:%s?mode=ro' % sys.argv[1], uri=True)
-dst = sqlite3.connect(sys.argv[2])
-with dst:
-    src.backup(dst)
-dst.close(); src.close()
-PY
-  then
-    say "  ok   hub database"
+  elif sqlite_copy "$HUB_DB" "$DEST/hub-server.db"; then
+    say "  ok   hub database"; WROTE=$((WROTE + 1))
   else
     say "  FAIL hub database"; FAILED=1
+  fi
+fi
+
+# ── Control database ─────────────────────────────────────────────────────────
+# Everything else in this script is a copy of something the machine could hand
+# back: volumes, bind mounts and compose files all still exist to be re-read.
+# control.db is the one file here that holds what NOTHING can re-derive -- the
+# claims projects filed, the masters they acknowledged, and the release history.
+# `docker ps` can tell you what is running; it cannot tell you which ref a
+# project agreed to, or which release was last promoted, which is precisely
+# what a rollback has to know. Losing this file means losing what to roll back
+# TO, and no amount of reading the machine gets it back.
+#
+# It was not backed up until 2026-09-24 -- the same class of gap as the one in
+# this file's header, where the step was believed to be covered because a
+# neighbouring step was.
+if [ -f "$CONTROL_DB" ]; then
+  ATTEMPTED=$((ATTEMPTED + 1))
+  if [ "$DRY" = "1" ]; then
+    echo "  back  $CONTROL_DB (hot backup via sqlite3 API)"
+  elif sqlite_copy "$CONTROL_DB" "$DEST/hub-control.db"; then
+    say "  ok   control database"; WROTE=$((WROTE + 1))
+  else
+    say "  FAIL control database"; FAILED=1
   fi
 fi
 
@@ -236,12 +333,20 @@ fi
 SIZE=$(du -sh "$DEST" 2>/dev/null | cut -f1)
 say "=== backup done: $SIZE in $DEST"
 [ "$HOT" -gt 0 ] && say "    $HOT source(s) were written during the copy — see HOT lines above"
+[ "$EXPOSED" -gt 0 ] && say "    $EXPOSED source(s) NOT BACKED UP — need root. Grant NOPASSWD for tar."
 
 # ── Retention ────────────────────────────────────────────────────────────────
 # Pruned only after a successful run, so a run of failures cannot quietly age
 # out the last good copy.
 # Zero artifacts written is a failed backup, however quiet it was. Without this
 # a run that skipped everything reports success and then prunes.
+#
+# The two databases COUNT toward this. Reproduced 2026-09-24: a host with no
+# readable volumes and no /srv/docker copied both databases successfully and
+# then printed "attempted 0 sources, wrote 0. Not a backup." and exited 1 --
+# having just backed up the only two files on the machine that cannot be
+# re-derived. A verdict that is wrong in the safe direction is still a verdict
+# operators learn to ignore, and this one arrives by systemd timer.
 if [ "$WROTE" = "0" ]; then
   say "  FAIL — attempted $ATTEMPTED sources, wrote 0. Not a backup."
   FAILED=1
