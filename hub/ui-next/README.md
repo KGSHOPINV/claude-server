@@ -25,9 +25,15 @@ whoever reads this next needs to know which direction the original lies in.
 | | taken | of | note |
 |---|---|---|---|
 | `shell/` | 15 | 15 | complete |
-| `components/ui/` | 7 | 20 | only what `shell/` imports |
-| `components/layout/` | 0 | 2 | `EmptyState`, `PageSection` — not taken |
+| `components/ui/` | 20 | 20 | complete |
+| `components/layout/` | 2 | 2 | complete |
 | `lib/store.js` stores | 4 | 6 | `useDraftStore` and `useTruckStore` removed: zero shell references |
+
+**The extraction is CLOSED.** Everything the shell layer needs is here: zero
+dangling internal imports, every external package declared. There is no reason
+to read `/srv/docker/fksinv` again, and not doing so is the point — one clean
+copy, then independence. From here this shell is ours to change freely, and
+changing it cannot affect that app.
 
 **Still carries fksinv's shape in two places.** `useUserStore` (5 references —
 Header, Footer, MobileHeader) is fksinv's auth model, not ServerHub's sessions.
