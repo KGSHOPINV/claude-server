@@ -3255,19 +3255,10 @@ async function runSurvey(key) {
 }
 
 // ── ISSUES ────────────────────────────────────────────────────────────────────
-async function renderIssues(elId) {
-  await fetchIssues();
-  const el=document.getElementById(elId); if(!el) return;
-  if(!S.issues.length){el.innerHTML='<div style="color:var(--muted);padding:14px;font-size:12px">No issues found.</div>';return;}
-  el.innerHTML=S.issues.map(i=>`<div class="iss-row">
-    <div class="iss-dot ${i.status}"></div>
-    <div><div class="iss-title">${i.title}</div>
-    ${i.description?`<div class="iss-desc">${i.description}</div>`:''}
-    ${i.resolution?`<div class="iss-res">✓ ${i.resolution}</div>`:''}
-    <div class="iss-date">${i.created_date||''} · ${i.status}</div></div>
-    <span class="badge ${i.status==='open'?'off':'up'}" style="margin-left:auto;flex-shrink:0">${i.status}</span>
-  </div>`).join('');
-}
+// renderIssues() moved to ui/views/issues.js. It had zero callers and read
+// i.description / i.resolution / i.created_date, none of which exist on the
+// issues table (id, service, title, body, status, created, updated) -- so it
+// would have rendered three blank fields. The view now owns its rendering.
 
 // ── NETWORK ───────────────────────────────────────────────────────────────────
 async function loadNet(key) {
