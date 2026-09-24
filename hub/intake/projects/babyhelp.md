@@ -8,6 +8,33 @@ Intake state: `awaiting` — no claim filed yet. Everything here is observed.
 
 ---
 
+## Acknowledgement — the part the project owes
+
+A project is not a thing the server observes. It is a party to an agreement,
+and this is the line that proves it.
+
+```
+server master    5ca90f6          what ksgcohub is running RIGHT NOW
+acknowledged     none             the last master babyhelp confirmed it read
+stale            YES — never acknowledged
+```
+
+**Rule:** when a server's master moves, every project on it goes `stale` until
+it acknowledges the new one. Stale is not a failure — it is "this project has
+not been told, so do not assume it knows."
+
+Acknowledging means three things, and the third is the one that matters:
+
+1. read this record
+2. read PENDING below
+3. **record what it will DO about PENDING** — even if the answer is "nothing,
+   it does not affect me." An unanswered pending change is how a project ends
+   up bound to a port that moved.
+
+Nothing is enforced. A project can sit stale forever. But the server will say
+so, out loud, every time anyone asks what is on it — and that is the point:
+silence stops being mistaken for agreement.
+
 ## Status points
 
 | | | |
@@ -18,6 +45,7 @@ Intake state: `awaiting` — no claim filed yet. Everything here is observed.
 | in band | ❌ | publishes 12080, outside any assigned band |
 | data placed | ❌ | named volume on the OS disk, not the data disk |
 | declared | ❌ | no claim filed |
+| acknowledged | ❌ | has never acknowledged a server master |
 
 **Reconciled: no.** Four differences, none of them disposed.
 
@@ -63,7 +91,11 @@ band moves 10020-10990 -> 7100-7899 on the next deploy
   why: 10000-10999 is the Supabase stack's reserved lane
   effect on babyhelp: none today — 12080 is outside both. Difference #2
                       stands either way.
+  babyhelp's answer: — NOT RECORDED
 ```
+
+The last line is what acknowledgement produces. Blank means nobody has said
+whether this matters to babyhelp — which is different from it not mattering.
 
 ## History
 

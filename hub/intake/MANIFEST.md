@@ -18,12 +18,22 @@ is. The gap is the deliverable.
 
 ## Board
 
-| Project | Home | State | Claim | Verified | Open diffs |
+Server masters right now — **the two servers are NOT on the same code**:
+
+```
+ksgcohub      5ca90f6    PR #18
+fks-services  ab02c2f    PR #10      eight commits behind, no identity.py at all
+```
+
+Every project is `stale` against its own server's master until it acknowledges
+it. All four are stale, because none has ever acknowledged one.
+
+| Project | Home | State | Ack'd master | Stale | Open diffs |
 |---|---|---|---|---|---|
-| fksinv | ksgcohub | `awaiting` | — | — | — |
-| metaforge | fks-services | `awaiting` | — | — | 4 SQL migrations missing (found already) |
-| babyhelp | ksgcohub | `awaiting` | — | 2026-09-24 | **4 open**, 0 disposed → `projects/babyhelp.md` |
-| flarevault | fks-services | `awaiting` | — | — | volume never backed up since 2026-07-27 |
+| fksinv | ksgcohub | `awaiting` | none | **yes** | — |
+| metaforge | fks-services | `awaiting` | none | **yes** | 4 SQL migrations missing |
+| babyhelp | ksgcohub | `awaiting` | none | **yes** | **4 open**, 0 disposed → `projects/babyhelp.md` |
+| flarevault | fks-services | `awaiting` | none | **yes** | volume unbacked since 2026-07-27 |
 
 ## Layout
 
