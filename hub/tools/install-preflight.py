@@ -143,6 +143,63 @@ def check_storage_sound():
     return WARN, '; '.join(i['detail'] for i in bad)
 
 
+def check_layout():
+    """The on-disk layout is a convention, and an undeclared convention is one
+    nobody can be wrong about out loud.
+
+    The canonical instance: bootstrap.sh:118 creates ~/db and seeds the admin
+    password into ~/db/server.db, while kernel/db.py:15 opens
+    <repo>/db/server.db. On a node cloned to ~/hub those are different files,
+    so the password the operator typed goes somewhere nothing reads and
+    db.py:96 seeds sha256('admin') instead. Every bootstrapped node therefore
+    stands on admin/admin, and nothing said so.
+
+    This asserts the one thing that actually matters: the database the hub
+    opens is the database that exists, and no rival copy is sitting elsewhere
+    pretending to be it.
+    """
+    try:
+        from kernel.db import DB_PATH
+    except Exception as e:
+        return MISSING, 'cannot resolve the hub database path: %s' % e
+
+    home = os.path.expanduser('~')
+    rivals = [p for p in (os.path.join(home, 'db', 'server.db'),
+                          os.path.join(home, 'hub', 'db', 'server.db'))
+              if os.path.exists(p) and os.path.abspath(p) != os.path.abspath(DB_PATH)]
+
+    if not os.path.exists(DB_PATH):
+        return MISSING, 'the hub database does not exist at %s' % DB_PATH
+    if rivals:
+        return WARN, ('a second database exists at %s — the hub reads %s, so '
+                      'anything seeded into the other one is invisible'
+                      % (rivals[0], DB_PATH))
+    return OK, 'hub database at %s, no rival copy' % DB_PATH
+
+
+def check_default_password():
+    """A node reachable from the internet standing on admin/admin is not a
+    configuration preference. Checked by hash so nothing is ever printed."""
+    try:
+        import hashlib
+        import sqlite3
+        from kernel.db import DB_PATH
+        if not os.path.exists(DB_PATH):
+            return MISSING, 'no database to check'
+        c = sqlite3.connect('file:%s?mode=ro' % DB_PATH, uri=True)
+        rows = c.execute('SELECT username, password_hash FROM users').fetchall()
+        c.close()
+    except Exception as e:
+        return MISSING, 'cannot read users: %s' % e
+
+    weak = hashlib.sha256(b'admin').hexdigest()
+    bad = [u for u, h in rows if h == weak]
+    if bad:
+        return MISSING, ('%s still uses the seeded default password'
+                         % ', '.join(bad))
+    return OK, '%d user(s), none on the seeded default' % len(rows)
+
+
 def check_enrolled():
     if os.path.exists(os.path.expanduser('~/.flare/node.json')):
         return OK, 'enrolled — ~/.flare/node.json present'
@@ -157,6 +214,8 @@ CHECKS = [
     ('backups running',  check_backups_running),
     ('cache reclamation', check_reclamation),
     ('storage sound',    check_storage_sound),
+    ('layout',           check_layout),
+    ('admin password',   check_default_password),
     ('enrolled',         check_enrolled),
 ]
 
