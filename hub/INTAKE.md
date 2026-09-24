@@ -111,6 +111,17 @@ teaches it that answering does not matter.
 Thanks — verified against <host>. Here is what the machine says versus what you
 claimed. This is not a rejection; nothing here has been changed.
 
+WHO ANSWERED
+  node:        <name>          e.g. ksgcohub
+  server_id:   <fvn_xxxxxx>    stable across reboots, renames and IP changes
+  derived_at:  <timestamp>
+  ref:         <short git sha> the code that produced this answer
+
+  This answer is true for THIS SERVER ONLY. Your project has one home server
+  and the rules are derived from ITS disks and ITS bound ports. The other
+  server will give different — and equally correct — answers. Do not carry
+  this answer across.
+
 MATCHED
   <things where your claim and the machine agree — listed, because agreement
    is evidence too and it is the larger part>
@@ -125,6 +136,20 @@ ASSIGNED TO YOU
   <the port band, data paths, labels and acceptance test from /api/admit,
    computed for YOUR host — these differ per machine by design>
 
+PENDING — what changes underneath you, and when
+  <the answers above are true TODAY. Anything staged but not yet deployed
+   goes here, so you are not building against a number that is about to move.>
+
+  Example of a real one, live right now:
+    band moves 10020-10990 -> 7100-7899 on the next deploy
+    why: 10000-10999 is the Supabase stack's reserved lane; admit was handing
+         out ports another service owns
+    what you must do: rebind before you publish, or declare `accept` and I
+         record that you are knowingly inside a reserved lane
+
+  If PENDING is empty, say "none" — silence and "nothing pending" are
+  different, and only one of them is information.
+
 WHAT I NEED BACK
   One disposition per difference: fix / accept / defer / hub-wrong.
 
@@ -136,6 +161,24 @@ WHAT I NEED BACK
   You are not required to fix anything. A declared deviation is reconciled. An
   undeclared one is the only failure state.
 ```
+
+## One project, one home server
+
+A project belongs to exactly one server and is managed only against that one.
+
+```
+ksgcohub      fksinv · babyhelp
+fks-services  metaforge · flarevault
+```
+
+This is not bookkeeping. The rules are DERIVED from the host: ksgcohub resolves
+its data root to /srv/data, fks-services to /srv/docker with backups on
+/backup. Two servers giving the same answer would mean the derivation is
+broken.
+
+So there is no global registry — there are two, one per server, and congruence
+between them is about the CODE REF, never the values. A project's receipt is
+only meaningful next to the server that produced it.
 
 ## Buckets and stages
 
