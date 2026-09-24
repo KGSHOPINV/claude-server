@@ -62,10 +62,26 @@ VOL_ROOT=/var/lib/docker/volumes
 DRY=0
 [ "${1:-}" = "--dry-run" ] && DRY=1
 
+# Volumes live under root-owned paths, so this script needs passwordless sudo.
+# Check ONCE, loudly. The first version tested `sudo -n` per volume and fell
+# through to `continue` on failure: on a host where sudo prompts (fks-services),
+# every volume was skipped, the failure counter stayed 0, retention ran, and it
+# exited 0 having backed up nothing while deleting the oldest real backup.
+# That is the same defect as the metaforge script this one was written to
+# replace. A backup tool that cannot read its sources must say so and stop.
+if [ "$DRY" = "0" ] && ! sudo -n true 2>/dev/null; then
+  echo "backup.sh: passwordless sudo is required to read Docker volumes." >&2
+  echo "  Docker volumes live under /var/lib/docker/volumes (root-owned)." >&2
+  echo "  Grant NOPASSWD for tar, or run this script as root." >&2
+  exit 1
+fi
+
 STAMP=$(date +%F)
 DEST="$DEST_ROOT/$STAMP"
 LOG="$DEST_ROOT/backup.log"
 FAILED=0
+ATTEMPTED=0
+WROTE=0
 
 say() { echo "$(date +%T) $*" | tee -a "$LOG" 2>/dev/null || echo "$(date +%T) $*"; }
 
@@ -84,14 +100,19 @@ for vol in $(docker volume ls -q 2>/dev/null); do
   case "$vol" in
     *cache*) [ "$DRY" = "1" ] && echo "  skip  $vol  (cache — regenerable)"; continue;;
   esac
+  ATTEMPTED=$((ATTEMPTED + 1))
   src="$VOL_ROOT/$vol/_data"
-  sudo -n test -d "$src" 2>/dev/null || continue
   if [ "$DRY" = "1" ]; then
     echo "  back  $vol"
     continue
   fi
+  # An unreadable source is a FAILURE, not something to skip past. A volume
+  # that exists and cannot be read is exactly the case worth shouting about.
+  if ! sudo -n test -d "$src" 2>/dev/null; then
+    say "  FAIL vol $vol — source unreadable at $src"; FAILED=1; continue
+  fi
   if sudo -n tar czf "$DEST/vol-$vol.tar.gz" -C "$src" . 2>/dev/null; then
-    say "  ok   vol $vol"
+    say "  ok   vol $vol"; WROTE=$((WROTE + 1))
   else
     say "  FAIL vol $vol"; FAILED=1
   fi
@@ -148,6 +169,13 @@ say "=== backup done: $SIZE in $DEST"
 # ── Retention ────────────────────────────────────────────────────────────────
 # Pruned only after a successful run, so a run of failures cannot quietly age
 # out the last good copy.
+# Zero artifacts written is a failed backup, however quiet it was. Without this
+# a run that skipped everything reports success and then prunes.
+if [ "$WROTE" = "0" ]; then
+  say "  FAIL — attempted $ATTEMPTED sources, wrote 0. Not a backup."
+  FAILED=1
+fi
+
 if [ "$FAILED" = "0" ]; then
   ls -1d "$DEST_ROOT"/20* 2>/dev/null | sort | head -n -"$KEEP" | while read -r old; do
     rm -rf "$old" && say "  pruned $old"
