@@ -44,69 +44,87 @@
   among others.
 -->
 <style>
+  /* The hub's own language, not a generic card grid. Slate, a cyan accent,
+     monospace for anything a machine generated, and colour used only to mean
+     something -- green is reporting, amber wants a human, grey is unknown.
+     A front door that looks unlike the room behind it reads as a bolt-on. */
   :root{
-    --bg:#0d1117; --panel:#161b22; --border:#30363d;
-    --text:#e6edf3; --muted:#8b949e; --accent:#f78166;
-    --ok:#3fb950; --warn:#d29922; --bad:#f85149;
+    --bg:#0b0f14; --panel:#111823; --panel2:#0e141d; --border:#1e2936;
+    --text:#dbe5f0; --muted:#7d8da0; --muted2:#55697e;
+    --accent:#4ec9e0; --green:#3fb950; --amber:#d29922; --red:#f85149;
+    --mono:ui-monospace,SFMono-Regular,"SF Mono",Menlo,monospace;
   }
   @media (prefers-color-scheme: light){
-    :root{ --bg:#ffffff; --panel:#f6f8fa; --border:#d0d7de;
-           --text:#1f2328; --muted:#656d76; --accent:#bc4c00;
-           --ok:#1a7f37; --warn:#9a6700; --bad:#cf222e; }
+    :root:not([data-theme="dark"]){
+      --bg:#f6f8fa; --panel:#ffffff; --panel2:#f0f3f6; --border:#d5dde5;
+      --text:#1f2328; --muted:#5b6570; --muted2:#8593a3; --accent:#0d7d94;
+    }
   }
   *{box-sizing:border-box}
   body{
     margin:0; min-height:100vh; background:var(--bg); color:var(--text);
-    font:15px/1.6 ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif;
-    padding:28px 20px 48px;
+    font:14px/1.55 ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif;
+    padding:0;
   }
-  main{ width:100%; max-width:900px; margin:0 auto }
-  .mark{
-    width:38px; height:38px; border-radius:9px; border:1px solid var(--border);
-    background:var(--panel); display:flex; align-items:center; justify-content:center;
-    font-size:17px; margin-bottom:16px;
-  }
-  h1{ font-size:21px; font-weight:500; margin:0 0 4px }
-  .sub{ color:var(--muted); margin:0 0 20px; font-size:13px }
-  code{ font-family:ui-monospace,SFMono-Regular,Menlo,monospace; font-size:12px }
+  .wrap{ max-width:940px; margin:0 auto; padding:26px 24px 60px }
 
-  .layers{ display:flex; flex-wrap:wrap; gap:6px; margin:0 0 10px }
-  .lay{
-    font-size:11px; padding:3px 9px; border-radius:999px;
-    border:1px solid var(--border); background:var(--panel); color:var(--muted);
-  }
-  .lay b{ color:var(--text); font-weight:600 }
-  .lay.on{ border-color:var(--ok); color:var(--text) }
-  .lay.pending{ border-style:dashed }
-  .doors{ display:flex; flex-wrap:wrap; gap:6px; margin:0 0 22px;
-          color:var(--muted); font-size:11px; align-items:center }
-  .door{ padding:3px 9px; border-radius:999px; border:1px solid var(--border);
-         background:var(--panel) }
+  /* header ---------------------------------------------------------------- */
+  .top{ display:flex; align-items:baseline; gap:12px; flex-wrap:wrap;
+        padding-bottom:14px; border-bottom:1px solid var(--border) }
+  .brand{ font-size:15px; font-weight:600; letter-spacing:.3px }
+  .brand .dot{ color:var(--accent) }
+  .who{ margin-left:auto; font-size:11px; color:var(--muted);
+        font-family:var(--mono) }
+  .who b{ color:var(--text); font-weight:500 }
 
-  .cards{ display:grid; gap:12px; grid-template-columns:repeat(auto-fill,minmax(270px,1fr)) }
+  /* layer strip ----------------------------------------------------------- */
+  .layers{ display:flex; gap:6px; flex-wrap:wrap; margin:16px 0 4px }
+  .lyr{ font-size:10px; font-family:var(--mono); padding:3px 8px;
+        border-radius:3px; border:1px solid var(--border); color:var(--muted2);
+        background:var(--panel2) }
+  .lyr.on{ color:var(--green); border-color:color-mix(in srgb,var(--green) 40%,transparent) }
+  .lyr .n{ color:var(--text); margin-right:5px }
+  .doors{ font-size:10px; color:var(--muted2); font-family:var(--mono);
+          margin:8px 0 22px }
+  .doors span{ color:var(--muted) }
+
+  /* servers --------------------------------------------------------------- */
+  .cards{ display:flex; flex-direction:column; gap:1px; background:var(--border);
+          border:1px solid var(--border); border-radius:6px; overflow:hidden }
   a.card{
-    display:block; text-decoration:none; color:inherit;
-    border:1px solid var(--border); background:var(--panel);
-    border-radius:10px; padding:14px 15px 12px;
+    display:block; padding:14px 16px; background:var(--panel);
+    color:inherit; text-decoration:none; position:relative;
+    transition:background .12s ease;
   }
-  a.card:hover{ border-color:var(--accent) }
-  a.card:focus-visible{ outline:2px solid var(--accent); outline-offset:2px }
-  .ctop{ display:flex; align-items:baseline; justify-content:space-between; gap:8px }
-  .cname{ font-size:15px; font-weight:600; overflow-wrap:anywhere }
-  .cid{ font-size:11px; color:var(--muted); overflow-wrap:anywhere;
-        font-family:ui-monospace,SFMono-Regular,Menlo,monospace }
-  .pill{ font-size:10px; letter-spacing:.04em; text-transform:uppercase;
-         padding:2px 8px; border-radius:999px; border:1px solid var(--border);
-         color:var(--muted); white-space:nowrap }
-  .pill.healthy,.pill.self{ color:var(--ok); border-color:var(--ok) }
-  .pill.degraded,.pill.recovering,.pill.enrolling{ color:var(--warn); border-color:var(--warn) }
-  .pill.unreachable{ color:var(--bad); border-color:var(--bad) }
-  .facts{ display:grid; grid-template-columns:1fr 1fr; gap:4px 12px;
-          margin-top:12px; padding-top:11px; border-top:1px solid var(--border);
-          font-size:12px }
-  .k{ color:var(--muted) }
-  .v{ text-align:right; overflow-wrap:anywhere }
-  .attn{ color:var(--warn) }
+  a.card:hover{ background:var(--panel2) }
+  a.card:hover .go{ color:var(--accent); transform:translateX(2px) }
+  a.card:focus-visible{ outline:2px solid var(--accent); outline-offset:-2px }
+  .ctop{ display:flex; align-items:center; gap:9px }
+  .cname{ font-size:15px; font-weight:600 }
+  .cid{ font-family:var(--mono); font-size:10px; color:var(--muted2) }
+  .go{ margin-left:auto; color:var(--muted2); font-size:16px;
+       transition:color .12s ease, transform .12s ease }
+
+  /* one line of facts, inline, mono -- reads as a readout not a form */
+  .facts{ display:flex; flex-wrap:wrap; gap:0 18px; margin-top:7px;
+          font-family:var(--mono); font-size:11px; color:var(--muted) }
+  .f b{ color:var(--text); font-weight:500 }
+  .f.warn b{ color:var(--amber) }
+  .seen{ margin-top:5px; font-size:10px; color:var(--muted2);
+         font-family:var(--mono) }
+
+  .pill{ font-size:9px; font-family:var(--mono); text-transform:uppercase;
+         letter-spacing:.6px; padding:2px 7px; border-radius:20px;
+         border:1px solid var(--border); color:var(--muted) }
+  .pill.healthy{ color:var(--green);
+                 border-color:color-mix(in srgb,var(--green) 40%,transparent) }
+  .pill.self{ color:var(--accent);
+              border-color:color-mix(in srgb,var(--accent) 40%,transparent) }
+  .pill.degraded,.pill.stale{ color:var(--amber);
+              border-color:color-mix(in srgb,var(--amber) 40%,transparent) }
+  .pill.unreachable{ color:var(--red);
+              border-color:color-mix(in srgb,var(--red) 40%,transparent) }
+
   .enter{ margin-top:11px; font-size:11px; color:var(--accent) }
 
   .msg{
@@ -293,26 +311,28 @@
   function card(s) {
     var sid = String(s.server_id || '');
     var st = String(s.status || '').toLowerCase().replace(/[^a-z]/g, '');
-    var facts = [
-      ['Containers', val(s.containers)],
-      ['Projects', val(s.projects)],
-      ['Attention', (s.attention ? '<span class="attn">' + es(s.attention) +
-                     '</span>' : val(s.attention))],
-      ['OS', val(s.os)],
-      ['Uptime', val(s.uptime)],
-      ['Last seen', s.self ? 'now (this box)' : val(when(s.last_seen))]
-    ];
-    var rows = facts.map(function (f) {
-      return '<div class="k">' + f[0] + '</div><div class="v">' + f[1] + '</div>';
-    }).join('');
+    // One line of facts rather than a label/value table. A table of six rows
+    // per server turns a two-server fleet into a wall and buries the one thing
+    // that matters -- which box wants a human.
+    var f = [];
+    if (s.containers != null) f.push('<span class="f"><b>' + es(s.containers) + '</b> containers</span>');
+    if (s.projects  != null) f.push('<span class="f"><b>' + es(s.projects)  + '</b> projects</span>');
+    if (s.attention)         f.push('<span class="f warn"><b>' + es(s.attention) + '</b> need attention</span>');
+    if (s.os)                f.push('<span class="f">' + es(s.os) + '</span>');
+    if (s.uptime)            f.push('<span class="f">up ' + es(s.uptime) + '</span>');
+
     return '<a class="card" href="/s/' + encodeURIComponent(sid) + '/">' +
              '<div class="ctop">' +
                '<span class="cname">' + val(s.name || sid) + '</span>' +
+               '<span class="cid">' + es(sid) + '</span>' +
                '<span class="pill ' + es(st) + '">' + val(s.status) + '</span>' +
+               '<span class="go">&rsaquo;</span>' +
              '</div>' +
-             '<div class="cid">' + es(sid) + '</div>' +
-             '<div class="facts">' + rows + '</div>' +
-             '<div class="enter">Operate this server &rarr;</div>' +
+             (f.length ? '<div class="facts">' + f.join('') + '</div>' : '') +
+             '<div class="seen">' +
+               (s.self ? 'this box &middot; read now'
+                       : 'last seen ' + es(when(s.last_seen) || 'unknown')) +
+             '</div>' +
            '</a>';
   }
 
