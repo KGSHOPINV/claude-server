@@ -5841,7 +5841,30 @@ checkLogin();
 const badge = document.getElementById('hub-user-badge');
 if (badge && HUB_USER) badge.textContent = '⚙ ' + HUB_USER;
 setCategory('server');
-createWorkspace({ title:'Home', icon:'⊞', pinned:true, viewType:'dashboard' });
+// LOBBY FIRST, on a central node.
+//
+// The spec: "Lobby first. After login you always land in the dashboard. No
+// scatter." On central this hub IS the lobby, so landing on the LOCAL
+// dashboard shows you one server -- the box that happened to serve the page --
+// and the fleet sits in a pane you have to go and find. Which reads exactly
+// like the other servers do not exist.
+//
+// A node is not a lobby, so it keeps landing on its own dashboard: that is
+// the only server it can honestly show.
+//
+// Asked, not assumed. /api/node says which mode this is, and the workspace is
+// created either way -- if the call fails we land on the dashboard, which is
+// the behaviour that was always there.
+(function () {
+  function home(viewType) {
+    createWorkspace({ title: viewType === 'fleet' ? 'Fleet' : 'Home',
+                      icon: viewType === 'fleet' ? '🖧' : '⊞',
+                      pinned: true, viewType: viewType });
+  }
+  fetch('/api/node').then(r => r.json()).then(d => {
+    home(d && d.mode === 'central' ? 'fleet' : 'dashboard');
+  }).catch(() => home('dashboard'));
+})();
 renderBookmarks();
 restoreStickyNotes();
 refresh(false);
