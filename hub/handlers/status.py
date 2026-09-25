@@ -6,6 +6,7 @@ Imports only from kernel/. No direct DB access except via kernel.db.
 """
 import json
 import os
+import re
 import subprocess
 from datetime import datetime
 
@@ -165,76 +166,64 @@ def get_context(handler, path, params):
 
 
 def get_sitemap(handler, path, params):
-    """# 20302716  GET /api/sitemap -- full route registry"""
-    routes = {
-        'GET': [
-            {'path': '/', 'description': 'Hub dashboard (HTML)'},
-            {'path': '/api/status', 'description': 'Server status'},
-            {'path': '/api/containers', 'description': 'Docker container list'},
-            {'path': '/api/services', 'description': 'Known services with running state'},
-            {'path': '/api/ports', 'description': 'Live port scan + lane classification'},
-            {'path': '/api/storage', 'description': 'Disk usage per mount'},
-            {'path': '/api/docker/images', 'description': 'Docker image list'},
-            {'path': '/api/docker/volumes', 'description': 'Docker volume list'},
-            {'path': '/api/docker/stats', 'description': 'Container CPU/RAM stats'},
-            {'path': '/api/docker/diagnostics', 'description': 'Container health diagnostics'},
-            {'path': '/api/identity', 'description': 'Peer mesh identity beacon'},
-            {'path': '/api/federation', 'description': 'Registered peer hubs'},
-            {'path': '/api/config', 'description': 'Hub config key/value store'},
-            {'path': '/api/integrations', 'description': 'External integrations'},
-            {'path': '/api/vault', 'description': 'Encrypted credential vault'},
-            {'path': '/api/issues', 'description': 'Tracked issue list'},
-            {'path': '/api/docs', 'description': 'Guide/doc list'},
-            {'path': '/api/docs/content', 'description': 'Guide content by filename'},
-            {'path': '/api/journal', 'description': 'Activity journal entries'},
-            {'path': '/api/receipt', 'description': 'Server receipt / hardware overview'},
-            {'path': '/api/manifest', 'description': 'Service manifest (BOM)'},
-            {'path': '/api/my-ip', 'description': 'Client IP detection'},
-            {'path': '/api/auth/check', 'description': 'Session auth check'},
-            {'path': '/api/users', 'description': 'User list'},
-            {'path': '/api/access', 'description': 'Access/permission config'},
-            {'path': '/api/ai/config', 'description': 'AI/LLM configuration'},
-            {'path': '/api/totp/status', 'description': 'TOTP gate status'},
-            {'path': '/api/totp/setup', 'description': 'TOTP setup (QR + secret)'},
-            {'path': '/api/context', 'description': 'Claude context export'},
-            {'path': '/api/sync', 'description': 'Sync status'},
-            {'path': '/api/files', 'description': 'File browser'},
-            {'path': '/cutsheet', 'description': 'Port cut-sheet (HTML)'},
-            {'path': '/api/sitemap', 'description': 'This endpoint -- route registry'},
-            {'path': '/proxy/{port}/{path}', 'description': 'Reverse proxy to local service'},
-        ],
-        'POST': [
-            {'path': '/api/run', 'description': 'Run shell command (gate level 3)'},
-            {'path': '/api/vault', 'description': 'Save encrypted vault blob'},
-            {'path': '/api/refresh', 'description': 'Force status cache refresh'},
-            {'path': '/api/auth/login', 'description': 'Authenticate (returns session token)'},
-            {'path': '/api/auth/logout', 'description': 'Invalidate session'},
-            {'path': '/api/config', 'description': 'Set hub config value'},
-            {'path': '/api/federation', 'description': 'Add federation peer URL'},
-            {'path': '/api/peer/register', 'description': 'Bidirectional peer mesh registration'},
-            {'path': '/api/journal', 'description': 'Append journal entry'},
-            {'path': '/api/ai/chat', 'description': 'AI chat message'},
-            {'path': '/api/ai/config', 'description': 'Set AI config (key/model)'},
-            {'path': '/api/totp/confirm', 'description': 'Confirm TOTP setup'},
-            {'path': '/api/totp/verify', 'description': 'Verify TOTP code (elevate gate)'},
-            {'path': '/api/totp/disable', 'description': 'Disable TOTP'},
-            {'path': '/api/service/install', 'description': 'Deploy a new service'},
-            {'path': '/api/tunnel/start', 'description': 'Start Cloudflare tunnel'},
-            {'path': '/api/tunnel/stop', 'description': 'Stop Cloudflare tunnel'},
-            {'path': '/api/ports/ack', 'description': 'Acknowledge port alert'},
-            {'path': '/api/update', 'description': 'git pull + hub restart'},
-            {'path': '/api/users', 'description': 'Create user'},
-            {'path': '/api/docker/prune', 'description': 'Docker system prune'},
-            {'path': '/api/activity', 'description': 'Log activity event'},
-            {'path': '/api/setup/generate-claude-md', 'description': 'Generate CLAUDE.md'},
-        ],
-    }
+    """# 20302716  GET /api/sitemap — derived from the router, not maintained
+
+    This was a hand-written list of paths and descriptions. It had drifted, as
+    hand-written lists do: it advertised GET and POST /api/vault -- "Encrypted
+    credential vault" -- which kernel/router.py reserves and deliberately never
+    implements, with the note that if the prefix ever appears, something has
+    gone wrong. So the server's own public map offered a credential store that
+    does not exist and must not.
+
+    It now reads kernel.router.ROUTES, which is the same table that dispatches
+    every request. A route cannot be advertised unless it is served, and cannot
+    be served without appearing here. The two can no longer disagree.
+
+    Descriptions come from each handler's docstring. A route with no docstring
+    says so rather than borrowing a plausible sentence -- an undocumented route
+    is a fact about the code, not something to paper over.
+
+    Gate 0. It names paths and their gate levels, never data, and "what can I
+    even call here" is a question you have before you can log in.
+    """
+    from kernel import router as _router
+
+    def describe(r):
+        try:
+            mod = _router._load(r['module'])
+            fn = getattr(mod, r['handler'], None)
+            doc = (fn.__doc__ or '').strip() if fn else ''
+        except Exception:
+            doc = ''
+        if not doc:
+            return '(undocumented)'
+        # First sentence after the telescope code line.
+        line = doc.splitlines()[0].strip()
+        line = re.sub(r'^#\s*\d{8}\s*', '', line)
+        line = re.sub(r'^(GET|POST)\s+\S+\s*[—-]*\s*', '', line)
+        return line.strip(' -—') or '(undocumented)'
+
+    routes = {'GET': [], 'POST': []}
+    for r in _router.ROUTES:
+        routes.setdefault(r['method'], []).append({
+            'path': r['path'] + ('*' if r.get('prefix') else ''),
+            'gate': r.get('gate', 0),
+            'code': r['code'],
+            'module': r['module'],
+            'description': describe(r),
+        })
+    for k in routes:
+        routes[k].sort(key=lambda x: x['path'])
+
     handler.send_json({
         'hub_version': '1.0',
         'port': PORT,
+        'derived_from': 'kernel.router.ROUTES',
         'routes': routes,
-        'total_get': len(routes['GET']),
-        'total_post': len(routes['POST']),
+        'total_get': len(routes.get('GET', [])),
+        'total_post': len(routes.get('POST', [])),
+        'total': sum(len(v) for v in routes.values()),
+        'gates': {'0': 'public', '1': 'signed in', '2': 'admin', '3': 'TOTP'},
     })
 
 
