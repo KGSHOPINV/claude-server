@@ -139,6 +139,18 @@ if __name__ == '__main__':
     else:
         print('  mode: CENTRAL — receiving heartbeats')
 
+    # Outbound delivery. Started EXPLICITLY, never on import -- a worker that
+    # spins up merely because a module was imported also runs inside every
+    # tool, test and one-off script that touches it, and then two processes
+    # are pushing the same queue.
+    #
+    # Until this line runs the push leg is inert, and outbox.worker_state()
+    # says NOT STARTED in words rather than showing a zero count that looks
+    # like 'nothing to send'.
+    from kernel import outbox as _outbox
+    _outbox.start(lambda m: log_activity(db_conn, m, 'outbox', 'delivery', '', 'warn'))
+    print('  outbox: delivery worker started')
+
     # Log startup
     log_activity(db_conn, 'Hub started', 'hub', 'startup', f'port={PORT}', 'info')
     print(f'\n  Server Hub API  —  http://localhost:{PORT}')

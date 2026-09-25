@@ -105,6 +105,19 @@ ROUTES = [
     {"code": "20316703", "method": "POST", "path": "/api/lobby/server/",         "prefix": True,  "gate": 2, "handler": "post_lobby_action",  "module": "lobby"},
     {"code": "20316704", "method": "POST", "path": "/api/lobby/vault",           "prefix": False, "gate": 3, "handler": "post_lobby_vault",   "module": "lobby"},
 
+    # ── The outbox (module 17) — outbound, staged and collected ──────────────
+    # Build-order item 1. The hole the eleven-step flow sat over: the intake
+    # message left the machine only because a human pasted it.
+    #
+    # -ack and -address are SIBLINGS, not children of /api/outbox/. A second
+    # entry on one prefix can never win the stable sort, and the gates differ:
+    # staging speaks FOR the server, a project acting on itself does not.
+    {"code": "20317701", "method": "GET",  "path": "/api/outbox",               "prefix": False, "gate": 2, "handler": "get_outbox_board",    "module": "outbox"},
+    {"code": "20317703", "method": "POST", "path": "/api/outbox/",              "prefix": True,  "gate": 2, "handler": "post_outbox_stage",   "module": "outbox"},
+    {"code": "20317702", "method": "GET",  "path": "/api/outbox/",              "prefix": True,  "gate": 1, "handler": "get_outbox_project",  "module": "outbox"},
+    {"code": "20317704", "method": "POST", "path": "/api/outbox-ack/",          "prefix": True,  "gate": 1, "handler": "post_outbox_ack",     "module": "outbox"},
+    {"code": "20317705", "method": "POST", "path": "/api/outbox-address/",      "prefix": True,  "gate": 1, "handler": "post_outbox_address", "module": "outbox"},
+
     # ── Federation ───────────────────────────────────────────────────────────
     {"code": "20303701", "method": "GET",  "path": "/api/federation",             "prefix": False, "gate": 1, "handler": "get_federation",         "module": "federation"},
     {"code": "20303702", "method": "POST", "path": "/api/federation",             "prefix": False, "gate": 1, "handler": "post_federation",        "module": "federation"},
