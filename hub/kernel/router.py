@@ -138,6 +138,38 @@ ROUTES = [
     # cannot log in" have the same first question.
     {"code": "20306707", "method": "GET",  "path": "/api/events/self",            "prefix": False, "gate": 0, "handler": "get_events_self",      "module": "events_stream"},
 
+    # ── The exchange (module 15) ─────────────────────────────────────────────
+    # The entry path already existed: /api/admit, /api/registry, /api/ack. What
+    # had no URLs was the ONGOING half -- bulletins, tickets, a project's own
+    # log, baselines. It sat in kernel/control.py callable only from a tool on
+    # the box, which meant the operator was still carrying every message by
+    # hand. That is the thing the exchange exists to stop.
+    #
+    # Gate 1 for reading and answering: a project holds a session already.
+    # Gate 2 to PUBLISH -- that speaks for the server to every project at once.
+    {"code": "20315701", "method": "GET",  "path": "/api/bulletins/",             "prefix": True,  "gate": 1, "handler": "get_bulletins",         "module": "exchange"},
+    {"code": "20315704", "method": "POST", "path": "/api/bulletins",              "prefix": False, "gate": 2, "handler": "post_bulletins",        "module": "exchange"},
+    # Longest-prefix first: /read and /readers must be tested before the bare
+    # /api/bulletin/<n>, or the bare route swallows them.
+    {"code": "20315703", "method": "POST", "path": "/api/bulletin/",              "prefix": True,  "gate": 1, "handler": "post_bulletin_read",    "module": "exchange"},
+    {"code": "20315705", "method": "GET",  "path": "/api/bulletin-readers/",      "prefix": True,  "gate": 1, "handler": "get_bulletin_readers",  "module": "exchange"},
+    {"code": "20315702", "method": "GET",  "path": "/api/bulletin/",              "prefix": True,  "gate": 1, "handler": "get_bulletin",          "module": "exchange"},
+
+    {"code": "20315706", "method": "GET",  "path": "/api/tickets",                "prefix": False, "gate": 1, "handler": "get_tickets",           "module": "exchange"},
+    {"code": "20315707", "method": "POST", "path": "/api/tickets",                "prefix": False, "gate": 1, "handler": "post_tickets",          "module": "exchange"},
+
+    {"code": "20315708", "method": "GET",  "path": "/api/project-log/",           "prefix": True,  "gate": 1, "handler": "get_project_log",       "module": "exchange"},
+    {"code": "20315709", "method": "POST", "path": "/api/project-log/",           "prefix": True,  "gate": 1, "handler": "post_project_log",      "module": "exchange"},
+
+    {"code": "20315710", "method": "GET",  "path": "/api/baselines/",             "prefix": True,  "gate": 1, "handler": "get_baselines",         "module": "exchange"},
+    {"code": "20315711", "method": "POST", "path": "/api/baselines/",             "prefix": True,  "gate": 1, "handler": "post_baselines",        "module": "exchange"},
+
+    # The bank. Gate 2 to deposit -- that is handing the server a secret.
+    # Collect is gate 1 because a project must be able to fetch its own.
+    {"code": "20315712", "method": "GET",  "path": "/api/bank",                   "prefix": False, "gate": 2, "handler": "get_bank",              "module": "exchange"},
+    {"code": "20315714", "method": "POST", "path": "/api/bank/collect",           "prefix": False, "gate": 1, "handler": "post_bank_collect",     "module": "exchange"},
+    {"code": "20315713", "method": "POST", "path": "/api/bank",                   "prefix": False, "gate": 2, "handler": "post_bank",             "module": "exchange"},
+
     # ── AI ────────────────────────────────────────────────────────────────────
     {"code": "20307701", "method": "GET",  "path": "/api/ai/config",              "prefix": False, "gate": 1, "handler": "get_ai_config",          "module": "ai"},
     {"code": "20307702", "method": "POST", "path": "/api/ai/chat",                "prefix": False, "gate": 1, "handler": "post_ai_chat",           "module": "ai"},
