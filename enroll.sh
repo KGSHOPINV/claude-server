@@ -78,7 +78,7 @@ ID_LABEL=$(printf '%s' "$SERVER_ID" | tr '_' '-')
 
 ok "machine-id : $MACHINE_ID"
 ok "server id  : $SERVER_ID"
-ok "node       : $NODE_NAME  (readable alias only — the id is the address)"
+ok "node       : $NODE_NAME  (label only — not used in any hostname)"
 
 # ── 2. preflight ─────────────────────────────────────────────────────────────
 step "2. Preflight"
