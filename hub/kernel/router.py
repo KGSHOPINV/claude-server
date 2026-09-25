@@ -356,6 +356,16 @@ SPLASH_HOSTS = [h.strip().lower() for h in os.environ.get(
 # which would confirm the route exists.
 SPLASH_ALLOW = ('/', '/mobile', '/desktop', '/manifest.json', '/sw.js')
 
+# Paths on the apex that are NOT the public login space. These reach the API
+# because there is a person behind them -- Cloudflare Access is scoped to
+# these paths, so a request only arrives here having already signed in.
+#
+# The guard above still applies to everything else: the apex must never expose
+# /api/config and friends, which is what it did for four minutes when a second
+# hostname was added without its own Access app.
+SPLASH_BEHIND_LOGIN = ('/fleet', '/flareshub', '/s/', '/api/lobby', '/api/door',
+                       '/ui/', '/api/auth/check', '/api/node')
+
 
 # 20200325  _splash_only — the apex must never reach the API
 def _splash_only(handler, path):
@@ -382,7 +392,12 @@ def _splash_only(handler, path):
         return False
     if host not in SPLASH_HOSTS:
         return False
-    return path.split('?')[0] not in SPLASH_ALLOW
+    p = path.split('?')[0]
+    if p in SPLASH_ALLOW:
+        return False
+    if any(p == a or p.startswith(a) for a in SPLASH_BEHIND_LOGIN):
+        return False
+    return True
 
 
 def dispatch(handler, method, path, params=None, body=None, db_conn_fn=None):
