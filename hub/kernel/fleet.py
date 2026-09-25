@@ -16,9 +16,20 @@ Status is DERIVED from last_seen on every read rather than written by a
 sweeper. A timer that stops running would otherwise leave every node frozen at
 "healthy" — the failure mode where the monitor lies rather than alarms.
 
-In-memory for now. SQLite persistence later; losing the registry on restart
-costs one heartbeat interval, since every node re-reports within 30s.
+PERSISTED, as of 2026-09-25. It used to be memory only, on the reasoning that
+losing the registry costs one heartbeat interval because every node re-reports
+within 30s. That is true and it is still the worst case -- but during a working
+session it meant a node that had been healthy for hours vanished on every hub
+restart, and a drill-in to it answered 404 no_such_server. Three separate times
+that looked like a broken product rather than a 30-second window.
+
+Status is still DERIVED on read, so a restored record cannot lie: a node that
+stopped beating while central was down comes back as degraded or unreachable
+on the first read, exactly as it would have without persistence. What is
+restored is the KNOWLEDGE that the node exists, never a claim about its health.
 """
+import json
+import os
 import threading
 import time
 from datetime import datetime, timezone
@@ -36,6 +47,43 @@ RECOVERING = 'recovering'
 _fleet = {}                      # server_id -> record
 _lock = threading.Lock()
 
+# Beside control.db: this is what central knows about the fleet, and it belongs
+# with the other things that cannot be re-derived from this box alone.
+_BASE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+STATE_FILE = os.environ.get(
+    'HUB_FLEET_STATE', os.path.join(os.path.dirname(_BASE), 'db', 'fleet.json'))
+_loaded = False
+
+
+# 20200336  _persist — write the registry, atomically
+def _persist():
+    """Called with the lock held. Best effort: a fleet that cannot be written
+    is not a reason to drop a heartbeat, so failure is silent here and visible
+    in the next read returning less than expected."""
+    try:
+        os.makedirs(os.path.dirname(STATE_FILE), exist_ok=True)
+        tmp = STATE_FILE + '.tmp'
+        with open(tmp, 'w', encoding='utf-8') as f:
+            json.dump(_fleet, f)
+        os.replace(tmp, STATE_FILE)      # atomic; a torn file reads as no file
+    except Exception:
+        pass
+
+
+# 20200337  _restore — load it once, on first use
+def _restore():
+    global _loaded
+    if _loaded:
+        return
+    _loaded = True
+    try:
+        with open(STATE_FILE, encoding='utf-8') as f:
+            data = json.load(f)
+        if isinstance(data, dict):
+            _fleet.update(data)
+    except Exception:
+        pass
+
 
 def _now():
     return datetime.now(timezone.utc).isoformat(timespec='seconds')
@@ -51,6 +99,7 @@ def register(server_id, name, machine_id, reachability=None):
     box claiming a new identity, which is either a legitimate reprovision or
     something worth asking about.
     """
+    _restore()
     if not server_id:
         return None, 'server_id required'
     note = None
@@ -77,6 +126,7 @@ def register(server_id, name, machine_id, reachability=None):
             'misses':       rec.get('misses', 0),
         })
         _fleet[server_id] = rec
+        _persist()
         return dict(rec), note
 
 
@@ -89,6 +139,7 @@ def heartbeat(payload, path='unknown', authenticated=False):
     that fell back from cloudflare to tailscale is still up, but the fact it
     had to is exactly the sort of quiet degradation that otherwise goes unseen.
     """
+    _restore()
     sid = payload.get('server_id') or payload.get('machine_id')
     if not sid:
         return None, 'heartbeat without server_id or machine_id — ignored'
@@ -169,6 +220,7 @@ def _derive_status(rec):
 
 # 20200334  fleet — full state for the UI
 def fleet():
+    _restore()
     out = {}
     with _lock:
         items = list(_fleet.items())
@@ -182,6 +234,7 @@ def fleet():
 
 
 def summary():
+    _restore()
     f = fleet()
     counts = {}
     for r in f.values():
