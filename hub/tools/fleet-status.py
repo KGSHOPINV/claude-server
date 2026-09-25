@@ -15,6 +15,11 @@ would mean the derivation is broken. So:
 Drift is the `ref` column disagreeing. The `data root` column disagreeing is
 the system working.
 
+`projects` and `stale` come from each node's own registry: how many projects
+filed a claim there, and how many have not acknowledged the ref that node is
+running. Stale is not failure -- it means the project has not been told, so
+nothing may assume it knows.
+
 Reads over SSH, derives everything, stores nothing. Run it whenever:
 
     python3 tools/fleet-status.py
@@ -47,9 +52,25 @@ def ssh(target, cmd):
 # 20404711  probe — everything about one node, in ONE ssh round trip
 def probe(name, target):
     """One connection per host. Several would be slower and could report a
-    machine mid-change as though the readings were simultaneous."""
+    machine mid-change as though the readings were simultaneous.
+
+    Two things in the payload below are load-bearing and easy to undo:
+
+    `ref` assigns to a variable before echoing. The previous form was
+    `echo "ref=$(git rev-parse ...)"`, and `echo` succeeds whether or not git
+    printed anything -- so in a checkout that is not a repo (a tarball deploy,
+    a copied directory) the `||` branch never ran and the column came back
+    BLANK. Blank under a ref column reads as "same as the others", i.e. as no
+    drift, when what happened is that nothing was measured.
+
+    `registry` sends the HTTP status back alongside the body. GET /api/registry
+    is new and fks-services is on an older ref that does not serve it. A 404
+    body still parses as JSON, and a missing "projects" key would have printed
+    0 -- a node with an unknown registry claiming nothing was stale.
+    """
     script = r'''
-cd ~/hub 2>/dev/null && echo "ref=$(git rev-parse --short HEAD 2>/dev/null)" || echo "ref=?"
+cd ~/hub 2>/dev/null && REF=$(git rev-parse --short HEAD 2>/dev/null)
+echo "ref=${REF:-?}"
 echo "hub=$(systemctl --user is-active hub 2>/dev/null)"
 echo "http=$(curl -s -o /dev/null -w '%{http_code}' -m 5 http://127.0.0.1:8765/ 2>/dev/null)"
 echo "backup_timer=$(systemctl --user list-timers --all --no-pager 2>/dev/null | grep -c hub-backup)"
@@ -62,6 +83,14 @@ if [ -f hub/tools/install-preflight.py ]; then
 else
   echo "preflight=not-deployed"
 fi
+echo "registry=$(curl -s -m 5 -w ' %{http_code}' http://127.0.0.1:8765/api/registry 2>/dev/null | python3 -c '
+import json, sys
+raw = sys.stdin.read()
+body, _, code = raw.rpartition(" ")
+d = json.loads(body) if code.strip() == "200" else None
+ps = (d or {}).get("projects") or []
+print("%d %d" % (len(ps), sum(1 for p in ps if p.get("stale"))) if d is not None else "n/a")
+' 2>/dev/null)"
 '''
     out = ssh(target, script)
     d = {'node': name, 'target': target, 'reachable': bool(out)}
@@ -69,7 +98,22 @@ fi
         if '=' in line:
             k, v = line.split('=', 1)
             d[k] = v.strip()
+    # Split here rather than at print time, so --json carries exactly the two
+    # numbers the table shows instead of a string a reader has to re-parse.
+    d['projects'], d['stale'] = _registry_cells(d.pop('registry', ''))
     return d
+
+
+# 20404712  _registry_cells — two numbers, or "n/a" and no pretending
+def _registry_cells(raw):
+    """"n/a" and "0" are different answers and only one of them is information.
+    A node whose hub predates /api/registry, whose hub is down, or whose curl
+    timed out has an UNKNOWN registry; printing 0 there would manufacture the
+    most reassuring reading available from the least evidence."""
+    parts = (raw or '').split()
+    if len(parts) == 2 and all(x.isdigit() for x in parts):
+        return parts[0], parts[1]
+    return 'n/a', 'n/a'
 
 
 def main():
@@ -79,8 +123,12 @@ def main():
         print(json.dumps(nodes, indent=2))
         return 0
 
+    # projects/stale sit beside preflight because all three answer the same
+    # question -- is this node's account of itself current -- while disk, band
+    # and dataroot are derived per machine and are SUPPOSED to disagree.
     cols = [('node', 13), ('ref', 9), ('hub', 8), ('http', 5),
-            ('preflight', 10), ('disk', 6), ('band', 16), ('dataroot', 14)]
+            ('preflight', 10), ('projects', 9), ('stale', 6),
+            ('disk', 6), ('band', 16), ('dataroot', 14)]
     print('  ' + ''.join(h.ljust(w) for h, w in cols))
     print('  ' + ''.join('-' * (w - 1) + ' ' for _, w in cols))
     for n in nodes:
@@ -96,6 +144,8 @@ def main():
             'node': n['node'], 'ref': n.get('ref', '?'),
             'hub': n.get('hub', '?'), 'http': n.get('http', '-'),
             'preflight': n.get('preflight', '?'),
+            'projects': n.get('projects', 'n/a'),
+            'stale': n.get('stale', 'n/a'),
             'disk': n.get('disk', '?'),
             'band': n.get('band', '-'), 'dataroot': n.get('dataroot', '-'),
         }
@@ -119,6 +169,20 @@ def main():
                if n.get('backup_timer', '0') == '0']
     if missing:
         print('  UNPROTECTED: no backup timer on %s' % ', '.join(missing))
+
+    # Two separate statements, never one total. A fleet-wide "3 stale" summed
+    # across a node that answered and a node that could not is a number with no
+    # meaning, and it reads as though the silent node had been checked.
+    behind = ['%s (%s)' % (n['node'], n['stale']) for n in live
+              if n.get('stale', 'n/a').isdigit() and n['stale'] != '0']
+    if behind:
+        print("  STALE: projects not told their node's master on %s"
+              % ', '.join(behind))
+    silent = [n['node'] for n in live if not n.get('stale', 'n/a').isdigit()]
+    if silent:
+        print('  registry: no answer from %s — its projects are UNKNOWN, not'
+              % ', '.join(silent))
+        print('            current. Deploy a ref carrying GET /api/registry.')
     return 0
 
 
