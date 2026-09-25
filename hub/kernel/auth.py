@@ -7,6 +7,7 @@ Auth is enforced at the router level — no handler can skip it.
 import base64
 import hashlib
 import hmac
+import json
 import os
 import secrets
 import struct
@@ -14,10 +15,108 @@ import threading
 import time
 
 # Shared session state
-_sessions = {}          # token → {user, created}
+_sessions = {}          # token → {user, role, created, expires}
 _users_lock = threading.Lock()
 _gate_sessions = {}     # token → {level, user, expires}
 _gate_lock = threading.Lock()
+
+# ── Session persistence ───────────────────────────────────────────────────────
+# _sessions used to be ONLY this dict, so every hub restart logged everyone out.
+# That is not a cosmetic annoyance: it is what made the Runbooks view -- 48
+# executable steps, the feature that exists so an operator can run routine work
+# without help -- unreachable in practice. You would land on the login screen
+# every time the hub was deployed or restarted and give up.
+#
+# The dict stays as the READ path, because a session check happens on nearly
+# every request and SQLite on each one would be silly. SQLite is the write-
+# through and the survivor: changes go to both, and the dict is rehydrated from
+# the table at startup.
+#
+# Gate tokens are deliberately NOT persisted. A gate is short-lived proof for a
+# dangerous operation (shell, vault, TOTP); surviving a restart is exactly what
+# it should not do.
+SESSION_TTL_DAYS = 30
+
+_loaded = False
+
+
+def _now():
+    return time.time()
+
+
+def _iso(ts):
+    return __import__('datetime').datetime.fromtimestamp(ts).isoformat()
+
+
+# 20200309  _session_load — hydrate the dict from SQLite, once
+def _session_load():
+    """Best effort. A hub that cannot read its session table must still serve
+    the login page, so every failure here degrades to 'no sessions' rather
+    than refusing to start."""
+    global _loaded
+    if _loaded:
+        return
+    _loaded = True
+    try:
+        from kernel.db import db_conn
+        conn = db_conn()
+        now = _iso(_now())
+        conn.execute("DELETE FROM sessions WHERE expires < ?", (now,))
+        rows = conn.execute(
+            "SELECT token, user, role, created, expires, via FROM sessions").fetchall()
+        conn.commit()
+        with _users_lock:
+            for r in rows:
+                _sessions[r['token']] = {
+                    'user': r['user'], 'role': r['role'],
+                    'created': r['created'], 'expires': r['expires'],
+                    'via': r['via'] or 'local',
+                }
+        conn.close()
+    except Exception:
+        pass
+
+
+# 20200310  session_put — create a session that survives a restart
+def session_put(token, user, role='admin', via='local'):
+    expires = _iso(_now() + SESSION_TTL_DAYS * 86400)
+    rec = {'user': user, 'role': role, 'created': _iso(_now()),
+           'expires': expires, 'via': via}
+    with _users_lock:
+        _sessions[token] = rec
+    try:
+        from kernel.db import db_conn
+        conn = db_conn()
+        conn.execute(
+            "INSERT OR REPLACE INTO sessions (token,user,role,created,expires,via) "
+            "VALUES (?,?,?,?,?,?)",
+            (token, user, role, rec['created'], expires, via))
+        conn.commit()
+        conn.close()
+    except Exception:
+        pass   # an unpersisted session still works until the next restart
+    return rec
+
+
+# 20200314  session_pop — end a session in both places
+def session_pop(token):
+    with _users_lock:
+        rec = _sessions.pop(token, None)
+    try:
+        from kernel.db import db_conn
+        conn = db_conn()
+        conn.execute("DELETE FROM sessions WHERE token = ?", (token,))
+        conn.commit()
+        conn.close()
+    except Exception:
+        pass
+    return rec
+
+
+def session_count():
+    _session_load()
+    with _users_lock:
+        return len(_sessions)
 
 # ── Cloudflare Access (FlareHub door) ──────────────────────────────────────────
 # Two doors, one identity:
@@ -33,6 +132,36 @@ CF_TRUST_IP = os.environ.get('HUB_CF_TRUST_IP', '').strip()
 CF_HEADER   = 'Cf-Access-Authenticated-User-Email'
 CF_EMAILS   = [e.strip().lower() for e in os.environ.get('HUB_CF_EMAILS', '').split(',') if e.strip()]
 CF_ROLE     = os.environ.get('HUB_CF_ROLE', 'admin')
+
+# The SERVICE door. Cloudflare Access forwards Cf-Access-Client-Id to the
+# origin when a SERVICE TOKEN authenticated the request -- which is how the
+# lobby reaches a node, because node hostnames refuse humans outright.
+#
+# Without this a drill-in delivers the node's real UI and then shows its login
+# box, because app.html calls /api/auth/check and the node has no human
+# session to check: the lobby came with a machine credential, not a person.
+# Two logins for one door, which is the thing the entry chain exists to
+# remove.
+#
+# Trusted on the SAME terms as the email: only from the tunnel's own address.
+# Anything on the tailnet or the LAN can invent this header, so the path is
+# what makes it safe, never the header.
+#
+# The session it grants is deliberately the SAME level as the Google door --
+# layer 1 and 2. A service token must not be a way to reach further than the
+# human who is holding it, and gate 2/3 still demand their own proof.
+# NOT Cf-Access-Client-Id. I assumed that one and it is never sent.
+#
+# Captured from a real request through the edge: Access forwards
+# Cf-Access-Jwt-Assertion and nothing else identifying. A service token's
+# identity is the `common_name` claim inside that JWT -- the client id. A human
+# session carries `email` instead, which is how the two are told apart.
+CF_JWT_HEADER = 'Cf-Access-Jwt-Assertion'
+# Which client ids may act as the lobby. Empty means any id Access accepted,
+# which is already narrow: Access only forwards the header after validating
+# the token against the app's own policy.
+CF_CLIENTS  = [c.strip().lower() for c in
+               os.environ.get('HUB_CF_CLIENTS', '').split(',') if c.strip()]
 
 
 # ── Internal helpers ───────────────────────────────────────────────────────────
@@ -73,6 +202,55 @@ def access_identity(handler):
     return email
 
 
+# 20200313  service_identity — the lobby, arriving with a service token
+def service_identity(handler):
+    """Return a name for the calling SERVICE, or None.
+
+    Same rule as access_identity: HUB_CF_TRUST_IP must be set AND the request
+    must have arrived from that address. cloudflared only forwards what Access
+    already approved, so the network path is the proof.
+
+    Returns a pseudo-user, not a person. Whoever reads the session should be
+    able to tell a machine from a human, so the name says which.
+    """
+    if not CF_TRUST_IP:
+        return None
+    try:
+        src = handler.client_address[0]
+    except Exception:
+        return None
+    if src != CF_TRUST_IP:
+        return None
+    raw = (handler.headers.get(CF_JWT_HEADER, '') or '').strip()
+    if not raw:
+        return None
+    # The payload is READ, not verified. Verifying would mean fetching and
+    # caching Cloudflare's signing keys, and it would buy nothing here: this
+    # header is only believed when the request arrived from the tunnel's own
+    # address, and cloudflared forwards only what Access already validated.
+    # The trust is the path. If that ever stops being true, verification does
+    # not save us either, because anything that can reach this port can send
+    # any header it likes.
+    try:
+        parts = raw.split('.')
+        if len(parts) != 3:
+            return None
+        pad = parts[1] + '=' * (-len(parts[1]) % 4)
+        claims = json.loads(base64.urlsafe_b64decode(pad))
+    except Exception:
+        return None
+    # common_name is the service token's client id. A human session has `email`
+    # and no common_name, and that one is access_identity's business -- it has
+    # already been consulted by the time we get here.
+    cid = (claims.get('common_name') or '').strip().lower()
+    if not cid:
+        return None
+    if CF_CLIENTS and cid not in CF_CLIENTS:
+        return None
+    # Never the whole id in a session record that gets logged and listed.
+    return 'lobby:' + cid.split('.')[0][:12]
+
+
 # 20200304  check_auth — validate session token from header or query param
 def check_auth(handler):
     token = handler.headers.get('X-Hub-Token','')
@@ -82,9 +260,16 @@ def check_auth(handler):
         for part in qs.split('&'):
             if part.startswith('token='):
                 token = part[6:]
+    _session_load()            # first call after a restart refills the dict
     with _users_lock:
         sess = _sessions.get(token)
     if sess:
+        # An expired row that survived the startup sweep (a long-running
+        # process crossing the TTL) must not authenticate.
+        exp = sess.get('expires')
+        if exp and exp < _iso(_now()):
+            session_pop(token)
+            return None
         return sess
     # Second door: Cloudflare Access already vetted this user with Google, so do
     # not ask for a password again. Grants a user-level session only -- gate 2/3
@@ -92,6 +277,12 @@ def check_auth(handler):
     email = access_identity(handler)
     if email:
         return {'user': email, 'role': CF_ROLE, 'via': 'cf-access'}
+    # Third door: the lobby, holding a service token. Checked AFTER the human
+    # doors so a real person is always identified as themselves rather than as
+    # the machine that carried their request.
+    svc = service_identity(handler)
+    if svc:
+        return {'user': svc, 'role': CF_ROLE, 'via': 'cf-service'}
     return None
 
 # ── TOTP ──────────────────────────────────────────────────────────────────────

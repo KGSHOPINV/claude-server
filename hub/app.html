@@ -125,10 +125,10 @@ body { font-family:var(--ui); background:var(--bg); color:var(--text); height:10
 /* ── RIGHT WIDGET PANEL (inner right, collapsible) ── */
 #wpanel { width:var(--wpanel-w); background:var(--panel); border-left:1px solid var(--border); display:flex; flex-direction:column; flex-shrink:0; overflow:hidden; transition:width var(--t); }
 #wpanel.collapsed { width:22px; }
-#wpanel.collapsed #wpanel-title, #wpanel.collapsed #wpanel-body, #wpanel.collapsed #wpanel-tabs { display:none; }
+#wpanel.collapsed #wpanel-body, #wpanel.collapsed #wpanel-tabs { display:none; }
 #wpanel.collapsed #wpanel-header { padding:8px 0; justify-content:center; align-items:flex-start; }
 #wpanel-header { padding:6px 8px 0; display:flex; align-items:center; justify-content:space-between; flex-shrink:0; border-bottom:1px solid var(--border); gap:4px; }
-#wpanel-title { font-size:10px; font-weight:700; letter-spacing:.6px; text-transform:uppercase; color:var(--muted); }
+/* #wpanel-title rule removed -- no such element in the markup. */
 #wpanel-tabs { display:flex; gap:1px; padding-bottom:0; }
 .wp-tab { background:none; border:none; border-bottom:2px solid transparent; color:var(--muted); font-size:10px; font-family:var(--ui); font-weight:600; padding:4px 8px 5px; cursor:pointer; letter-spacing:.3px; transition:all var(--t); white-space:nowrap; border-radius:3px 3px 0 0; }
 .wp-tab:hover { color:var(--text); }
@@ -139,11 +139,6 @@ body { font-family:var(--ui); background:var(--bg); color:var(--text); height:10
 #wpanel-body::-webkit-scrollbar { display:none; }
 .w-type-item { display:flex; align-items:center; gap:8px; padding:7px 8px; border-radius:var(--r); cursor:pointer; font-size:12px; color:var(--muted); transition:background var(--t),color var(--t); }
 .w-type-item:hover { background:var(--panel2); color:var(--text); }
-.w-active-section { margin-top:10px; }
-.w-active-item { display:flex; align-items:center; gap:6px; padding:5px 8px; border-radius:var(--r); font-size:11px; color:var(--muted); background:var(--panel2); margin-bottom:3px; }
-.w-active-item .wa-title { flex:1; }
-.wa-btn { background:none; border:none; color:var(--muted2); cursor:pointer; font-size:10px; padding:1px 4px; border-radius:3px; }
-.wa-btn:hover { background:var(--border2); color:var(--text); }
 
 /* ── RIGHT WIDGET DOCK (far right, always visible) ── */
 #wdock { width:var(--wdock-w); background:var(--panel); border-left:1px solid var(--border); display:flex; flex-direction:column; align-items:center; padding:8px 0; gap:2px; flex-shrink:0; overflow-y:auto; scrollbar-width:none; }
@@ -269,18 +264,8 @@ body.desk-mode #desk-exit { display:flex; align-items:center; gap:6px; }
 .if-bar-btn { padding:2px 8px; border-radius:3px; border:1px solid var(--border2); background:none; color:var(--muted2); font-size:10px; cursor:pointer; text-decoration:none; font-family:var(--ui); transition:color var(--t),border-color var(--t); }
 .if-bar-btn:hover { color:var(--text); border-color:var(--accent); }
 
-/* Dashboard */
-.view-dash { padding:14px; overflow-y:auto; height:100%; box-sizing:border-box; }
-.grp-label { font-size:10px; font-weight:700; letter-spacing:.7px; text-transform:uppercase; color:var(--muted); margin:12px 0 7px; }
-.svc-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(140px,1fr)); gap:6px; }
-.svc-card { background:var(--panel); border:1px solid var(--border); border-radius:var(--r); padding:9px 11px; cursor:pointer; transition:border-color var(--t); position:relative; min-height:66px; }
-.svc-card:hover { border-color:var(--accent); }
-.svc-card.dim { opacity:.5; cursor:default; }
-.svc-card.dim:hover { border-color:var(--border); }
-.sc-name { font-size:12px; font-weight:600; }
-.sc-desc { font-size:10px; color:var(--muted); margin-top:2px; }
-.sc-port { font-family:var(--mono); font-size:9px; color:var(--muted2); margin-top:5px; }
-.sc-status { position:absolute; top:7px; right:7px; }
+/* Dashboard v1 (.view-dash dup, .grp-label, .svc-grid, .svc-card*, .sc-*) removed --
+   the live .view-dash is defined below and renderDash() emits .hd-* classes. */
 
 /* Terminal */
 .view-term { display:flex; flex-direction:column; height:100%; }
@@ -368,9 +353,6 @@ body.desk-mode #desk-exit { display:flex; align-items:center; gap:6px; }
 
 /* Storage View */
 .view-storage { height:100%; box-sizing:border-box; }
-.stor-block { background:var(--panel2); border:1px solid var(--border); border-radius:5px; padding:10px 12px; margin-bottom:8px; }
-.stor-hdr { font-size:10px; font-weight:700; letter-spacing:.5px; text-transform:uppercase; color:var(--muted2); margin-bottom:6px; }
-.stor-pre { font-family:var(--mono); font-size:11px; color:var(--text); white-space:pre; line-height:1.6; }
 
 /* Files View */
 .view-files { display:flex; flex-direction:column; height:100%; }
@@ -382,15 +364,6 @@ body.desk-mode #desk-exit { display:flex; align-items:center; gap:6px; }
 .file-row .fsize { color:var(--muted2); font-family:var(--mono); font-size:10px; flex-shrink:0; }
 .file-row .fdate { color:var(--muted2); font-size:10px; flex-shrink:0; width:90px; }
 
-/* Journal View */
-.view-journal { display:flex; flex-direction:column; height:100%; }
-.jnl-bar { display:flex; gap:4px; padding:6px 8px; background:var(--panel2); border-bottom:1px solid var(--border); flex-shrink:0; }
-.jnl-row { padding:8px 12px; border-bottom:1px solid rgba(255,255,255,.03); font-size:11px; }
-.jnl-ts { font-size:9px; color:var(--muted2); font-family:var(--mono); margin-bottom:2px; }
-.jnl-type { display:inline-block; font-size:8px; font-weight:700; letter-spacing:.4px; text-transform:uppercase; padding:1px 5px; border-radius:3px; margin-right:6px; }
-.jnl-type.cmd  { background:rgba(57,208,196,.12); color:var(--accent); }
-.jnl-type.manual { background:rgba(88,166,255,.12); color:var(--blue); }
-.jnl-body { color:var(--text); font-family:var(--mono); }
 
 /* Runbooks */
 .view-runbooks { display:flex; height:100%; overflow:hidden; }
@@ -429,54 +402,11 @@ body.desk-mode #desk-exit { display:flex; align-items:center; gap:6px; }
 .stack-ctr { display:flex; align-items:center; gap:4px; padding:2px 0; }
 .map-network { margin:8px 12px 12px; padding:5px 12px; border:1px dashed #1c2d44; border-radius:4px; font-size:10px; font-family:var(--mono); color:#1c3450; text-align:center; letter-spacing:.5px; }
 
-/* Vault */
-.view-vault { padding:14px; overflow-y:auto; height:100%; box-sizing:border-box; }
-#vlock { max-width:320px; margin:30px auto; }
-#vlock h2 { font-size:18px; font-weight:700; margin-bottom:5px; }
-#vlock p { color:var(--muted); font-size:11px; margin-bottom:14px; }
-/* ── VAULT v2 ────────────────────────────────────────── */
-.vault-search-bar { display:flex; gap:6px; margin-bottom:8px; }
-.vault-cats { display:flex; gap:4px; flex-wrap:wrap; margin-bottom:10px; }
-.vault-cat-btn { padding:3px 10px; border-radius:10px; border:1px solid var(--border); background:none; color:var(--muted); font-size:10px; cursor:pointer; transition:all var(--t); }
-.vault-cat-btn.active { border-color:var(--accent); color:var(--accent); background:var(--acdim); }
-.ve2 { background:var(--panel); border:1px solid var(--border); border-radius:8px; padding:11px 13px; margin-bottom:7px; transition:border-color var(--t); }
-.ve2:hover { border-color:var(--border2); }
-.ve2-hdr { display:flex; align-items:center; gap:7px; margin-bottom:8px; }
-.ve2-icon { font-size:16px; width:28px; height:28px; border-radius:6px; background:var(--panel2); display:flex; align-items:center; justify-content:center; flex-shrink:0; }
-.ve2-title { font-weight:600; font-size:13px; flex:1; }
-.ve2-cat { font-size:9px; padding:2px 7px; border-radius:8px; background:var(--acdim); color:var(--accent); font-weight:600; letter-spacing:.2px; flex-shrink:0; }
-.ve2-row { display:flex; align-items:center; gap:7px; margin-bottom:5px; }
-.ve2-label { font-size:9px; color:var(--muted2); width:54px; text-transform:uppercase; letter-spacing:.4px; flex-shrink:0; }
-.ve2-val { font-size:11px; color:var(--text); font-family:var(--mono); flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
-.ve2-val.masked { color:var(--muted2); letter-spacing:2px; }
-.ve2-copybtn { background:none; border:1px solid var(--border); border-radius:4px; color:var(--muted); cursor:pointer; font-size:10px; padding:2px 7px; transition:all var(--t); }
-.ve2-copybtn:hover { border-color:var(--accent); color:var(--accent); }
-.ve2-foot { display:flex; align-items:center; gap:6px; margin-top:7px; padding-top:7px; border-top:1px solid var(--border); }
-.ve2-url { font-size:10px; color:var(--accent); flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; cursor:pointer; }
-.ve2-url:hover { text-decoration:underline; }
-/* vault modal */
-#vault-modal { display:none; position:fixed; inset:0; background:rgba(0,0,0,.78); z-index:900; align-items:center; justify-content:center; }
-#vault-modal.show { display:flex; }
-.vm-box { background:var(--panel); border:1px solid var(--border); border-radius:10px; padding:22px; width:360px; max-width:96vw; max-height:90vh; overflow-y:auto; }
-.vm-title { font-size:15px; font-weight:700; margin-bottom:16px; display:flex; align-items:center; gap:8px; }
-.vm-field { margin-bottom:11px; }
-.vm-field label { display:block; font-size:10px; color:var(--muted); text-transform:uppercase; letter-spacing:.4px; margin-bottom:4px; }
-.vm-field input, .vm-field select { width:100%; background:var(--bg); border:1px solid var(--border); border-radius:var(--r); color:var(--text); font-size:13px; padding:8px 10px; outline:none; font-family:var(--ui); transition:border-color var(--t); }
-.vm-field input:focus, .vm-field select:focus { border-color:var(--accent); }
-.vm-pw-row { display:flex; gap:5px; }
-.vm-pw-row input { flex:1; }
-.vm-footer { display:flex; gap:7px; justify-content:flex-end; margin-top:16px; padding-top:12px; border-top:1px solid var(--border); }
+/* .vi is the shared modal text input -- used by the add-service modal, NOT vault-only.
+   The rest of the vault CSS (.view-vault, #vlock, .vault-*, .ve2-*, #vault-modal, .vm-*)
+   went with the deleted client-side vault subsystem. */
 .vi { width:100%; background:var(--panel); border:1px solid var(--border2); border-radius:var(--r); color:var(--text); font-size:12px; padding:7px 10px; margin-bottom:8px; }
 .vi:focus { outline:none; border-color:var(--accent); }
-#vbody { display:none; }
-#ventries { display:flex; flex-direction:column; gap:7px; margin-top:12px; }
-.ve { background:var(--panel); border:1px solid var(--border); border-radius:var(--r); padding:8px 11px; display:flex; align-items:center; gap:7px; }
-.ve-info { flex:1; min-width:0; }
-.ve-title { font-weight:600; font-size:12px; }
-.ve-user  { font-size:10px; color:var(--muted); }
-.ve-pw { font-family:var(--mono); font-size:10px; color:var(--muted); margin-top:2px; }
-.ve-pw.show { color:var(--text); letter-spacing:0; }
-.ve-acts { display:flex; gap:3px; }
 
 /* Issues */
 .view-issues { padding:14px; overflow-y:auto; height:100%; box-sizing:border-box; }
@@ -637,7 +567,6 @@ body.desk-mode #desk-exit { display:flex; align-items:center; gap:6px; }
 .cfg-tab { padding:6px 14px; font-size:11px; cursor:pointer; color:var(--muted); border-bottom:2px solid transparent; margin-bottom:-1px; transition:all var(--t); }
 .cfg-tab:hover { color:var(--text); }
 .cfg-tab.active { color:var(--accent); border-bottom-color:var(--accent); font-weight:600; }
-.cfg-tab-pane { }
 .cfg-tab-pane.hidden { display:none; }
 
 /* ── SURVEY VIEW ────────────────────────────────────────────────── */
@@ -774,45 +703,8 @@ body.desk-mode #desk-exit { display:flex; align-items:center; gap:6px; }
 .sv-alert.warn { background:var(--ydim); border:1px solid rgba(210,153,34,.2); color:var(--yellow); }
 .sv-alert.crit { background:var(--rdim); border:1px solid rgba(248,81,73,.2); color:var(--red); }
 
-/* ── PLATFORM VIEW ─────────────────────────────────── */
-.view-platform { display:flex; flex-direction:column; height:100%; overflow-y:auto; padding:14px; gap:12px; box-sizing:border-box; }
-.pf-header { display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:8px; }
-.pf-hdr-left { display:flex; align-items:center; gap:10px; }
-.pf-title { font-size:13px; font-weight:700; letter-spacing:.2px; }
-.pf-mode { font-size:9px; font-weight:600; letter-spacing:.5px; text-transform:uppercase; background:var(--panel2); border:1px solid var(--border); border-radius:4px; padding:2px 7px; color:var(--muted2); }
-.pf-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(300px,1fr)); gap:12px; }
-.pf-card { background:var(--panel); border:1px solid var(--border); border-radius:10px; padding:15px; display:flex; flex-direction:column; gap:10px; }
-.pf-card-hdr { display:flex; align-items:center; justify-content:space-between; gap:8px; }
-.pf-card-name { display:flex; align-items:center; gap:7px; font-size:12px; font-weight:700; }
-.pf-card-icon { font-size:17px; line-height:1; }
-.pf-card-status { display:flex; align-items:center; gap:4px; font-size:10px; color:var(--muted); font-family:var(--mono); }
-.pf-dot { width:6px; height:6px; border-radius:50%; flex-shrink:0; }
-.pf-dot-live { background:var(--green); box-shadow:0 0 4px var(--green); }
-.pf-dot-warn { background:var(--yellow); }
-.pf-dot-off { background:var(--muted2); }
-.pf-desc { font-size:11px; color:var(--muted); line-height:1.5; }
-.pf-tags { display:flex; flex-wrap:wrap; gap:4px; }
-.pf-tag { font-size:9px; background:var(--panel2); border:1px solid var(--border); border-radius:3px; padding:1px 6px; color:var(--muted); font-family:var(--mono); }
-.pf-divider { height:1px; background:var(--border); }
-.pf-rows { display:flex; flex-direction:column; gap:5px; }
-.pf-row { display:flex; align-items:center; justify-content:space-between; font-size:11px; }
-.pf-row-label { color:var(--muted); }
-.pf-row-value { font-family:var(--mono); color:var(--text); font-size:10px; }
-.pf-row-value.dim { color:var(--muted2); font-style:italic; }
-.pf-actions { display:flex; gap:6px; flex-wrap:wrap; }
-.pf-instances { display:flex; flex-direction:column; gap:4px; }
-.pf-inst-row { display:flex; align-items:center; gap:7px; font-size:11px; padding:5px 8px; background:var(--panel2); border-radius:5px; }
-.pf-inst-name { font-weight:600; }
-.pf-inst-port { font-family:var(--mono); color:var(--muted); font-size:10px; }
-.pf-none { font-size:10px; color:var(--muted2); font-style:italic; padding:4px 0; }
-.pf-ecosystem { background:var(--panel); border:1px solid var(--border); border-radius:10px; padding:13px 15px; }
-.pf-eco-label { font-size:9px; font-weight:700; letter-spacing:.6px; text-transform:uppercase; color:var(--muted2); margin-bottom:9px; }
-.pf-eco-nodes { display:flex; flex-wrap:wrap; align-items:center; gap:4px; }
-.pf-eco-node { display:flex; align-items:center; gap:5px; padding:4px 9px; background:var(--panel2); border:1px solid var(--border); border-radius:6px; font-size:11px; }
-.pf-eco-node.live { border-color:var(--accent); background:var(--acdim); }
-.pf-eco-arrow { color:var(--muted2); font-size:11px; padding:0 1px; }
-.pf-notice { display:flex; align-items:flex-start; gap:8px; padding:9px 12px; background:var(--acdim); border:1px solid rgba(88,166,255,.15); border-radius:6px; font-size:11px; color:var(--muted); }
-.pf-notice-icon { font-size:13px; flex-shrink:0; }
+/* removed: PLATFORM VIEW styles (.view-platform + 38 .pf-* rules) -- case 'platform'
+   renders a .stub-view; no markup uses these. */
 
 /* ── ACTIVITY LOG ────────────────────────────────── */
 .view-activity { display:flex; flex-direction:column; height:100%; overflow:hidden; }
@@ -1040,51 +932,7 @@ body.desk-mode #desk-exit { display:flex; align-items:center; gap:6px; }
   </div>
 </div>
 
-<!-- VAULT ENTRY MODAL -->
-<div id="vault-modal" onclick="if(event.target===this)closeVaultModal()">
-  <div class="vm-box">
-    <div class="vm-title">🔐 <span id="vm-title-txt">New Entry</span></div>
-    <div class="vm-field"><label>Title *</label><input id="vm-ttl" placeholder="e.g. Portainer Admin" autocomplete="off"></div>
-    <div class="vm-field"><label>Username / Email</label><input id="vm-usr" placeholder="admin" autocomplete="off"></div>
-    <div class="vm-field"><label>Password</label>
-      <div class="vm-pw-row">
-        <input id="vm-pw" type="password" placeholder="password" autocomplete="new-password" oninput="vaultPwStrength(this.value)">
-        <button class="btn" title="Show/hide" onclick="var e=document.getElementById('vm-pw');e.type=e.type==='password'?'text':'password'" style="padding:0 9px;font-size:13px">👁</button>
-        <button class="btn" title="Generate strong password" onclick="vaultGenPw()" style="padding:0 9px;font-size:13px">⚡</button>
-      </div>
-      <div style="margin-top:6px">
-        <div style="display:flex;gap:3px;margin-bottom:3px" id="vm-strength-bars">
-          <div style="flex:1;height:3px;border-radius:2px;background:var(--border)" id="vsb0"></div>
-          <div style="flex:1;height:3px;border-radius:2px;background:var(--border)" id="vsb1"></div>
-          <div style="flex:1;height:3px;border-radius:2px;background:var(--border)" id="vsb2"></div>
-          <div style="flex:1;height:3px;border-radius:2px;background:var(--border)" id="vsb3"></div>
-        </div>
-        <div style="display:flex;justify-content:space-between;align-items:center">
-          <span id="vm-strength-lbl" style="font-size:10px;color:var(--muted)"></span>
-          <span style="font-size:10px;color:var(--muted)">Length: <span id="vm-gen-len-lbl">20</span>
-            <input type="range" id="vm-gen-len" min="12" max="40" value="20" style="width:60px;vertical-align:middle;margin-left:4px" oninput="document.getElementById('vm-gen-len-lbl').textContent=this.value"></span>
-        </div>
-      </div>
-    </div>
-    <div class="vm-field"><label>URL</label><input id="vm-url" placeholder="https://server:9443" autocomplete="off"></div>
-    <div class="vm-field"><label>Notes</label><input id="vm-notes" placeholder="Optional notes" autocomplete="off"></div>
-    <div class="vm-field"><label>Category</label>
-      <select id="vm-cat">
-        <option value="Server">🖥 Server</option>
-        <option value="Network">🌐 Network</option>
-        <option value="Work">💼 Work</option>
-        <option value="Personal">👤 Personal</option>
-        <option value="Banking">🏦 Banking</option>
-        <option value="Other">🔐 Other</option>
-      </select>
-    </div>
-    <input type="hidden" id="vm-idx" value="-1">
-    <div class="vm-footer">
-      <button class="btn" onclick="closeVaultModal()">Cancel</button>
-      <button class="btn p" onclick="vaultSaveEntry()">Save Entry</button>
-    </div>
-  </div>
-</div>
+<!-- removed: VAULT ENTRY MODAL -- backed the deleted client-side vault subsystem -->
 
 <!-- COMMAND PALETTE -->
 <div id="cmdpal" onclick="if(event.target===this)closeCmdPal()">
@@ -1266,6 +1114,7 @@ body.desk-mode #desk-exit { display:flex; align-items:center; gap:6px; }
 </div>
 
 <script src="/ui/registry.js"></script>
+<script src="/ui/notify.js"></script>
 <script>
 'use strict';
 const API = window.location.origin;  // works from any host — localhost, Tailscale IP, LAN IP
@@ -1344,13 +1193,9 @@ const S = {
   secNavCollapsed: false,
   workspaces: [],        // [{id, title, icon, pinned, layout, panes}]
   activeWs: null,        // id of active workspace
-  pickerTarget: null,    // {wsId, paneId}
   termHistories: {},     // wsId+paneId -> []
   termHistIdx: {},
-  vaultData: null,
-  vaultMP: null,
   docsLoaded: false,
-  mapDrawn: false,
 };
 
 let _wsCounter = 0;
@@ -1371,10 +1216,12 @@ async function fetchStatus(force=false) {
     applyStatus();
   } catch { applyStatus(false); }
 }
-function applyStatus(ok) {
+function applyStatus(ok = true) {
   const s = S.status;
   const dot = document.getElementById('sdot');
-  if (!s?.online) { dot.className='off'; return; }
+  // `ok` is false when fetchStatus() threw. Without it the dot only ever went red on the
+  // very first failed fetch, because S.status still held the last good payload.
+  if (!ok || !s?.online) { dot.className='off'; return; }
   dot.className='on';
   if (s.uptime)    document.getElementById('t-up').textContent = s.uptime;
   if (s.ram_used_mb && s.ram_total_mb) {
@@ -1886,9 +1733,9 @@ function reRenderWorkspace(wsId) {
 
 // ── VIEW PICKER ───────────────────────────────────────────────────────────────
 function openPicker(wsId, paneId, btn) {
-  S.pickerTarget = {wsId, paneId};
+  // removed: S.pickerTarget was written here and never read anywhere.
   const picker = document.getElementById('picker');
-  const viewList = Object.entries(VIEW_DEFS).filter(([k])=>k!=='blank').map(([k,v])=>
+  const viewList = Object.entries(VIEW_DEFS).filter(([,v])=>!v.hidden).map(([k,v])=>
     `<div class="pick-item" onclick="setPaneView('${wsId}','${paneId}','${k}')">${v.icon} ${v.title}</div>`
   ).join('');
   const svcsHtml = S.services.filter(s=>s.installed!==false&&!s.noui).slice(0,8).map(s => {
@@ -2069,19 +1916,6 @@ function mountPaneContent(wsId, paneId, viewType, viewConfig, body) {
     case 'browser':
       body.innerHTML = `<div class="stub-view"><div class="stub-icon">🌐</div><div class="stub-title">Browser</div><div class="stub-msg">Use your real browser. Services are accessible via the Services nav — click any to open in an iframe pane.</div></div>`;
       break;
-    case '_browser_old':
-      body.innerHTML = `<div style="display:flex;flex-direction:column;height:100%">
-        <div style="display:flex;gap:4px;padding:4px 6px;background:var(--panel2);border-bottom:1px solid var(--border);flex-shrink:0;align-items:center">
-          <button onclick="browserNav('${key}','back')"  class="btn" style="padding:2px 8px;font-size:12px">←</button>
-          <button onclick="browserNav('${key}','fwd')"   class="btn" style="padding:2px 8px;font-size:12px">→</button>
-          <button onclick="browserNav('${key}','reload')" class="btn" style="padding:2px 8px;font-size:12px">↻</button>
-          <input id="burl-${key}" value="${viewConfig.url||''}" placeholder="https://… or :PORT for local" style="flex:1;background:var(--bg);border:1px solid var(--border2);border-radius:3px;color:var(--text);font-family:var(--mono);font-size:11px;padding:3px 8px;min-width:0" onkeydown="if(event.key==='Enter')loadBrowser('${key}')">
-          <button onclick="loadBrowser('${key}')" class="btn p" style="padding:3px 10px;font-size:11px">Go</button>
-        </div>
-        <iframe id="bframe-${key}" style="flex:1;border:none;background:#fff" sandbox="allow-same-origin allow-scripts allow-forms allow-popups allow-pointer-lock"></iframe>
-      </div>`;
-      if (viewConfig.url) loadBrowser(key);
-      break;
     case 'survey':
       body.innerHTML = `<div class="view-survey">
         <div class="sv-hdr">
@@ -2125,7 +1959,9 @@ function mountPaneContent(wsId, paneId, viewType, viewConfig, body) {
           </div>
           <div id="stor-panel-${key}" class="tab-panel"></div>
         </div>`;
-      storTab(document.querySelector('#vstor-${key} .tab-btn.active'), '${key}', 'overview');
+      // was: '#vstor-${key} ...' inside a single-quoted string -- ${key} never interpolated.
+      // loadStorageView() already had the correct version; wire it up.
+      loadStorageView(key);
       break;
     case 'dockermgr':
       body.innerHTML = `
@@ -2140,7 +1976,9 @@ function mountPaneContent(wsId, paneId, viewType, viewConfig, body) {
           </div>
           <div id="dkr-panel-${key}" class="tab-panel"></div>
         </div>`;
-      dkrTab(document.querySelector('#vdkr-${key} .tab-btn.active'), '${key}', 'overview');
+      // was: '#vdkr-${key} ...' inside a single-quoted string -- ${key} never interpolated,
+      // so querySelector threw on the invalid selector and the first tab never loaded.
+      dkrTab(document.querySelector('#vdkr-'+key+' .tab-btn.active') || {closest:()=>null}, key, 'overview');
       break;
 
 
@@ -2158,16 +1996,6 @@ function mountPaneContent(wsId, paneId, viewType, viewConfig, body) {
 
     case 'journal':
       body.innerHTML = `<div class="stub-view"><div class="stub-icon">📓</div><div class="stub-title">Journal</div><div class="stub-msg">Use the Activity view instead — it already captures everything that happens on the server and supports manual notes.</div><button class="btn p" onclick="openView('activity')" style="margin-top:12px">Open Activity →</button></div>`;
-      break;
-    case '_journal_old':
-      body.innerHTML = `<div class="view-journal">
-        <div class="jnl-bar">
-          <input id="jnl-inp-${key}" class="vs-inp" placeholder="Add a journal entry…" style="flex:1" onkeydown="if(event.key==='Enter')addJournalEntry('${key}')">
-          <button onclick="addJournalEntry('${key}')" class="btn p" style="padding:3px 12px">Add</button>
-        </div>
-        <div id="jnl-list-${key}" style="overflow-y:auto;flex:1;padding:4px 0"></div>
-      </div>`;
-      loadJournal(key);
       break;
 
     case 'runbooks':
@@ -2992,253 +2820,15 @@ function refreshDashboards() {
   document.querySelectorAll('[id^="dash-"]').forEach(el => renderDash(el.id));
 }
 
-// ── VAULT ─────────────────────────────────────────────────────────────────────
-const V_ICONS = {Server:'🖥',Network:'🌐',Work:'💼',Personal:'👤',Banking:'🏦',Other:'🔐'};
-
-function vaultHTML() {
-  if (S.vaultData) return vaultBodyHTML();
-  return `<div id="vlock">
-    <div style="font-size:36px;margin-bottom:10px">🔐</div>
-    <h2>Password Vault</h2>
-    <p>AES-256-GCM · 200k PBKDF2 · master password never leaves this browser.</p>
-    <input class="vi" id="vmp" type="password" placeholder="Master password…" autocomplete="current-password" onkeydown="if(event.key==='Enter')vaultUnlock()">
-    <div style="display:flex;gap:7px">
-      <button class="btn p" style="flex:1" onclick="vaultUnlock()">Unlock</button>
-      <button class="btn" onclick="vaultSetup()">New Vault</button>
-    </div>
-    <div id="verr" style="color:var(--red);font-size:11px;margin-top:8px"></div>
-  </div>`;
-}
-
-function vaultBodyHTML() {
-  if (!S.vaultData) return '';
-  const entries = S.vaultData.entries || [];
-  const q   = (S._vaultQ   || '').toLowerCase();
-  const cat = S._vaultCat  || 'All';
-  const cats = ['All', ...new Set(entries.map(e => e.category || 'Other'))];
-  const shown = entries.map((e,i) => ({...e,_i:i})).filter(e => {
-    if (cat !== 'All' && (e.category||'Other') !== cat) return false;
-    if (q && !`${e.title}${e.username}${e.url}${e.notes}`.toLowerCase().includes(q)) return false;
-    return true;
-  });
-  return `
-    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
-      <div style="font-size:13px;font-weight:700">🔐 Vault <span style="font-size:10px;color:var(--muted);font-weight:400">${entries.length} entr${entries.length===1?'y':'ies'}</span></div>
-      <div style="display:flex;gap:6px">
-        <button class="btn" onclick="vaultLock()">🔒 Lock</button>
-        <button class="btn p" onclick="vaultAdd()">＋ New</button>
-      </div>
-    </div>
-    <div class="vault-search-bar">
-      <input class="vs-inp" style="flex:1" id="vault-search" placeholder="🔍  Search titles, usernames, URLs…"
-        value="${q}" oninput="S._vaultQ=this.value;refreshVaultList()">
-    </div>
-    <div class="vault-cats">
-      ${cats.map(c=>`<button class="vault-cat-btn${c===cat?' active':''}"
-        onclick="S._vaultCat='${c}';refreshVaultList()">${V_ICONS[c]||'🏷'} ${c}</button>`).join('')}
-    </div>
-    <div id="ventries">
-      ${shown.length ? shown.map(e=>vaultEntryHTML(e,e._i)).join('')
-        : `<div style="text-align:center;color:var(--muted);padding:28px 0;font-size:12px">
-            ${entries.length ? '🔍 No entries match' : '🗂 No entries yet — click ＋ New to add one'}
-           </div>`}
-    </div>`;
-}
-
-function vaultEntryHTML(e, i) {
-  const icon = V_ICONS[e.category||'Other'] || '🔐';
-  return `<div class="ve2" data-i="${i}">
-    <div class="ve2-hdr">
-      <div class="ve2-icon">${icon}</div>
-      <div class="ve2-title">${escH(e.title||'—')}</div>
-      ${e.category?`<span class="ve2-cat">${e.category}</span>`:''}
-      <button class="btn" style="font-size:10px;padding:2px 7px" onclick="vaultEdit(${i})" title="Edit">✏</button>
-      <button class="btn d" style="font-size:10px;padding:2px 7px" onclick="delVE(${i})" title="Delete">✕</button>
-    </div>
-    ${e.username?`<div class="ve2-row">
-      <span class="ve2-label">User</span>
-      <span class="ve2-val">${escH(e.username)}</span>
-      <button class="ve2-copybtn" onclick="vCopy(${i},'username','User')">Copy</button>
-    </div>`:''}
-    <div class="ve2-row">
-      <span class="ve2-label">Password</span>
-      <span class="ve2-val masked" id="vepw-${i}">••••••••</span>
-      <button class="ve2-copybtn" onclick="toggleVPw(${i})" id="vpwtgl-${i}">👁</button>
-      <button class="ve2-copybtn" onclick="vCopy(${i},'password','Password')">Copy</button>
-    </div>
-    ${e.notes?`<div class="ve2-row"><span class="ve2-label">Notes</span><span class="ve2-val" style="color:var(--muted);font-family:var(--ui)">${escH(e.notes)}</span></div>`:''}
-    ${e.url?`<div class="ve2-foot"><span class="ve2-url" onclick="window.open(${JSON.stringify(e.url)},'_blank')">🔗 ${escH(e.url)}</span></div>`:''}
-  </div>`;
-}
-
+// ── HTML ESCAPE ─────────────────────────────────────────────────────────────
+// Hoisted out of the deleted client-side vault block; still used by renderDash() and
+// the Survey view.
 function escH(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
 
-function refreshVaultList() {
-  document.querySelectorAll('.view-vault').forEach(el => {
-    const ve = el.querySelector('#ventries'); if (!ve) return;
-    const q   = (S._vaultQ||'').toLowerCase();
-    const cat = S._vaultCat||'All';
-    const entries = S.vaultData?.entries||[];
-    const shown = entries.map((e,i)=>({...e,_i:i})).filter(e=>{
-      if (cat!=='All'&&(e.category||'Other')!==cat) return false;
-      if (q&&!`${e.title}${e.username}${e.url}${e.notes}`.toLowerCase().includes(q)) return false;
-      return true;
-    });
-    ve.innerHTML = shown.length ? shown.map(e=>vaultEntryHTML(e,e._i)).join('')
-      : `<div style="text-align:center;color:var(--muted);padding:28px 0;font-size:12px">${entries.length?'🔍 No entries match':'🗂 No entries yet'}</div>`;
-  });
-}
-
-function initVault() {}
-
-async function vaultUnlock() {
-  const mp = document.getElementById('vmp')?.value; if (!mp) return;
-  const err = document.getElementById('verr'); err.textContent = '';
-  try {
-    const r = await fetch(API+'/api/vault'); const d = await r.json();
-    if (!d.blob) { err.textContent = 'No vault found — click "New Vault".'; return; }
-    S.vaultData = await vDec(d.blob, mp); S.vaultMP = mp;
-    document.querySelectorAll('.view-vault').forEach(el => el.innerHTML = vaultBodyHTML());
-  } catch { err.textContent = 'Wrong password or corrupted vault.'; }
-}
-
-async function vaultSetup() {
-  const mp = document.getElementById('vmp')?.value;
-  const err = document.getElementById('verr');
-  if (!mp || mp.length < 6) { err.textContent='Password must be 6+ characters.'; return; }
-  S.vaultData = {entries:[]}; S.vaultMP = mp; await saveVault();
-  document.querySelectorAll('.view-vault').forEach(el => el.innerHTML = vaultBodyHTML());
-}
-
-function vaultLock() {
-  S.vaultData = null; S.vaultMP = null; S._vaultQ = ''; S._vaultCat = 'All';
-  document.querySelectorAll('.view-vault').forEach(el => el.innerHTML = vaultHTML());
-}
-
-async function saveVault() {
-  const blob = await vEnc(S.vaultData, S.vaultMP);
-  try {
-    const r = await apiPost('/api/vault', {blob});
-    if (!r.ok) localStorage.setItem('vault_backup', blob);
-  } catch { localStorage.setItem('vault_backup', blob); }
-}
-
-function toggleVPw(i) {
-  const el = document.getElementById('vepw-'+i); if (!el) return;
-  if (el.classList.contains('masked')) {
-    el.textContent = S.vaultData.entries[i]?.password || '—';
-    el.classList.remove('masked');
-  } else {
-    el.textContent = '••••••••';
-    el.classList.add('masked');
-  }
-}
-
-function vaultAdd() { openVaultModal(-1); }
-
-function vaultEdit(i) {
-  const e = S.vaultData?.entries[i]; if (!e) return;
-  document.getElementById('vm-title-txt').textContent = 'Edit Entry';
-  document.getElementById('vm-ttl').value   = e.title    || '';
-  document.getElementById('vm-usr').value   = e.username || '';
-  document.getElementById('vm-pw').value    = e.password || '';
-  document.getElementById('vm-url').value   = e.url      || '';
-  document.getElementById('vm-notes').value = e.notes    || '';
-  document.getElementById('vm-cat').value   = e.category || 'Other';
-  document.getElementById('vm-idx').value   = i;
-  document.getElementById('vault-modal').classList.add('show');
-}
-
-function openVaultModal(idx) {
-  document.getElementById('vm-title-txt').textContent = 'New Entry';
-  ['vm-ttl','vm-usr','vm-pw','vm-url','vm-notes'].forEach(id => { const el=document.getElementById(id); if(el) el.value=''; });
-  document.getElementById('vm-cat').value = 'Server';
-  document.getElementById('vm-idx').value = idx ?? -1;
-  document.getElementById('vault-modal').classList.add('show');
-  setTimeout(() => document.getElementById('vm-ttl')?.focus(), 60);
-}
-
-function closeVaultModal() { document.getElementById('vault-modal').classList.remove('show'); }
-
-async function vaultSaveEntry() {
-  const entry = {
-    title:    document.getElementById('vm-ttl').value.trim(),
-    username: document.getElementById('vm-usr').value.trim(),
-    password: document.getElementById('vm-pw').value,
-    url:      document.getElementById('vm-url').value.trim(),
-    notes:    document.getElementById('vm-notes').value.trim(),
-    category: document.getElementById('vm-cat').value,
-  };
-  if (!entry.title) { document.getElementById('vm-ttl').focus(); return; }
-  if (!S.vaultData) S.vaultData = {entries:[]};
-  const idx = parseInt(document.getElementById('vm-idx').value);
-  if (idx >= 0) S.vaultData.entries[idx] = entry;
-  else S.vaultData.entries.push(entry);
-  await saveVault(); closeVaultModal();
-  document.querySelectorAll('.view-vault').forEach(el => el.innerHTML = vaultBodyHTML());
-}
-
-function vaultGenPw() {
-  const len   = parseInt(document.getElementById('vm-gen-len')?.value || '20');
-  const chars = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!@#$%^&*-_';
-  const pw = Array.from(crypto.getRandomValues(new Uint8Array(len)))
-    .map(b => chars[b % chars.length]).join('');
-  const el = document.getElementById('vm-pw');
-  if (el) { el.value = pw; el.type = 'text'; vaultPwStrength(pw); }
-  showToast('Strong password generated ⚡');
-}
-
-function vaultPwStrength(pw) {
-  const bars  = [0,1,2,3].map(i => document.getElementById('vsb'+i));
-  const lbl   = document.getElementById('vm-strength-lbl');
-  if (!bars[0] || !lbl) return;
-  let score = 0;
-  if (pw.length >= 8)  score++;
-  if (pw.length >= 16) score++;
-  if (/[A-Z]/.test(pw) && /[a-z]/.test(pw)) score++;
-  if (/[0-9]/.test(pw)) score++;
-  if (/[^A-Za-z0-9]/.test(pw)) score = Math.min(4, score + 1);
-  const colours = ['','#f85149','#d29922','#3fb950','#58a6ff'];
-  const labels  = ['','Weak','Fair','Strong','Very strong'];
-  bars.forEach((b,i) => b.style.background = i < score ? colours[score] : 'var(--border)');
-  lbl.textContent = pw ? labels[Math.min(score,4)] : '';
-  lbl.style.color = colours[Math.min(score,4)] || 'var(--muted)';
-}
-
-function vCopy(i, field, label) {
-  const val = S.vaultData?.entries[i]?.[field] || '';
-  navigator.clipboard.writeText(val).then(() => {
-    showToast(label + ' copied ✓');
-    // Flash every matching copy button briefly
-    document.querySelectorAll(`.ve2-copybtn[onclick*="vCopy(${i},'${field}'"]`).forEach(btn => {
-      const orig = btn.textContent;
-      btn.textContent = '✓';
-      btn.style.color = 'var(--green)';
-      setTimeout(() => { btn.textContent = orig; btn.style.color = ''; }, 1400);
-    });
-  });
-}
-
-async function delVE(i) {
-  const title = S.vaultData?.entries[i]?.title || 'this entry';
-  const card  = document.querySelector(`.ve2[data-i="${i}"]`);
-  if (!card) { _doDelVE(i); return; }
-  // Inline confirm — replaces card content briefly
-  const orig = card.innerHTML;
-  card.innerHTML = `<div style="padding:12px;display:flex;align-items:center;gap:10px;flex-wrap:wrap">
-    <span style="font-size:12px;color:var(--text);flex:1">Delete <strong>${escH(title)}</strong>?</span>
-    <button class="btn d" style="font-size:11px" onclick="_doDelVE(${i})">Delete</button>
-    <button class="btn" style="font-size:11px" onclick="refreshVaultList()">Cancel</button>
-  </div>`;
-}
-async function _doDelVE(i) {
-  S.vaultData.entries.splice(i,1); await saveVault();
-  document.querySelectorAll('.view-vault').forEach(el => el.innerHTML = vaultBodyHTML());
-}
-
-async function vEnc(data,pw){const salt=crypto.getRandomValues(new Uint8Array(16)),iv=crypto.getRandomValues(new Uint8Array(12));const k=await vKey(pw,salt);const ct=await crypto.subtle.encrypt({name:'AES-GCM',iv},k,new TextEncoder().encode(JSON.stringify(data)));const o=new Uint8Array(28+ct.byteLength);o.set(salt,0);o.set(iv,16);o.set(new Uint8Array(ct),28);return btoa(String.fromCharCode(...o));}
-async function vDec(blob,pw){const r=Uint8Array.from(atob(blob),c=>c.charCodeAt(0));const k=await vKey(pw,r.slice(0,16));const d=await crypto.subtle.decrypt({name:'AES-GCM',iv:r.slice(16,28)},k,r.slice(28));return JSON.parse(new TextDecoder().decode(d));}
-async function vKey(pw,salt){const m=await crypto.subtle.importKey('raw',new TextEncoder().encode(pw),'PBKDF2',false,['deriveKey']);return crypto.subtle.deriveKey({name:'PBKDF2',salt,iterations:200000,hash:'SHA-256'},m,{name:'AES-GCM',length:256},false,['encrypt','decrypt']);}
+// removed: the whole client-side Password Vault (20 functions, its modal and its CSS).
+// Every renderer targeted '.view-vault', an element nothing ever created -- case 'vault'
+// in mountPaneContent() renders a .stub-view pointing at FlareVault on :7777 instead.
+// The 'vault_backup' localStorage key it wrote on save was never read back.
 
 // ── HUB UPDATE ────────────────────────────────────────────────────────────────
 // ── SETTINGS v2 ───────────────────────────────────────────────────────────────
@@ -3407,8 +2997,34 @@ function setCfgSection(section) {
       <div id="cfg-tab-alerts" class="cfg-tab-pane hidden">
         <div class="vs-section">
           <div style="font-size:11px;color:var(--muted);margin-bottom:10px;line-height:1.6">
-            Push alerts go to <strong style="color:var(--text)">ntfy</strong> on port 8085.<br>
-            Subscribe on your phone: <code style="font-family:var(--mono)">server-alerts</code> topic.
+            Notifications come from <strong style="color:var(--text)">this hub</strong> &mdash;
+            same origin, same login, no second account.<br>
+            Delivered while the hub is open or installed. A fully closed app
+            needs Web Push, which is not built yet.
+          </div>
+          <div class="vs-row"><label>Permission</label>
+            <code id="ntf-perm" style="font-family:var(--mono);font-size:11px;color:var(--muted)">&hellip;</code>
+          </div>
+          <div class="vs-row"><label>Stream</label>
+            <code id="ntf-stream" style="font-family:var(--mono);font-size:11px;color:var(--muted)">&hellip;</code>
+          </div>
+          <div class="vs-row"><label>Minimum level</label>
+            <select id="ntf-level" class="vs-inp" style="width:120px" onchange="HubNotify.setLevel(this.value)">
+              <option value="info">info (everything)</option>
+              <option value="warn">warn</option>
+              <option value="high">high</option>
+              <option value="critical">critical only</option>
+            </select>
+          </div>
+          <div style="margin-top:10px;display:flex;gap:6px">
+            <button class="btn p" onclick="enableNotifications()">Enable notifications</button>
+          </div>
+          <div style="font-size:11px;color:var(--muted);margin:14px 0 8px;line-height:1.6;
+                      border-top:1px solid var(--border);padding-top:10px">
+            <strong style="color:var(--text)">ntfy</strong> is installed on 8085 and has
+            published <strong style="color:var(--text)">nothing</strong> &mdash; the hub has
+            never held a token for it. It is kept for the one thing the above
+            cannot do: reach a phone with everything closed.
           </div>
           <div class="vs-row"><label>ntfy URL</label>
             <a href="http://${SRV}:8085" target="_blank" style="color:var(--accent);font-size:11px;font-family:var(--mono)">:8085</a>
@@ -3445,6 +3061,7 @@ function setCfgSection(section) {
         </div>
       </div>`;
     loadAISettings();
+    refreshNotifyPanel();
 
   // ── SYSTEM ────────────────────────────────────────────────────────────────
   } else if (section === 'system') {
@@ -3666,19 +3283,10 @@ async function runSurvey(key) {
 }
 
 // ── ISSUES ────────────────────────────────────────────────────────────────────
-async function renderIssues(elId) {
-  await fetchIssues();
-  const el=document.getElementById(elId); if(!el) return;
-  if(!S.issues.length){el.innerHTML='<div style="color:var(--muted);padding:14px;font-size:12px">No issues found.</div>';return;}
-  el.innerHTML=S.issues.map(i=>`<div class="iss-row">
-    <div class="iss-dot ${i.status}"></div>
-    <div><div class="iss-title">${i.title}</div>
-    ${i.description?`<div class="iss-desc">${i.description}</div>`:''}
-    ${i.resolution?`<div class="iss-res">✓ ${i.resolution}</div>`:''}
-    <div class="iss-date">${i.created_date||''} · ${i.status}</div></div>
-    <span class="badge ${i.status==='open'?'off':'up'}" style="margin-left:auto;flex-shrink:0">${i.status}</span>
-  </div>`).join('');
-}
+// renderIssues() moved to ui/views/issues.js. It had zero callers and read
+// i.description / i.resolution / i.created_date, none of which exist on the
+// issues table (id, service, title, body, status, created, updated) -- so it
+// would have rendered three blank fields. The view now owns its rendering.
 
 // ── NETWORK ───────────────────────────────────────────────────────────────────
 async function loadNet(key) {
@@ -3910,7 +3518,8 @@ function updateContextPanel() {
   const pane = ws?.panes?.[0];
   const vt = pane?.viewType || 'blank';
   const vc = pane?.viewConfig || {};
-  const titleEl = document.getElementById('wpanel-title');
+  // removed: #wpanel-title lookup and write -- that element is not in the markup
+  // (#wpanel-header holds #wpanel-tabs instead), so the title was never displayed.
   const body = document.getElementById('ctx-panel-content');
   if (!body) return;
 
@@ -3919,10 +3528,9 @@ function updateContextPanel() {
   const ctxInfo = (label, val) => `<div style="display:flex;justify-content:space-between;align-items:center;padding:4px 8px;font-size:11px"><span style="color:var(--muted)">${label}</span><span style="color:var(--text);font-family:var(--mono);font-size:10px">${val}</span></div>`;
   const divider = () => `<div style="height:1px;background:var(--border);margin:6px 0"></div>`;
 
-  let title = 'Context', html = '';
+  let html = '';
 
   if (vt === 'terminal') {
-    title = 'Shell Tools';
     html = secHead('Quick Run') +
       ['health-check','docker ps -a --format "table {{.Names}}\\t{{.Status}}"','df -h /','free -h','uptime','sudo fail2ban-client status sshd','ls /srv/docker/'].map(cmd =>
         `<div class="w-type-item" style="font-family:var(--mono);font-size:10px" onclick="qcmd('${ws.id}-${pane.id}','${cmd.replace(/'/g,"\\'").replace(/"/g,'&quot;')}')">${cmd}</div>`
@@ -3932,7 +3540,6 @@ function updateContextPanel() {
 
   } else if (vt === 'iframe') {
     const svc = S.services.find(s=>s.port===vc.port) || {};
-    title = vc.title || 'Service';
     html = secHead('Service') +
       ctxInfo('Port', ':' + (vc.port||'—')) +
       ctxInfo('Status', svc.running ? '🟢 up' : '⚫ —') +
@@ -3944,7 +3551,6 @@ function updateContextPanel() {
       (svc.name ? ctxBtn('↺','Restart container', `qcmd && openView('terminal')`) : '');
 
   } else if (vt === 'dashboard') {
-    title = 'Quick Actions';
     html = secHead('Server') +
       ctxBtn('↻','Refresh status', 'hardRefresh()') +
       ctxBtn('⌨','Open terminal', "openView('terminal')") +
@@ -3956,7 +3562,6 @@ function updateContextPanel() {
       ctxInfo('Load', S.status?.load || '—');
 
   } else if (vt === 'map') {
-    title = 'Containers';
     const running = S.containers.filter(c=>c.running).length;
     const stopped = S.containers.filter(c=>!c.running).length;
     html = secHead('Summary') +
@@ -3967,40 +3572,29 @@ function updateContextPanel() {
       ).join('') || `<div style="padding:6px 8px;font-size:11px;color:var(--muted)">All running ✓</div>`);
 
   } else if (vt === 'logs') {
-    title = 'Log Tools';
     html = secHead('Containers') +
       S.containers.filter(c=>c.running).slice(0,10).map(c =>
         `<div class="w-type-item" style="font-size:10px;font-family:var(--mono)" onclick="document.getElementById('lname-${ws.id}-${pane.id}')&&(document.getElementById('lname-${ws.id}-${pane.id}').value='${c.name}')">${c.name}</div>`
       ).join('');
 
-  } else if (vt === 'vault') {
-    title = 'Vault Tools';
-    html = secHead('Actions') +
-      ctxBtn('🔒','Lock vault', 'vaultLock()') +
-      ctxBtn('＋','New entry', 'vaultAdd()') +
-      divider() +
-      ctxInfo('Entries', S.vaultData?.entries?.length ?? (S.vaultData ? '0' : '—'));
-
+  // removed: the vt==='vault' branch ('Lock vault' / 'New entry') -- the only caller of
+  // vaultLock()/vaultAdd(), which went with the client-side vault subsystem below.
   } else if (vt === 'docs') {
-    title = 'Guides';
     html = secHead('All Guides') +
       S.docs.map(d =>
         `<div class="w-type-item" style="font-size:11px" onclick="openDocWs('${d.file}','${d.title}')">📄 ${d.title}</div>`
       ).join('');
 
   } else if (vt === 'network') {
-    title = 'Network Tools';
     html = secHead('Actions') +
       ctxBtn('🔓','Unban my IP', `unbanMyIP('${ws?.id}-${pane?.id}')`) +
       ctxBtn('🔥','UFW status', `qcmd('${ws?.id}-${pane?.id}','sudo ufw status numbered')`) +
       ctxBtn('📡','Open ports', `qcmd('${ws?.id}-${pane?.id}','ss -tlnp')`);
 
   } else if (vt === 'chat') {
-    title = 'AI Chat';
     html = secHead('Context') + ctxInfo('Model', 'Claude CLI') + ctxInfo('Server', S.status?.online?'online':'offline');
 
   } else {
-    title = 'Workspace';
     html = secHead('Layout') +
       ['l1','l2h','l2v','l4'].map((l,i) => {
         const icons = ['▣ Single','⊢ Side-by-side','⊤ Stacked','⊞ 2×2'];
@@ -4008,7 +3602,6 @@ function updateContextPanel() {
       }).join('');
   }
 
-  if (titleEl) titleEl.textContent = title;
   body.innerHTML = html;
 }
 
@@ -4022,7 +3615,8 @@ function setWsLayout(wsId, layout) {
   reRenderWorkspace(wsId);
 }
 
-function updateWActiveList() {} // kept for compat, no longer used
+// removed: updateWActiveList() was an empty no-op kept 'for compat'; its two call
+// sites (addWidget, closeWidget) went with it. The widget dock renders itself.
 
 // ── WIDGET ENGINE ─────────────────────────────────────────────────────────────
 const W = { widgets: [], zTop: 60 };
@@ -4073,7 +3667,6 @@ function spawnWidget(type) {
   const meta = {id, type, icon:def.icon, title:def.title, el};
   W.widgets.push(meta);
   mountWidget(id, type, document.getElementById(`wbody-${id}`));
-  updateWActiveList();
 }
 
 function saveStickyNotes() {
@@ -4218,7 +3811,6 @@ function closeWidget(id) {
   const meta = W.widgets.find(w=>w.id===id);
   if (meta?.statsInterval) clearInterval(meta.statsInterval);
   W.widgets = W.widgets.filter(w=>w.id!==id);
-  updateWActiveList();
   saveStickyNotes();
 }
 
@@ -4307,34 +3899,7 @@ async function runWTerm(id) {
   out.scrollTop = out.scrollHeight;
 }
 
-// ── BROWSER PANE ─────────────────────────────────────────────────────────────
-function loadBrowser(key) {
-  let url = document.getElementById(`burl-${key}`)?.value?.trim(); if (!url) return;
-  // Short form: :3000 → route as local service
-  if (/^:\d+/.test(url)) { const port=url.slice(1).split('/')[0]; url=`http://${SRV}:${port}/${url.slice(port.length+1)}`; }
-  if (!url.startsWith('http')) url='https://'+url;
-  document.getElementById(`burl-${key}`).value = url;
-  const frame = document.getElementById(`bframe-${key}`); if (!frame) return;
-  try {
-    const u = new URL(url);
-    const isLocal = u.hostname===SRV||u.hostname==='localhost'||u.hostname==='127.0.0.1'||u.hostname===(S.server_info?.local_ip||'');
-    if (isLocal) {
-      const port = u.port || (u.protocol==='https:'?'443':'80');
-      frame.src = `${API}/proxy/${port}/${u.pathname.slice(1)}${u.search}`;
-    } else {
-      frame.src = '';
-      frame.srcdoc = `<html><body style="background:#0d1117;color:#cdd9e5;font-family:system-ui;display:flex;height:100%;align-items:center;justify-content:center;flex-direction:column;gap:12px;margin:0;padding:20px;text-align:center"><p style="opacity:.6;font-size:13px;max-width:320px">External sites block embedding (X-Frame-Options). Use the link below to open it.</p><a href="${url}" target="_blank" style="background:#238636;color:#fff;padding:8px 18px;border-radius:6px;text-decoration:none;font-size:13px">Open ${u.hostname} in new tab ↗</a></body></html>`;
-    }
-  } catch { frame.src = url; }
-}
-function browserNav(key, dir) {
-  const f = document.getElementById(`bframe-${key}`); if (!f) return;
-  if (dir==='back')   try{f.contentWindow.history.back();}catch{}
-  if (dir==='fwd')    try{f.contentWindow.history.forward();}catch{}
-  if (dir==='reload') try{f.contentWindow.location.reload();}catch{f.src=f.src;}
-}
-
-// ── LOG TAIL WIDGET ───────────────────────────────────────────────────────────
+// ──────────────────────────────────────────────────────────
 async function tailLog(id) {
   const name = document.getElementById(`ltname-${id}`)?.value?.trim(); if (!name) return;
   const lines = document.getElementById(`ltlines-${id}`)?.value || '50';
@@ -4502,17 +4067,49 @@ let HUB_TOKEN = sessionStorage.getItem('hub_token') || '';
 let HUB_USER  = sessionStorage.getItem('hub_user')  || '';
 
 async function checkLogin() {
-  if (!HUB_TOKEN) { showLogin(); return; }
+  // ASK THE SERVER FIRST, ALWAYS.
+  //
+  // This used to bail to the login form whenever sessionStorage held no
+  // token -- so arriving through Cloudflare Access, already signed in with
+  // Google, still showed a username and password box. Two logins for one
+  // door, which is the thing the whole entry chain exists to remove.
+  //
+  // The server already knows: kernel/auth.check_auth accepts the Access
+  // email when the request came down the tunnel (HUB_CF_TRUST_IP). The page
+  // just never asked. So ask with whatever token we have, which may be none,
+  // and let the server decide.
   try {
-    const r = await fetch(API+'/api/auth/check', {headers:{'X-Hub-Token':HUB_TOKEN}});
+    const r = await fetch(API+'/api/auth/check',
+      {headers: HUB_TOKEN ? {'X-Hub-Token':HUB_TOKEN} : {}});
     const d = await r.json();
-    if (d.ok) { hideLogin(); }
-    else { HUB_TOKEN=''; HUB_USER=''; sessionStorage.removeItem('hub_token'); showLogin(); }
-  } catch { hideLogin(); } // server offline — let them in but limit ops
+    if (d.ok) {
+      HUB_USER = d.user || HUB_USER;
+      if (d.via === 'cf-access') {
+        // No token to store -- the identity rides on every request through
+        // the tunnel. Storing a fake one would break the local door later.
+        const badge = document.getElementById('hub-user-badge');
+        if (badge) badge.textContent = '⚙ ' + HUB_USER;
+      }
+      hideLogin();
+      return;
+    }
+  } catch { hideLogin(); return; } // server offline — let them in, ops will fail loudly
+  // Genuinely nobody: clear anything stale and show the local door.
+  HUB_TOKEN=''; HUB_USER=''; sessionStorage.removeItem('hub_token');
+  showLogin();
 }
 
 function showLogin() { document.getElementById('login-gate').classList.add('show'); setTimeout(()=>document.getElementById('login-pass').focus(),100); }
-function hideLogin() { document.getElementById('login-gate').classList.remove('show'); }
+function hideLogin() {
+  document.getElementById('login-gate').classList.remove('show');
+  // Notifications start when the gate opens, not on page load: before this
+  // point there is no session, so the stream would only be refused. Idempotent
+  // -- hideLogin runs on cached-session, fresh-login and server-offline paths.
+  if (window.HubNotify && !window._hubNotifyStarted) {
+    window._hubNotifyStarted = true;
+    HubNotify.start();
+  }
+}
 
 async function doLogin() {
   const user = document.getElementById('login-user').value.trim();
@@ -4541,6 +4138,31 @@ async function doLogin() {
 document.addEventListener('keydown', e=>{
   if (e.key==='Enter' && document.getElementById('login-gate').classList.contains('show')) doLogin();
 });
+
+// 20301716  enableNotifications — must run from a click. Browsers refuse the
+// permission prompt outside a user gesture, so this cannot live in start().
+async function enableNotifications() {
+  if (!window.HubNotify) { alert('notify.js did not load'); return; }
+  const p = await HubNotify.enable();
+  if (p !== 'granted') {
+    alert(p === 'denied'
+      ? 'Blocked in the browser. Reset it in the site settings — the page cannot ask again once denied.'
+      : 'Notifications not available here (' + p + '). Over plain http:// on the LAN the browser has no secure context; use the Tailscale or Cloudflare hostname.');
+  }
+  if (!window._hubNotifyStarted) { window._hubNotifyStarted = true; HubNotify.start(); }
+  refreshNotifyPanel();
+}
+
+function refreshNotifyPanel() {
+  if (!window.HubNotify) return;
+  const s = HubNotify.status();
+  const perm = document.getElementById('ntf-perm');
+  const str  = document.getElementById('ntf-stream');
+  const lvl  = document.getElementById('ntf-level');
+  if (perm) perm.textContent = s.permission;
+  if (str)  str.textContent  = s.stream + (s.last_id ? ' · at #' + s.last_id : '');
+  if (lvl)  lvl.value = s.level;
+}
 
 function doLogout() {
   fetch(API+'/api/auth/logout',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({token:HUB_TOKEN})});
@@ -5129,7 +4751,8 @@ async function runStorPrune(type, key, btn) {
 }
 
 // ── DOCKER MANAGEMENT VIEW ────────────────────────────────────────────────────
-let _dkrImagesCache = null, _dkrVolsCache = null, _dkrStatsCache = null, _dkrDiagCache = null;
+// removed: _dkrImagesCache/_dkrVolsCache/_dkrStatsCache/_dkrDiagCache were declared here
+// and never assigned or read -- dkrTab() re-fetches on every tab switch.
 
 async function dkrTab(btn, key, tab) {
   const bar = btn.closest('.tab-bar');
@@ -5329,7 +4952,8 @@ async function dkrRenderDiag(panel, key) {
     </div>`;
 }
 
-// Legacy compat
+// Mounts the Storage view's first tab. Passes a {closest:()=>null} stub so storTab()
+// cannot throw when the tab bar has not been rendered yet.
 async function loadStorageView(key) {
   storTab(document.querySelector('#vstor-'+key+' .tab-btn.active') || {closest:()=>null}, key, 'overview');
 }
@@ -5369,31 +4993,13 @@ function filesNav(key, rel) {
   else loadFiles(key, cur+'/'+rel);
 }
 
-// ── JOURNAL ───────────────────────────────────────────────────────────────────
-async function loadJournal(key) {
-  const el = document.getElementById(`jnl-list-${key}`); if(!el) return;
-  const r = await fetch(API+'/api/journal'); const entries = await r.json();
-  if(!entries.length){el.innerHTML='<div style="padding:16px;color:var(--muted);font-size:11px;text-align:center">No journal entries yet</div>';return;}
-  el.innerHTML = entries.map(e=>`<div class="jnl-row">
-    <div class="jnl-ts">${(e.ts||'').replace('T',' ').slice(0,16)}${e.user?' · '+e.user:''}</div>
-    <span class="jnl-type ${e.type}">${e.type}</span>
-    <span class="jnl-body">${e.body}</span>
-  </div>`).join('');
-}
-
-async function addJournalEntry(key) {
-  const inp = document.getElementById(`jnl-inp-${key}`); if(!inp||!inp.value.trim()) return;
-  await fetch(API+'/api/journal',{method:'POST',headers:{'Content-Type':'application/json','X-Hub-Token':HUB_TOKEN},body:JSON.stringify({type:'manual',body:inp.value.trim(),user:HUB_USER})});
-  inp.value=''; loadJournal(key);
-}
-
-// ── COMMAND PALETTE ───────────────────────────────────────────────────────────
+// ──────────────────────────────────────────────────────────
 let _cpActive = 0, _cpFiltered = [];
 
 function buildCmdIndex() {
   const items = [];
   // Views
-  Object.entries(VIEW_DEFS).filter(([k])=>k!=='blank'&&k!=='iframe').forEach(([k,v])=>{
+  Object.entries(VIEW_DEFS).filter(([,v])=>!v.hidden).forEach(([k,v])=>{
     items.push({grp:'Views', icon:v.icon, label:`Open ${v.title}`, hint:'view', action:()=>openView(k), kw:[k,v.title.toLowerCase()]});
   });
   // Services
@@ -5929,240 +5535,7 @@ function renderGuideView(body) {
   window._guideAct = GUIDE_FEATURES.map(f=>f.action);
 }
 
-// ── PLATFORM VIEW ─────────────────────────────────────────────────────────────
-async function renderPlatformView(key) {
-  const root = document.getElementById('vpf-' + key);
-  if (!root) return;
 
-  // ── 1. vigil-node presence — check port data for :7777 ──────────────────
-  let vigilLive = false;
-  let vigilPort = null;
-  try {
-    const pd = await fetch(API+'/api/ports', {headers:{'X-Hub-Token':HUB_TOKEN}}).then(r=>r.json());
-    vigilPort = (pd.ports||[]).find(p => p.port===7777);
-    vigilLive = !!vigilPort;
-  } catch {}
-
-  // ── 2. metaforge instances — scan service list and docker ps ────────────
-  const svcs    = S.services || [];
-  const mfSvcs  = svcs.filter(s => {
-    const n = (s.name||'').toLowerCase();
-    return n.includes('metaforge') || n.includes('mforge') || n.startsWith('mf-');
-  });
-  // also check running containers name from docker ps via /api/run
-  let mfExtra = [];
-  try {
-    const r = await fetch(API+'/api/run', {
-      method:'POST',
-      headers:{'Content-Type':'application/json','X-Hub-Token':HUB_TOKEN},
-      body: JSON.stringify({cmd:"docker ps --format '{{.Names}}\t{{.Ports}}\t{{.Status}}' | grep -i metaforge || echo ''"})
-    });
-    if (r.ok) {
-      const d = await r.json();
-      const lines = (d.output||'').trim().split('\n').filter(l=>l&&!l.startsWith('TOTP'));
-      mfExtra = lines.map(l => {
-        const parts = l.split('\t');
-        return {name: parts[0]||'', ports: parts[1]||'', status: parts[2]||''};
-      }).filter(x=>x.name);
-    }
-  } catch {}
-
-  const allMf = [...mfSvcs.map(s=>({name:s.name, ports:s.port?`:${s.port}`:'', status:s.running?'running':'stopped'})), ...mfExtra];
-  // dedup by name
-  const seenMf = new Set();
-  const mfInstances = allMf.filter(m => { if (seenMf.has(m.name)) return false; seenMf.add(m.name); return true; });
-
-  // ── render ───────────────────────────────────────────────────────────────
-  const escH = s => (s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
-
-  const vigilStatus = vigilLive
-    ? `<span class="pf-dot pf-dot-live"></span> vigil-node live · port 7777`
-    : `<span class="pf-dot pf-dot-off"></span> not detected`;
-
-  const mfStatus = mfInstances.length > 0
-    ? `<span class="pf-dot pf-dot-live"></span> ${mfInstances.length} instance${mfInstances.length!==1?'s':''} found`
-    : `<span class="pf-dot pf-dot-off"></span> no instances`;
-
-  const mfInstancesHtml = mfInstances.length > 0
-    ? mfInstances.map(m => `
-        <div class="pf-inst-row">
-          <span class="pf-dot ${m.status==='running'?'pf-dot-live':'pf-dot-off'}"></span>
-          <span class="pf-inst-name">${escH(m.name)}</span>
-          <span class="pf-inst-port">${escH(m.ports)}</span>
-          <span style="font-size:10px;color:var(--muted);margin-left:auto">${escH(m.status)}</span>
-        </div>`).join('')
-    : `<div class="pf-none">No Metaforge containers detected on this server</div>`;
-
-  root.innerHTML = `
-    <div class="pf-header">
-      <div class="pf-hdr-left">
-        <span style="font-size:20px">🔮</span>
-        <span class="pf-title">Platform Tools</span>
-        <span class="pf-mode">standalone mode</span>
-      </div>
-      <button class="btn btn-sm" onclick="renderPlatformView('${key}')">↺ Refresh</button>
-    </div>
-
-    <div class="pf-notice">
-      <span class="pf-notice-icon">ℹ</span>
-      <span>Hub is running in standalone mode. FlareVault provides the port authority + topology layer when connected.
-      Metaforge can be deployed from this panel. Both integrate when live — hub honors what they report.</span>
-    </div>
-
-    <div class="pf-grid">
-
-      <!-- ── FLAREVAULT ─────────────────────────────────── -->
-      <div class="pf-card">
-        <div class="pf-card-hdr">
-          <div class="pf-card-name"><span class="pf-card-icon">🔒</span> FlareVault</div>
-          <div class="pf-card-status">${vigilStatus}</div>
-        </div>
-        <div class="pf-desc">
-          Portable encrypted vault + Cloudflare protocol layer + living topology map.
-          Runs from USB or any machine with Python 3.11+. Nothing cloud-dependent to unlock it.
-        </div>
-        <div class="pf-tags">
-          <span class="pf-tag">AES-GCM vault</span>
-          <span class="pf-tag">CF tunnel</span>
-          <span class="pf-tag">topology map</span>
-          <span class="pf-tag">vigil-node</span>
-        </div>
-        <div class="pf-divider"></div>
-        <div class="pf-rows">
-          <div class="pf-row">
-            <span class="pf-row-label">Connection</span>
-            <span class="pf-row-value dim">not connected</span>
-          </div>
-          <div class="pf-row">
-            <span class="pf-row-label">vigil-node</span>
-            <span class="pf-row-value">${vigilLive?`7777 · ${escH(vigilPort?.service||'vigil-node')}`:'— not running'}</span>
-          </div>
-          <div class="pf-row">
-            <span class="pf-row-label">Port registry</span>
-            <span class="pf-row-value dim">FlareVault owns this when live</span>
-          </div>
-          <div class="pf-row">
-            <span class="pf-row-label">CF state</span>
-            <span class="pf-row-value dim">LOCAL → SERVER → TUNNEL → LIVE</span>
-          </div>
-        </div>
-        <div class="pf-divider"></div>
-        <div style="font-size:10px;color:var(--muted);font-weight:600;margin-bottom:3px;letter-spacing:.3px;text-transform:uppercase">Three port layers</div>
-        <div class="pf-rows">
-          <div class="pf-row">
-            <span class="pf-row-label">Docker internal</span>
-            <span class="pf-row-value dim">set by the app · never changes</span>
-          </div>
-          <div class="pf-row">
-            <span class="pf-row-label">Proxy (Traefik)</span>
-            <span class="pf-row-value dim">domain/path → Docker port</span>
-          </div>
-          <div class="pf-row">
-            <span class="pf-row-label">Node port bands</span>
-            <span class="pf-row-value dim">dedicated range per project · FV owns registry</span>
-          </div>
-        </div>
-        <div class="pf-actions">
-          <button class="btn btn-sm" onclick="openView('ports')" title="Open Port Landscape">📡 Port Landscape</button>
-          <a class="btn btn-sm" href="https://github.com/KGSHOPINV/flarevault" target="_blank" style="text-decoration:none">GitHub ↗</a>
-        </div>
-      </div>
-
-      <!-- ── METAFORGE ──────────────────────────────────── -->
-      <div class="pf-card">
-        <div class="pf-card-hdr">
-          <div class="pf-card-name"><span class="pf-card-icon">⚗</span> Metaforge</div>
-          <div class="pf-card-status">${mfStatus}</div>
-        </div>
-        <div class="pf-desc">
-          Universal system-building framework. Self-aware database.
-          One Postgres instance that knows everything about itself — 86 meta tables across 4 schemas.
-        </div>
-        <div class="pf-tags">
-          <span class="pf-tag">86 tables</span>
-          <span class="pf-tag">Postgres</span>
-          <span class="pf-tag">Redis</span>
-          <span class="pf-tag">SurrealDB</span>
-          <span class="pf-tag">multi-deploy</span>
-        </div>
-        <div class="pf-divider"></div>
-        <div class="pf-rows">
-          <div class="pf-row">
-            <span class="pf-row-label">Instances on server</span>
-            <span class="pf-row-value">${mfInstances.length > 0 ? mfInstances.length : '0'}</span>
-          </div>
-          <div class="pf-row">
-            <span class="pf-row-label">Deploy mode</span>
-            <span class="pf-row-value dim">multi-tenant · isolated · substrate</span>
-          </div>
-          <div class="pf-row">
-            <span class="pf-row-label">MCP endpoint</span>
-            <span class="pf-row-value dim">— planned</span>
-          </div>
-          <div class="pf-row">
-            <span class="pf-row-label">Wizard</span>
-            <span class="pf-row-value dim">python wizard/init.py</span>
-          </div>
-        </div>
-        <div class="pf-divider"></div>
-        <div style="font-size:10px;color:var(--muted);font-weight:600;margin-bottom:5px;letter-spacing:.3px;text-transform:uppercase">Instances</div>
-        <div class="pf-instances">${mfInstancesHtml}</div>
-        <div class="pf-actions">
-          <button class="btn btn-sm" title="Clone and run wizard/init.py — coming soon" onclick="alert('Deploy wizard coming soon. Clone github.com/KGSHOPINV/metaforge and run: python wizard/init.py')">🚀 Deploy Instance</button>
-          <a class="btn btn-sm" href="https://github.com/KGSHOPINV/metaforge" target="_blank" style="text-decoration:none">GitHub ↗</a>
-        </div>
-      </div>
-
-    </div>
-
-    <!-- ── ECOSYSTEM OVERVIEW ───────────────────────────── -->
-    <div class="pf-ecosystem">
-      <div class="pf-eco-label">Ecosystem</div>
-      <div class="pf-eco-nodes">
-        <div class="pf-eco-node live">
-          <span class="pf-dot pf-dot-live"></span>
-          <span>Hub</span>
-          <span style="font-size:9px;color:var(--muted)">windshield</span>
-        </div>
-        <span class="pf-eco-arrow">→</span>
-        <div class="pf-eco-node">
-          <span class="pf-dot pf-dot-off"></span>
-          <span>FlareVault</span>
-          <span style="font-size:9px;color:var(--muted)">port authority + topology</span>
-        </div>
-        <span class="pf-eco-arrow">→</span>
-        <div class="pf-eco-node ${mfInstances.length>0?'live':''}">
-          <span class="pf-dot ${mfInstances.length>0?'pf-dot-live':'pf-dot-off'}"></span>
-          <span>Metaforge</span>
-          <span style="font-size:9px;color:var(--muted)">data substrate</span>
-        </div>
-        <span class="pf-eco-arrow">→</span>
-        <div class="pf-eco-node">
-          <span class="pf-dot pf-dot-off"></span>
-          <span>server-kit</span>
-          <span style="font-size:9px;color:var(--muted)">install catalog</span>
-        </div>
-      </div>
-    </div>
-  `;};
-
-// ── TASKS / DOCKET VIEW ────────────────────────────────────────────────────────
-const TASK_DOCKET = [
-  { status:'done',  label:'Nightly Maintenance Agent',   desc:'Python agent runs nightly — checks containers, disk, cert expiry, sends ntfy alert with full report.', tags:['automation','monitoring'] },
-  { status:'done',  label:'TOTP Gate System',             desc:'2FA over all /api/run shell calls. Gate modal auto-pops on 403. 30-min sessions. Works on desktop + mobile.', tags:['security'] },
-  { status:'done',  label:'Adminer, Mailpit, Wiki.js',    desc:'All three services deployed and running. Marked as installed in hub services list.', tags:['services'] },
-  { status:'done',  label:'Portainer Fix',                desc:'Fresh DB reset — admin setup completed. Watchtower pinned to 1.7.1 with DOCKER_API_VERSION=1.41.', tags:['infra'] },
-  { status:'done',  label:'Hub as systemd Service',       desc:'Hub runs as systemd user service — auto-restarts on crash, survives SSH disconnection.', tags:['infra'] },
-  { status:'done',  label:'PWA + Desktop Shortcut',       desc:'Manifest.json served — hub installable as a PWA on Chrome/Edge. Desktop .url shortcut + launcher.', tags:['ux'] },
-  { status:'next',  label:'Service Tokens',               desc:'Named long-lived tokens with role scope — separate AI/n8n identity from human TOTP sessions.', tags:['security','ai'] },
-  { status:'next',  label:'Update Hub Button',            desc:'One-click git pull + hub restart from the browser Settings view.', tags:['ux','ops'] },
-  { status:'next',  label:'n8n Health Alert → ntfy',      desc:'n8n workflow that pings ntfy when any monitored service goes down.', tags:['automation','monitoring'] },
-  { status:'next',  label:'Wire AI Key into Setup',       desc:'Install script prompts for API key, stores in hub_config — AI chat works out of the box.', tags:['ai'] },
-  { status:'idea',  label:'Supabase Install',             desc:'Full Postgres + auth + realtime stack. Large install — spin up when needed.', tags:['db'] },
-  { status:'idea',  label:'MinIO Install',                desc:'S3-compatible object storage — useful for backups and AI asset storage.', tags:['storage'] },
-  { status:'idea',  label:'Tailscale Deep Integration',   desc:'Show Tailscale node map, peer list, and MagicDNS status in the hub Infra Map.', tags:['network'] },
-  { status:'idea',  label:'Mobile APK (TWA)',             desc:'Wrap mobile.html as a Trusted Web Activity APK for Android — proper homescreen app.', tags:['mobile'] },
-];
 
 // ── Remote Access view ────────────────────────────────────────────────────────
 async function renderRemoteView(body) {
@@ -6250,33 +5623,6 @@ async function remoteTunnelStop() {
 
 function remCopy(url) {
   navigator.clipboard.writeText(url).then(() => showToast('URL copied ✓'));
-}
-
-function renderTasksView(body) {
-  const ICONS = { done:'✅', next:'🔵', idea:'💡' };
-  const LABELS = { done:'Done', next:'Up Next', idea:'Ideas' };
-  const groups = ['done','next','idea'];
-  body.innerHTML = `<div class="guide-wrap">
-    <div class="guide-hero" style="padding:24px 0 20px">
-      <div class="guide-hero-icon">📋</div>
-      <div class="guide-hero-title">Task Docket</div>
-      <div class="guide-hero-sub">What's been built, what's coming, what's on the ideas list</div>
-    </div>
-    ${groups.map(g => {
-      const items = TASK_DOCKET.filter(t=>t.status===g);
-      return `<div class="guide-section-title">${ICONS[g]} ${LABELS[g]} — ${items.length} item${items.length===1?'':'s'}</div>
-        <div style="display:flex;flex-direction:column;gap:8px;margin-bottom:8px">
-          ${items.map(t=>`<div class="guide-netlify" style="cursor:default;opacity:${g==='done'?'0.75':'1'}">
-            <div style="font-size:20px">${ICONS[t.status]}</div>
-            <div style="flex:1">
-              <div style="font-size:12px;font-weight:600;color:var(--text)">${t.label}</div>
-              <div style="font-size:11px;color:var(--muted);margin-top:2px;line-height:1.5">${t.desc}</div>
-              <div class="guide-card-tags" style="margin-top:6px">${t.tags.map(tg=>`<span class="guide-tag">${tg}</span>`).join('')}</div>
-            </div>
-          </div>`).join('')}
-        </div>`;
-    }).join('')}
-  </div>`;
 }
 
 // ── SERVER INTELLIGENCE LAYER ─────────────────────────────────────────────────
@@ -6490,6 +5836,10 @@ checkLogin();
 const badge = document.getElementById('hub-user-badge');
 if (badge && HUB_USER) badge.textContent = '⚙ ' + HUB_USER;
 setCategory('server');
+// The Home workspace. The fleet is NOT here -- it is the standalone lobby at
+// flarevault.dev/fleet, outside this app. A 'Fleet' pane inside the hub was my
+// wrong shape: it made the dashboard a tab in one server's UI when the point
+// was a door in front of every server.
 createWorkspace({ title:'Home', icon:'⊞', pinned:true, viewType:'dashboard' });
 renderBookmarks();
 restoreStickyNotes();

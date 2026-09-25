@@ -1,0 +1,417 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Fleet</title>
+<!--
+  THE LOBBY -- served at dashboard.<zone>, and nowhere else.
+
+  THIS IS NOT THE HUB APP. app.html is one server's control room; every pane in
+  it assumes "the box I am talking to". A fleet view bolted into that app was
+  the mistake this file replaces: it rendered a SUMMARY of other servers inside
+  the local server's UI, so picking a server changed a list and never changed
+  which machine you were operating.
+
+  What this page does instead is smaller and is the whole point: one card per
+  server, and clicking a card NAVIGATES to /s/<server_id>/, where
+  handlers/lobbyhost.py routes you into that server's own hub UI. You end up
+  operating that server. There is deliberately no drill-in pane here, no tabs
+  and no second copy of the app's views -- anything this page rendered in place
+  would be a summary again, which is the bug.
+
+  WHAT MUST NOT LEAK. A client must never learn that a server it does not own
+  exists. So this page renders EXACTLY the rows /api/lobby returned and nothing
+  else: no placeholder card, no "N more", no skeleton row that later fills in,
+  no total taken from anywhere but the rows already on screen. An empty lobby
+  renders as an empty lobby -- that is a correct lobby for a role that owns
+  nothing, not an error state to paper over.
+
+  HOUSE STYLE, from splash.html: CSS variables, a light-scheme override, no
+  framework, no build step, no external fetch of any kind. Everything this page
+  needs comes from this origin, because the lobby has to work on the evening
+  the CDN is the thing that is down.
+
+  THE COOKIE, AND WHY THERE IS ONE. /api/door hands back a role JWT and
+  /api/lobby wants it as `Authorization: Bearer`. A CLICK on a card is a
+  top-level navigation, and a navigation cannot carry a header -- so without a
+  cookie, /s/<id>/ arrives at lobbyhost with no identity and every drill-in is
+  a 401. The token is therefore also written to a cookie scoped `Path=/s/`,
+  SameSite=Strict: it is sent on the navigation into a server and on nothing
+  else, never on /api/*, and never on a cross-site request. That is safe here
+  only because /s/ is GET-only -- a cookie-borne credential on a route that
+  wrote anything would be a CSRF hole. lobbyhost refuses POST, for that reason
+  among others.
+-->
+<style>
+  /* The hub's own language, not a generic card grid. Slate, a cyan accent,
+     monospace for anything a machine generated, and colour used only to mean
+     something -- green is reporting, amber wants a human, grey is unknown.
+     A front door that looks unlike the room behind it reads as a bolt-on. */
+  :root{
+    --bg:#0b0f14; --panel:#111823; --panel2:#0e141d; --border:#1e2936;
+    --text:#dbe5f0; --muted:#7d8da0; --muted2:#55697e;
+    --accent:#4ec9e0; --green:#3fb950; --amber:#d29922; --red:#f85149;
+    --mono:ui-monospace,SFMono-Regular,"SF Mono",Menlo,monospace;
+  }
+  @media (prefers-color-scheme: light){
+    :root:not([data-theme="dark"]){
+      --bg:#f6f8fa; --panel:#ffffff; --panel2:#f0f3f6; --border:#d5dde5;
+      --text:#1f2328; --muted:#5b6570; --muted2:#8593a3; --accent:#0d7d94;
+    }
+  }
+  *{box-sizing:border-box}
+  body{
+    margin:0; min-height:100vh; background:var(--bg); color:var(--text);
+    font:14px/1.55 ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif;
+    padding:0;
+  }
+  .wrap{ max-width:940px; margin:0 auto; padding:26px 24px 60px }
+
+  /* header ---------------------------------------------------------------- */
+  .top{ display:flex; align-items:baseline; gap:12px; flex-wrap:wrap;
+        padding-bottom:14px; border-bottom:1px solid var(--border) }
+  .brand{ font-size:15px; font-weight:600; letter-spacing:.3px }
+  .brand .dot{ color:var(--accent) }
+  .who{ margin-left:auto; font-size:11px; color:var(--muted);
+        font-family:var(--mono) }
+  .who b{ color:var(--text); font-weight:500 }
+
+  /* layer strip ----------------------------------------------------------- */
+  .layers{ display:flex; gap:6px; flex-wrap:wrap; margin:16px 0 4px }
+  .lyr{ font-size:10px; font-family:var(--mono); padding:3px 8px;
+        border-radius:3px; border:1px solid var(--border); color:var(--muted2);
+        background:var(--panel2) }
+  .lyr.on{ color:var(--green); border-color:color-mix(in srgb,var(--green) 40%,transparent) }
+  .lyr .n{ color:var(--text); margin-right:5px }
+  .doors{ font-size:10px; color:var(--muted2); font-family:var(--mono);
+          margin:8px 0 22px }
+  .doors span{ color:var(--muted) }
+
+  /* servers --------------------------------------------------------------- */
+  .cards{ display:flex; flex-direction:column; gap:1px; background:var(--border);
+          border:1px solid var(--border); border-radius:6px; overflow:hidden }
+  a.card{
+    display:block; padding:14px 16px; background:var(--panel);
+    color:inherit; text-decoration:none; position:relative;
+    transition:background .12s ease;
+  }
+  a.card:hover{ background:var(--panel2) }
+  a.card:hover .go{ color:var(--accent); transform:translateX(2px) }
+  a.card:focus-visible{ outline:2px solid var(--accent); outline-offset:-2px }
+  .ctop{ display:flex; align-items:center; gap:9px }
+  .cname{ font-size:15px; font-weight:600 }
+  .cid{ font-family:var(--mono); font-size:10px; color:var(--muted2) }
+  .go{ margin-left:auto; color:var(--muted2); font-size:16px;
+       transition:color .12s ease, transform .12s ease }
+
+  /* one line of facts, inline, mono -- reads as a readout not a form */
+  .facts{ display:flex; flex-wrap:wrap; gap:0 18px; margin-top:7px;
+          font-family:var(--mono); font-size:11px; color:var(--muted) }
+  .f b{ color:var(--text); font-weight:500 }
+  .f.warn b{ color:var(--amber) }
+  .seen{ margin-top:5px; font-size:10px; color:var(--muted2);
+         font-family:var(--mono) }
+
+  .pill{ font-size:9px; font-family:var(--mono); text-transform:uppercase;
+         letter-spacing:.6px; padding:2px 7px; border-radius:20px;
+         border:1px solid var(--border); color:var(--muted) }
+  .pill.healthy{ color:var(--green);
+                 border-color:color-mix(in srgb,var(--green) 40%,transparent) }
+  .pill.self{ color:var(--accent);
+              border-color:color-mix(in srgb,var(--accent) 40%,transparent) }
+  .pill.degraded,.pill.stale{ color:var(--amber);
+              border-color:color-mix(in srgb,var(--amber) 40%,transparent) }
+  .pill.unreachable{ color:var(--red);
+              border-color:color-mix(in srgb,var(--red) 40%,transparent) }
+
+  .enter{ margin-top:11px; font-size:11px; color:var(--accent) }
+
+  .msg{
+    border:1px solid var(--border); background:var(--panel);
+    border-radius:10px; padding:16px 18px; font-size:13px; color:var(--muted);
+  }
+  .msg h2{ font-size:14px; font-weight:600; color:var(--text); margin:0 0 6px }
+  .msg p{ margin:0 0 8px }
+  .msg.bad{ border-color:var(--bad) }
+  .foot{
+    margin-top:28px; padding-top:14px; border-top:1px solid var(--border);
+    color:var(--muted); font-size:11px;
+  }
+</style>
+</head>
+<body>
+<main>
+  <div class="mark" aria-hidden="true">&#9670;</div>
+  <h1>Fleet</h1>
+  <p class="sub" id="who">Reading your role&hellip;</p>
+
+  <div class="layers" id="layers"></div>
+  <div class="doors" id="doorstrip"></div>
+
+  <div class="msg" id="msg" hidden></div>
+  <div class="cards" id="cards"></div>
+
+  <div class="foot" id="foot">
+    Picking a server routes you into that server. This page holds no data of
+    its own.
+  </div>
+</main>
+
+<script>
+(function () {
+  'use strict';
+
+  function $(id) { return document.getElementById(id); }
+
+  // Escape everything that comes off the wire. Server names and OS strings are
+  // operator-supplied text, and one of them will eventually contain a '<'.
+  function es(v) {
+    if (v === null || v === undefined || v === '') return '';
+    return String(v).replace(/[&<>"']/g, function (c) {
+      return ({ '&': '&amp;', '<': '&lt;', '>': '&gt;',
+                '"': '&quot;', "'": '&#39;' })[c];
+    });
+  }
+
+  // A value that is genuinely absent renders as a dash, not as 0 and not as
+  // "none". A node that has not reported its container count has not said
+  // zero, and showing zero would be this page inventing a fact.
+  function val(v) {
+    if (v === null || v === undefined || v === '') return '&mdash;';
+    return es(v);
+  }
+
+  // dashboard.example.dev -> example.dev. Used only to NAME the right door in
+  // an error message. The API tells us the real hostnames when it can; this is
+  // the fallback for a failure that happened before any response arrived.
+  function zone() {
+    var h = String(location.hostname || '');
+    var p = h.split('.');
+    return p.length > 2 ? p.slice(1).join('.') : h;
+  }
+
+  function when(iso) {
+    if (!iso) return '';
+    var d = new Date(iso);
+    if (isNaN(d.getTime())) return String(iso);
+    return d.toLocaleString();
+  }
+
+  function show(title, html, bad) {
+    var m = $('msg');
+    m.className = 'msg' + (bad ? ' bad' : '');
+    m.innerHTML = '<h2>' + es(title) + '</h2>' + html;
+    m.hidden = false;
+  }
+
+  // The hub's local door uses X-Hub-Token from localStorage. Behind Cloudflare
+  // Access the cookie already authenticates us and this header is absent and
+  // unnecessary -- it is sent when present purely so the lobby also works on a
+  // hostname where the operator signed in locally. It is never required here.
+  function hubToken() {
+    try { return localStorage.getItem('hub_token') || ''; } catch (e) { return ''; }
+  }
+
+  function jget(url, bearer) {
+    var h = { 'Accept': 'application/json' };
+    var t = hubToken();
+    if (t) { h['X-Hub-Token'] = t; }
+    if (bearer) { h['Authorization'] = 'Bearer ' + bearer; }
+    return fetch(url, { headers: h, credentials: 'same-origin' })
+      .then(function (r) {
+        return r.text().then(function (txt) {
+          var body = null;
+          try { body = JSON.parse(txt); } catch (e) { body = null; }
+          return { status: r.status, body: body };
+        });
+      });
+  }
+
+  // -- Refusals, each naming the door that fixes it --------------------------
+  //
+  // A 401 and a 409 have completely different fixes and must never collapse
+  // into one "could not load". 401 means you are at the right place without a
+  // role; 409 means this box is a node and the lobby is somewhere else.
+
+  function denied(res) {
+    var b = (res && res.body) || {};
+    var door = b.door || ('login.' + zone());
+    $('who').textContent = '';
+    show('Not signed in',
+         '<p>This lobby did not get a role for you' +
+         (b.error ? ' (<code>' + es(b.error) + '</code>)' : '') + '.</p>' +
+         '<p>The one human door is <code>' + es(door) + '</code>. Sign in ' +
+         'there and come back &mdash; this page never authenticates anybody ' +
+         'itself, it only reads the role you already hold.</p>' +
+         (b.detail ? '<p>' + es(b.detail) + '</p>' : ''), true);
+  }
+
+  function notCentral(res) {
+    var b = (res && res.body) || {};
+    var lobby = b.lobby || ('dashboard.' + zone());
+    $('who').textContent = '';
+    show('This server is not the lobby',
+         '<p>You reached a node' +
+         (b.mode ? ' (mode <code>' + es(b.mode) + '</code>)' : '') +
+         '. A node answers for itself and holds no fleet.</p>' +
+         '<p>The lobby lives at <code>' + es(lobby) + '</code>.</p>', true);
+  }
+
+  function broke(what, res) {
+    var b = (res && res.body) || {};
+    show('The lobby could not be read',
+         '<p>' + es(what) + (res ? ' &mdash; HTTP ' + es(res.status) : '') +
+         '.</p>' + (b.error ? '<p><code>' + es(b.error) + '</code></p>' : '') +
+         (b.fix ? '<p>' + es(b.fix) + '</p>' : '') +
+         '<p>Nothing is shown rather than something stale: a fleet page that ' +
+         'renders its last answer is a monitor that lies.</p>', true);
+  }
+
+  // -- The layer strip, said honestly ----------------------------------------
+  //
+  // Rendered FROM the API's own `layer` block, not from a list written here.
+  // If this page held its own copy it would eventually claim layer 3 is live
+  // on the day someone flips it in the backend and forgets the front -- and a
+  // UI that offers a destructive control nothing enforces is worse than a UI
+  // that offers nothing.
+  function layers(layer) {
+    var names = { 1: 'Read', 2: 'Console &amp; containers',
+                  3: 'Destructive', 4: 'Vault &amp; kill switch' };
+    var enforced = (layer && layer.enforced) || [];
+    var pending = (layer && layer.pending) || {};
+    var out = [];
+    for (var n = 1; n <= 4; n++) {
+      var on = enforced.indexOf(n) !== -1;
+      var pend = pending[String(n)];
+      if (!on && !pend) { continue; }
+      out.push('<span class="lay ' + (on ? 'on' : 'pending') + '">' +
+               '<b>L' + n + '</b> ' + names[n] + ' &middot; ' +
+               (on ? 'enforced' : es(pend)) + '</span>');
+    }
+    $('layers').innerHTML = out.join('');
+  }
+
+  function doors(list) {
+    if (!list || !list.length) { $('doorstrip').innerHTML = ''; return; }
+    var out = ['<span>Your doors:</span>'];
+    for (var i = 0; i < list.length; i++) {
+      out.push('<span class="door">' + es(list[i].label || list[i].id) +
+               '</span>');
+    }
+    $('doorstrip').innerHTML = out.join('');
+  }
+
+  // -- One card per server. Clicking it LEAVES this page. ---------------------
+  //
+  // An <a href>, not a click handler, on purpose: a real link is what makes
+  // this a route into that server rather than a tab in a dashboard. Middle
+  // click, copy link and the back button all behave, and there is no state
+  // here for them to break.
+  function card(s) {
+    var sid = String(s.server_id || '');
+    var st = String(s.status || '').toLowerCase().replace(/[^a-z]/g, '');
+    // One line of facts rather than a label/value table. A table of six rows
+    // per server turns a two-server fleet into a wall and buries the one thing
+    // that matters -- which box wants a human.
+    var f = [];
+    if (s.containers != null) f.push('<span class="f"><b>' + es(s.containers) + '</b> containers</span>');
+    if (s.projects  != null) f.push('<span class="f"><b>' + es(s.projects)  + '</b> projects</span>');
+    if (s.attention)         f.push('<span class="f warn"><b>' + es(s.attention) + '</b> need attention</span>');
+    if (s.os)                f.push('<span class="f">' + es(s.os) + '</span>');
+    if (s.uptime)            f.push('<span class="f">up ' + es(s.uptime) + '</span>');
+
+    return '<a class="card" href="/s/' + encodeURIComponent(sid) + '/">' +
+             '<div class="ctop">' +
+               '<span class="cname">' + val(s.name || sid) + '</span>' +
+               '<span class="cid">' + es(sid) + '</span>' +
+               '<span class="pill ' + es(st) + '">' + val(s.status) + '</span>' +
+               '<span class="go">&rsaquo;</span>' +
+             '</div>' +
+             (f.length ? '<div class="facts">' + f.join('') + '</div>' : '') +
+             '<div class="seen">' +
+               (s.self ? 'this box &middot; read now'
+                       : 'last seen ' + es(when(s.last_seen) || 'unknown')) +
+             '</div>' +
+           '</a>';
+  }
+
+  // The server injects window.__LOBBY__ at render time. Using it means this
+  // page makes NO API call on the apex -- which matters because /fleet and
+  // /api are separate Cloudflare Access apps with separate sessions, so a
+  // fetch to /api gets a cross-origin redirect to the Access login that
+  // fetch() cannot follow. The browser calls that CORS; the cause is two apps.
+  //
+  // The fetch path stays as a fallback. If injection ever fails the page
+  // produces a diagnosable error instead of a blank screen.
+  function boot() {
+    var d = window.__LOBBY__;
+    if (d && d.ok) { render(d); return true; }
+    return false;
+  }
+
+  function render(d) {
+    var id = d.identity || {};
+    $('who').innerHTML = 'Signed in as <code>' + es(id.sub || '?') +
+      '</code> &middot; role <code>' + es(id.role || '?') + '</code>' +
+      (d.mode ? ' &middot; this box is <code>' + es(d.mode) + '</code>' : '');
+    layers(d.layer);
+    doors(d.doors);
+
+    var list = d.servers || [];
+    if (!list.length) {
+      // An empty lobby is a correct lobby. It says nothing about whether other
+      // servers exist, because saying anything at all about them is the leak.
+      $('cards').innerHTML = '';
+      show('No servers', '<p>Your role has no servers in it.</p>');
+      return;
+    }
+    $('msg').hidden = true;
+    $('cards').innerHTML = list.map(card).join('');
+    $('foot').innerHTML = 'Showing the ' + list.length + ' server' +
+      (list.length === 1 ? '' : 's') + ' your role holds. Picking one routes ' +
+      'you into it at <code>/s/&lt;id&gt;/</code> &mdash; you operate that ' +
+      'machine, you do not read a summary of it.';
+  }
+
+  // The role token also goes in a cookie so a CLICK can carry it. Path=/s/
+  // keeps it off every other route on this origin, including /api/*, so the
+  // header stays the only way the API ever sees it.
+  function stash(token, ttl) {
+    try {
+      document.cookie = 'flare_role=' + encodeURIComponent(token) +
+        '; Path=/s/; SameSite=Strict; Max-Age=' + (parseInt(ttl, 10) || 1800) +
+        (location.protocol === 'https:' ? '; Secure' : '');
+    } catch (e) { /* a lobby that cannot set a cookie still lists servers */ }
+  }
+
+  function start() {
+    jget('/api/door').then(function (res) {
+      if (res.status === 401) { denied(res); return null; }
+      if (!res.body || !res.body.ok || !res.body.token) {
+        broke('the door did not hand back a role token', res);
+        return null;
+      }
+      stash(res.body.token, res.body.expires_in);
+      return jget('/api/lobby', res.body.token);
+    }).then(function (res) {
+      if (!res) { return; }
+      if (res.status === 401) { denied(res); return; }
+      if (res.status === 409) { notCentral(res); return; }
+      if (!res.body || !res.body.ok) { broke('the lobby refused', res); return; }
+      render(res.body);
+    }).catch(function (e) {
+      broke('the request never completed: ' + (e && e.message ? e.message : e),
+            null);
+    });
+  }
+
+  // Injected data first. start() is the fallback and only runs if the server
+  // could not render the payload -- on the apex that fallback will fail with a
+  // CORS error, which is the diagnosable outcome we want rather than a blank
+  // page pretending nothing happened.
+  if (!boot()) { start(); }
+})();
+</script>
+</body>
+</html>

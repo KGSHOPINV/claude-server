@@ -651,12 +651,20 @@ document.addEventListener('DOMContentLoaded', () => {
   });
   document.getElementById('sheet').addEventListener('click', e=>{ if(e.target===document.getElementById('sheet')) closeSheet(); });
 
-  if (TOKEN) {
-    fetch(API+'/api/auth/check', {headers:hdrs()})
-      .then(r=>r.json())
-      .then(d=>{ if(d.ok) showApp(); else { TOKEN=''; sessionStorage.clear(); } })
-      .catch(()=>{ document.getElementById('gate-err').textContent='Hub server unreachable'; });
-  }
+  // ASK THE SERVER FIRST, ALWAYS -- the same bug app.html had.
+  //
+  // `if (TOKEN)` skipped the check whenever sessionStorage was empty, so
+  // arriving through Cloudflare Access, already signed in with Google, still
+  // got the username and password gate. Through Access there IS no token to
+  // hold: the identity rides on every request down the tunnel, and the server
+  // already knows. The page just never asked.
+  fetch(API+'/api/auth/check', {headers: TOKEN ? hdrs() : {}})
+    .then(r=>r.json())
+    .then(d=>{
+      if (d.ok) { showApp(); return; }
+      TOKEN=''; sessionStorage.clear();
+    })
+    .catch(()=>{ document.getElementById('gate-err').textContent='Hub server unreachable'; });
 });
 
 // ── AI CHAT ───────────────────────────────────────────────────────────────────

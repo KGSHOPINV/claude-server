@@ -20,6 +20,7 @@ from datetime import datetime
 
 from kernel.ssh import ssh_run
 from kernel import collect as _srv
+from kernel import storage as _store
 
 PORT = int(os.environ.get('HUB_PORT', 8765))
 
@@ -152,6 +153,11 @@ def node_payload():
             # A silently-failing alerting system is worse than none: you
             # believe you are covered. Report it as a fact about this node.
             'notifications': _ntfy_health(),
+            # Storage is reported for the same reason as notifications: the
+            # failure is silent. 40GB of dead build cache sat on this node's
+            # OS disk for two weeks while a 458GB disk sat empty, because
+            # nothing was looking.
+            'storage': _store.landscape()['findings'],
         },
     }
 
@@ -171,8 +177,12 @@ RESERVED = {
     22:   'ssh',
     80:   'http', 443: 'https',
 }
-BAND_SIZE = 10
-BAND_FLOOR, BAND_CEIL = 10020, 10990   # project bands live above the 10000 line
+# The band is the kernel's to define, not this handler's. It was briefly
+# declared here as 10020-10990, which sits inside the Supabase stack lane —
+# /api/admit was handing out ports another service already owns. One source.
+BAND_FLOOR = _srv.PROJECT_BAND_FLOOR
+BAND_CEIL  = _srv.PROJECT_BAND_CEIL
+BAND_SIZE  = _srv.PROJECT_BAND_SIZE
 
 
 # 20204315  _ports_in_use — every bound TCP port on the host
@@ -215,6 +225,14 @@ def get_admit(handler, path, params):
     band = _free_band(used)
     collision = wanted in projects if wanted else None
 
+    # Derived, not assumed. This node's data path depends on this node's disks:
+    # ksgcohub has a 458GB mount at /srv/data, fks-services does not. A single
+    # hardcoded path is correct on one machine and wrong on the other, and the
+    # project that believes it fills the OS disk.
+    land = _store.landscape()
+    dr = land['data_root']
+    data_dir = ('%s/<project>' % dr['path'].rstrip('/')) if dr['dedicated']                else '/srv/docker/<project>/data'
+
     handler.send_json({
         'node':        (_enrollment() or {}).get('node', ''),
         'machine_id':  _machine_id(),
@@ -224,6 +242,15 @@ def get_admit(handler, path, params):
 
         'assigned_band': band,          # [lo, hi] — bind only inside this
         'ports_in_use':  used,
+
+        # The disks this answer was derived from, so a project (or a human)
+        # can check the reasoning rather than trusting the conclusion.
+        'storage': {
+            'data_root': dr['path'],
+            'dedicated': dr['dedicated'],
+            'mounts':    land['mounts'],
+            'findings':  land['findings'],
+        },
 
         # The contract. Same words every project, so the fleet stays queryable.
         'contract': {
@@ -236,7 +263,7 @@ def get_admit(handler, path, params):
                 'com.ksg.role':    '<api|ui|db|worker>',
                 'com.ksg.data':    '/srv/docker/<project>/data',
             },
-            'data':      'one bind mount at ./data — the only thing needing backup',
+            'data':      data_dir + '  — one bind mount, the only thing needing backup',
             'secrets':   '.env, gitignored, generated fresh. Never copied between projects.',
             'git':       'its own repo. The server is never the source of truth.',
         },

@@ -5,6 +5,10 @@ Runs on the server, reads system state, does safe cleanup,
 diffs against baseline, sends AI-narrated report to ntfy.
 
 Cron: 0 3 * * * /usr/bin/python3 /home/admin1/hub/maintenance.py
+
+This root copy is the one that runs: the repo is cloned to ~/hub, so
+hub-maintenance.service's ExecStart=/home/admin1/hub/maintenance.py resolves
+here. The byte-identical hub/maintenance.py duplicate was deleted 2026-09.
 """
 import json, os, subprocess, time, urllib.request, urllib.error
 from datetime import datetime

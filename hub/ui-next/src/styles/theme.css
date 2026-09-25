@@ -1,0 +1,295 @@
+/* ============================================================
+   FKSINV Application Theme
+   ============================================================
+   Warm neutral palette. Dark mode default.
+   Not pitch black, not sterile white. Built for long shifts.
+
+   Import this in index.css:
+     @import "./styles/theme.css";
+
+   Usage:
+     color: var(--theme-zone-y);
+     background: var(--theme-surface-raised);
+     font-size: var(--theme-text-base);
+     gap: var(--theme-space-3);
+   ============================================================ */
+
+/* ============================================================
+   1. DARK MODE (default)
+   ============================================================ */
+
+:root,
+.dark {
+  /* --- Surface layers (warm dark, NOT pitch black) ---
+     Base:     #1a1d23  (warm charcoal — the canvas)
+     Sunken:   #161920  (recessed wells, inset panels)
+     Card:     #22262e  (default card / container)
+     Raised:   #2a2f38  (elevated: modals, popovers, dropdowns)
+     Overlay:  #323842  (highest elevation: overlays, toasts)
+  */
+  --theme-surface-base:    #1a1d23;
+  --theme-surface-sunken:  #161920;
+  --theme-surface-card:    #22262e;
+  --theme-surface-raised:  #2a2f38;
+  --theme-surface-overlay: #323842;
+
+  /* --- Text ---
+     Primary:     high contrast but not pure white
+     Secondary:   muted, used for labels and descriptions
+     Tertiary:    low priority, placeholders, disabled
+     Inverse:     for use on light/colored backgrounds
+  */
+  --theme-text-primary:    #e8e6e3;
+  --theme-text-secondary:  #9b978f;
+  --theme-text-tertiary:   #6b675f;
+  --theme-text-inverse:    #1a1d23;
+
+  /* --- Borders & dividers ---
+     Subtle enough to define space without visual noise.
+  */
+  --theme-border-default:  #2e3340;
+  --theme-border-subtle:   #262b34;
+  --theme-border-strong:   #3a4050;
+
+  /* --- Interactive (focus, hover, active) --- */
+  --theme-interactive-hover:  #2e3340;
+  --theme-interactive-active: #353c4a;
+  --theme-interactive-focus:  #4a7ccc;
+
+  /* --- Zone colors (inventory zones — these are the system truth) ---
+     Y   = amber    (prime / new OEM)
+     B   = blue     (grade B / refurb)
+     R   = red      (raw / pipeline)
+     EX  = purple   (exceptions / AFTM)
+     ZZ  = slate    (salvage / parts)
+     TR  = teal     (truck / mobile)
+     OFX = orange   (overflow)
+     OPS = cyan     (operations / transient)
+     VRT = gray     (virtual)
+  */
+  --theme-zone-y:    #f59e0b;
+  --theme-zone-b:    #3b82f6;
+  --theme-zone-r:    #ef4444;
+  --theme-zone-ex:   #a855f7;
+  --theme-zone-zz:   #94a3b8;
+  --theme-zone-tr:   #14b8a6;
+  --theme-zone-ofx:  #f97316;
+  --theme-zone-ops:  #22d3ee;
+  --theme-zone-vrt:  #9ca3af;
+
+  /* Zone backgrounds (15% opacity for dark mode badges/pills) */
+  --theme-zone-y-bg:    rgba(245, 158, 11, 0.15);
+  --theme-zone-b-bg:    rgba(59, 130, 246, 0.15);
+  --theme-zone-r-bg:    rgba(239, 68, 68, 0.15);
+  --theme-zone-ex-bg:   rgba(168, 85, 247, 0.15);
+  --theme-zone-zz-bg:   rgba(148, 163, 184, 0.15);
+  --theme-zone-tr-bg:   rgba(20, 184, 166, 0.15);
+  --theme-zone-ofx-bg:  rgba(249, 115, 22, 0.15);
+  --theme-zone-ops-bg:  rgba(34, 211, 238, 0.15);
+  --theme-zone-vrt-bg:  rgba(156, 163, 175, 0.15);
+
+  /* --- Status colors (stock / record states) --- */
+  --theme-status-stock:     #e2924a;
+  --theme-status-off:       #b55a5a;
+  --theme-status-reserved:  #6daa6d;
+  --theme-status-empty:     #6b675f;
+  --theme-status-active:    #5dac5d;
+  --theme-status-warning:   #d9a041;
+  --theme-status-error:     #d45454;
+  --theme-status-info:      #5b9bd5;
+
+  /* --- Semantic --- */
+  --theme-success:     #5dac5d;
+  --theme-warning:     #d9a041;
+  --theme-danger:      #d45454;
+  --theme-info:        #5b9bd5;
+  --theme-neutral:     #6b675f;
+}
+
+
+/* ============================================================
+   2. LIGHT MODE
+   ============================================================ */
+
+.light {
+  --theme-surface-base:    #f5f3f0;
+  --theme-surface-sunken:  #edeae6;
+  --theme-surface-card:    #ffffff;
+  --theme-surface-raised:  #ffffff;
+  --theme-surface-overlay: #ffffff;
+
+  --theme-text-primary:    #1a1d23;
+  --theme-text-secondary:  #5c5850;
+  --theme-text-tertiary:   #9b978f;
+  --theme-text-inverse:    #f5f3f0;
+
+  --theme-border-default:  #ddd9d3;
+  --theme-border-subtle:   #e8e5e0;
+  --theme-border-strong:   #c8c3ba;
+
+  --theme-interactive-hover:  #edeae6;
+  --theme-interactive-active: #e3dfda;
+  --theme-interactive-focus:  #4a7ccc;
+
+  /* Zone colors stay the same — they're semantic, not theme-dependent */
+  /* Zone backgrounds get stronger for light mode */
+  --theme-zone-y-bg:    rgba(245, 158, 11, 0.12);
+  --theme-zone-b-bg:    rgba(59, 130, 246, 0.12);
+  --theme-zone-r-bg:    rgba(239, 68, 68, 0.12);
+  --theme-zone-ex-bg:   rgba(168, 85, 247, 0.12);
+  --theme-zone-zz-bg:   rgba(148, 163, 184, 0.12);
+  --theme-zone-tr-bg:   rgba(20, 184, 166, 0.12);
+  --theme-zone-ofx-bg:  rgba(249, 115, 22, 0.12);
+  --theme-zone-ops-bg:  rgba(34, 211, 238, 0.12);
+  --theme-zone-vrt-bg:  rgba(156, 163, 175, 0.12);
+
+  /* Status colors — slightly deeper for light backgrounds */
+  --theme-status-stock:     #c47a2e;
+  --theme-status-off:       #a04040;
+  --theme-status-reserved:  #4d8a4d;
+  --theme-status-empty:     #9b978f;
+  --theme-status-active:    #3d8c3d;
+  --theme-status-warning:   #b88020;
+  --theme-status-error:     #c03030;
+  --theme-status-info:      #3a7ab5;
+
+  --theme-success:     #3d8c3d;
+  --theme-warning:     #b88020;
+  --theme-danger:      #c03030;
+  --theme-info:        #3a7ab5;
+  --theme-neutral:     #9b978f;
+}
+
+
+/* ============================================================
+   3. TYPOGRAPHY SCALE
+   ============================================================
+   Base: 16px. Clean sans-serif (Geist Variable from index.css).
+   Use size + spacing for hierarchy, not weight alone.
+*/
+
+:root {
+  --theme-text-xs:    0.75rem;    /* 12px — badges, captions */
+  --theme-text-sm:    0.8125rem;  /* 13px — secondary labels */
+  --theme-text-base:  1rem;       /* 16px — body text */
+  --theme-text-md:    1.0625rem;  /* 17px — emphasized body */
+  --theme-text-lg:    1.25rem;    /* 20px — section titles */
+  --theme-text-xl:    1.5rem;     /* 24px — page titles */
+  --theme-text-2xl:   1.875rem;   /* 30px — dashboard headers */
+  --theme-text-3xl:   2.25rem;    /* 36px — hero / large display */
+
+  --theme-leading-tight:   1.25;
+  --theme-leading-normal:  1.5;
+  --theme-leading-relaxed: 1.625;
+
+  --theme-tracking-tight:  -0.01em;
+  --theme-tracking-normal: 0;
+  --theme-tracking-wide:   0.025em;
+
+  --theme-weight-normal:   400;
+  --theme-weight-medium:   500;
+  --theme-weight-semi:     600;
+  --theme-weight-bold:     700;
+}
+
+
+/* ============================================================
+   4. SPACING SCALE
+   ============================================================
+   8px base grid. Consistent gaps and padding.
+*/
+
+:root {
+  --theme-space-0:   0;
+  --theme-space-px:  1px;
+  --theme-space-0_5: 0.125rem;  /* 2px */
+  --theme-space-1:   0.25rem;   /* 4px */
+  --theme-space-1_5: 0.375rem;  /* 6px */
+  --theme-space-2:   0.5rem;    /* 8px */
+  --theme-space-2_5: 0.625rem;  /* 10px */
+  --theme-space-3:   0.75rem;   /* 12px */
+  --theme-space-4:   1rem;      /* 16px */
+  --theme-space-5:   1.25rem;   /* 20px */
+  --theme-space-6:   1.5rem;    /* 24px */
+  --theme-space-8:   2rem;      /* 32px */
+  --theme-space-10:  2.5rem;    /* 40px */
+  --theme-space-12:  3rem;      /* 48px */
+  --theme-space-16:  4rem;      /* 64px */
+  --theme-space-20:  5rem;      /* 80px */
+}
+
+
+/* ============================================================
+   5. RADIUS SCALE
+   ============================================================ */
+
+:root {
+  --theme-radius-none: 0;
+  --theme-radius-sm:   0.25rem;   /* 4px  — badges, chips */
+  --theme-radius-md:   0.375rem;  /* 6px  — buttons, inputs */
+  --theme-radius-lg:   0.5rem;    /* 8px  — cards */
+  --theme-radius-xl:   0.75rem;   /* 12px — modals, panels */
+  --theme-radius-full: 9999px;    /* pills */
+}
+
+
+/* ============================================================
+   6. SHADOWS (dark mode: subtle, light mode: soft)
+   ============================================================ */
+
+:root,
+.dark {
+  --theme-shadow-sm:  0 1px 2px rgba(0, 0, 0, 0.3);
+  --theme-shadow-md:  0 2px 6px rgba(0, 0, 0, 0.35);
+  --theme-shadow-lg:  0 4px 12px rgba(0, 0, 0, 0.4);
+}
+
+.light {
+  --theme-shadow-sm:  0 1px 2px rgba(0, 0, 0, 0.06);
+  --theme-shadow-md:  0 2px 6px rgba(0, 0, 0, 0.08);
+  --theme-shadow-lg:  0 4px 12px rgba(0, 0, 0, 0.1);
+}
+
+
+/* ============================================================
+   7. TRANSITION DEFAULTS
+   ============================================================ */
+
+:root {
+  --theme-transition-fast:   100ms ease;
+  --theme-transition-normal: 200ms ease;
+  --theme-transition-slow:   300ms ease;
+}
+
+
+/* ============================================================
+   8. APP IDENTITY COLORS
+   ============================================================
+   Each app in the rail gets a subtle accent for its active state.
+*/
+
+:root {
+  --theme-app-operations:  #3b82f6;  /* blue */
+  --theme-app-truck:       #14b8a6;  /* teal */
+  --theme-app-management:  #a855f7;  /* purple */
+  --theme-app-portal:      #f59e0b;  /* amber */
+  --theme-app-console:     #6b7280;  /* gray */
+}
+
+
+/* ============================================================
+   9. TEMPLATE IDENTITY COLORS
+   ============================================================
+   Page templates get a subtle top-border accent so users
+   unconsciously learn: "queue pages feel different from work pages."
+*/
+
+:root {
+  --theme-template-board:   #3b82f6;  /* blue — dashboards */
+  --theme-template-queue:   #14b8a6;  /* teal — list/search views */
+  --theme-template-work:    #f59e0b;  /* amber — active work surfaces */
+  --theme-template-config:  #a855f7;  /* purple — settings/config */
+  --theme-template-record:  #6b7280;  /* gray — read-only records */
+  --theme-template-mirror:  #f97316;  /* orange — client portal mirrors */
+  --theme-template-custom:  #ef4444;  /* red — custom / special pages */
+}

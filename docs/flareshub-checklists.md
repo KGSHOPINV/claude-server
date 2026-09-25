@@ -140,6 +140,60 @@ app endpoint and Access would silently kill push.
 
 ---
 
+## B2. Storage — what a node must settle before it is finished
+
+This checklist exists because `MASTER.md` lists *"7. Backup — set up before
+adding data"* and `bootstrap.sh` never implemented it. The step was recorded,
+looked correct for months, and was never done — because prose has no failure
+mode.
+
+So this one is executable. `tools/install-preflight.py` asserts every row
+against the machine:
+
+```
+python3 tools/install-preflight.py            report
+python3 tools/install-preflight.py --strict   exit 1 if anything is missing
+```
+
+**ksgcohub, 2026-09-23 — 4 of 8 complete:**
+
+| # | Step | Status |
+|---|------|--------|
+| 1 | Hub enabled as a systemd **user** service | ✅ |
+| 2 | Identity issued from `/etc/machine-id` | ✅ `fvn_685a59`, issuer `self` |
+| 3 | Data root designated — largest non-OS mount ≥50GB | ✅ `/srv/data` (457.4GB) |
+| 4 | Backup target on a **different physical device** than the data | ✅ `/` has 68.1GB free on `/dev/mapper/ubuntu--vg-ubuntu--lv` |
+| 5 | **Backups actually running** | ❌ no tool, no timer, no cron — nothing is backed up |
+| 6 | **Cache reclamation scheduled** | ❌ nothing reclaims build cache — this is how 40GB accumulated |
+| 7 | Storage sound — no `high`/`warn` findings | ⚠️ `/srv/data` 99% empty while `/` carries the load |
+| 8 | Enrolled — reachable by name | ❌ blocked on a scoped Cloudflare token |
+
+**The two that matter:** 5 and 6. Neither needs anything from anyone, neither
+stops a container, and 5 is the only row on this page where the failure is
+unrecoverable.
+
+### Why a backup target must be a different device
+
+`findmnt` reports the source device, so this is checked rather than assumed. A
+copy on the same disk survives a bad `rm` and nothing else. On a one-disk
+machine the preflight says so plainly instead of pretending.
+
+### What bootstrap.sh still owes
+
+| Step | Exists |
+|------|--------|
+| 1 OS detect · 2 packages · 3 Docker · 4 hub · 5 systemd | ✅ all five |
+| 6 designate data root | ❌ |
+| 7 designate backup target, install backup job | ❌ |
+| 8 install reclamation timer | ❌ |
+| 9 `--check` mode — assert, change nothing | ❌ |
+
+Step 9 is the one that stops this recurring. A converging installer means
+running it on an existing node brings it to standard instead of needing a
+rebuild — and "did step 7 happen" becomes a command rather than a memory.
+
+---
+
 ## E. What the system will be able to state
 
 Once A–D land, these become answerable in one call rather than by archaeology:
@@ -149,6 +203,9 @@ Once A–D land, these become answerable in one call rather than by archaeology:
 - Which projects are publicly exposed and behind which policy
 - Who logged in, when, through which door
 - What has drifted from what was declared
+- **Which nodes are quietly filling their disks** — `attention.storage` rides in
+  `/api/node`, the same payload every node heartbeats to central, so one address
+  answers it for the whole fleet without visiting a single machine
 
 All five are unanswerable today. The last one is the point of the whole
 exercise: **drift you can see.**

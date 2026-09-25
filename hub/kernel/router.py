@@ -17,6 +17,28 @@ Gate levels: 0=public 1=user 2=admin 3=totp
 #   "module":  "status",          # which handler file owns this
 # }
 
+# ── Namespace reservations ───────────────────────────────────────────────────
+# Telescope module numbers and URL prefixes are a shared namespace across the
+# federation. Reserving them costs nothing now; discovering a collision after
+# both sides have shipped costs a migration.
+#
+#   00-19   ServerHub.    In use: 00 kernel, 01 identity, 02 status,
+#                         03 federation, 04 config, 05 users, 06 events,
+#                         07 ai, 08 tunnel, 09 proxy, 10 ops, 11 node,
+#                         12 mesh.  Free: 13-19.
+#   20-29   FlareVault.   Endpoints the hub implements on FV's behalf.
+#                         None yet — reserved so FV can claim without asking.
+#   30-39   Metaforge.    Same arrangement.
+#   40-49   local.        Per-deployment, never upstreamed.
+#
+# URL prefixes:
+#   /api/mesh/*      shared contract, changes need both sides to agree
+#   /api/node        this node describing itself — ServerHub owns it
+#   /api/admit       boundaries for a project landing here — ServerHub owns it
+#   /api/vault/*     RESERVED AND DELIBERATELY UNIMPLEMENTED. Doctrine: the hub
+#                    stores pointers, never credentials. If this prefix ever
+#                    appears here, something has gone wrong.
+#
 ROUTES = [
     # ── Identity ─────────────────────────────────────────────────────────────
     {"code": "20301701", "method": "GET",  "path": "/",                           "prefix": False, "gate": 0, "handler": "serve_app",            "module": "identity"},
@@ -59,10 +81,67 @@ ROUTES = [
 
     {"code": "20311702", "method": "GET",  "path": "/api/admit",                  "prefix": False, "gate": 1, "handler": "get_admit",            "module": "node"},
 
+    # ── registry (module 13) — what a project talks to ───────────────────────
+    # Gate 1: a project must be authenticated to file a claim, but reading the
+    # registry is gate 1 too rather than 0 -- who runs what on a machine is not
+    # public information.
+    {"code": "20313701", "method": "GET",  "path": "/api/registry",               "prefix": False, "gate": 1, "handler": "get_registry",         "module": "registry"},
+    {"code": "20313702", "method": "GET",  "path": "/api/registry/",              "prefix": True,  "gate": 1, "handler": "get_registry_project", "module": "registry"},
+    {"code": "20313703", "method": "POST", "path": "/api/registry/",              "prefix": True,  "gate": 1, "handler": "post_registry_project","module": "registry"},
+    {"code": "20313704", "method": "POST", "path": "/api/ack/",                   "prefix": True,  "gate": 1, "handler": "post_ack",             "module": "registry"},
+
     # ── Mesh (module 12) — hub-and-spoke: nodes report UP, never laterally ──
     {"code": "20312701", "method": "POST", "path": "/api/heartbeat",              "prefix": False, "gate": 0, "handler": "post_heartbeat",       "module": "mesh"},
     {"code": "20312702", "method": "POST", "path": "/api/mesh/register",          "prefix": False, "gate": 0, "handler": "post_mesh_register",   "module": "mesh"},
     {"code": "20312703", "method": "GET",  "path": "/api/mesh/fleet",             "prefix": False, "gate": 1, "handler": "get_mesh_fleet",       "module": "mesh"},
+
+    # ── The lobby (module 16) — dashboard.<zone>, central mode ───────────────
+    # Gate 1 here is a DECLARATION, not the control. A gate level cannot say
+    # "this role may see these three servers and must not learn the others
+    # exist", so every one of these does its own role check inside. That also
+    # survives HUB_ENFORCE_GATES being unset, which it currently is.
+    # The connector: a login becomes a role the lobby can read. Layers 1-2
+    # only -- 3 and 4 are space FlareVault is holding.
+    {"code": "20319701", "method": "GET",  "path": "/api/door",                  "prefix": False, "gate": 1, "handler": "get_door",           "module": "door"},
+    {"code": "20316701", "method": "GET",  "path": "/api/lobby",                 "prefix": False, "gate": 1, "handler": "get_lobby",          "module": "lobby"},
+    {"code": "20316702", "method": "GET",  "path": "/api/lobby/server/",         "prefix": True,  "gate": 1, "handler": "get_lobby_server",   "module": "lobby"},
+    {"code": "20316703", "method": "POST", "path": "/api/lobby/server/",         "prefix": True,  "gate": 2, "handler": "post_lobby_action",  "module": "lobby"},
+    {"code": "20316704", "method": "POST", "path": "/api/lobby/vault",           "prefix": False, "gate": 3, "handler": "post_lobby_vault",   "module": "lobby"},
+
+    # ── Route into a server (module 18) — dashboard.<zone>/s/<id>/ ──────────
+    # The lobby LISTS; this is where you actually go. GET only: writes do not
+    # cross nodes, and the POST entry exists so a write is refused BY NAME
+    # rather than 404ing as though the route were gone.
+    #
+    # serve_lobby has no entry on purpose. A path would make lobby.html
+    # reachable on every hostname this origin answers to, including the
+    # service-token-only node hostnames. identity.serve_app dispatches to it
+    # on Host, the same way the splash does.
+    # FlareSHub, the page you land on after the login space. A real route, not
+    # a fall-through from serve_app: that one only ever answers /, /mobile and
+    # /desktop, so /fleet never reached the host dispatch and 404'd.
+    #
+    # Gate 0 because Cloudflare Access is scoped to this PATH and has already
+    # decided there is a person here. The page itself then fetches /api/door
+    # and /api/lobby, both of which do their own checks -- a hostile request
+    # that reached this path gets an empty shell and nothing else.
+    {"code": "20318701", "method": "GET",  "path": "/fleet",                     "prefix": False, "gate": 0, "handler": "serve_lobby",        "module": "lobbyhost"},
+    {"code": "20318704", "method": "GET",  "path": "/flareshub",                 "prefix": False, "gate": 0, "handler": "serve_lobby",        "module": "lobbyhost"},
+    {"code": "20318702", "method": "GET",  "path": "/s/",                        "prefix": True,  "gate": 1, "handler": "route_into_server",  "module": "lobbyhost"},
+    {"code": "20318703", "method": "POST", "path": "/s/",                        "prefix": True,  "gate": 1, "handler": "refuse_write",       "module": "lobbyhost"},
+
+    # ── The outbox (module 17) — outbound, staged and collected ──────────────
+    # Build-order item 1. The hole the eleven-step flow sat over: the intake
+    # message left the machine only because a human pasted it.
+    #
+    # -ack and -address are SIBLINGS, not children of /api/outbox/. A second
+    # entry on one prefix can never win the stable sort, and the gates differ:
+    # staging speaks FOR the server, a project acting on itself does not.
+    {"code": "20317701", "method": "GET",  "path": "/api/outbox",               "prefix": False, "gate": 2, "handler": "get_outbox_board",    "module": "outbox"},
+    {"code": "20317703", "method": "POST", "path": "/api/outbox/",              "prefix": True,  "gate": 2, "handler": "post_outbox_stage",   "module": "outbox"},
+    {"code": "20317702", "method": "GET",  "path": "/api/outbox/",              "prefix": True,  "gate": 1, "handler": "get_outbox_project",  "module": "outbox"},
+    {"code": "20317704", "method": "POST", "path": "/api/outbox-ack/",          "prefix": True,  "gate": 1, "handler": "post_outbox_ack",     "module": "outbox"},
+    {"code": "20317705", "method": "POST", "path": "/api/outbox-address/",      "prefix": True,  "gate": 1, "handler": "post_outbox_address", "module": "outbox"},
 
     # ── Federation ───────────────────────────────────────────────────────────
     {"code": "20303701", "method": "GET",  "path": "/api/federation",             "prefix": False, "gate": 1, "handler": "get_federation",         "module": "federation"},
@@ -96,6 +175,49 @@ ROUTES = [
     {"code": "20306703", "method": "POST", "path": "/api/incidents",              "prefix": False, "gate": 1, "handler": "post_incidents",         "module": "events"},
     {"code": "20306704", "method": "POST", "path": "/api/activity",               "prefix": False, "gate": 1, "handler": "post_activity",          "module": "events"},
 
+    # The notification path. HOLDING is activity_log above; these two are LIVE.
+    # Gate 1: a stream of what the server is doing is not public, and this is
+    # the same session the page already holds -- no second credential.
+    {"code": "20306705", "method": "GET",  "path": "/api/events/stream",          "prefix": False, "gate": 1, "handler": "get_events_stream",    "module": "events_stream"},
+    {"code": "20306706", "method": "GET",  "path": "/api/events/since",           "prefix": False, "gate": 1, "handler": "get_events_since",     "module": "events_stream"},
+    # Gate 0: it names files and says whether they are there. It returns no
+    # event content, so it is safe to ask before you can log in -- which is
+    # exactly when you need it, because "notifications are broken" and "I
+    # cannot log in" have the same first question.
+    {"code": "20306707", "method": "GET",  "path": "/api/events/self",            "prefix": False, "gate": 0, "handler": "get_events_self",      "module": "events_stream"},
+
+    # ── The exchange (module 15) ─────────────────────────────────────────────
+    # The entry path already existed: /api/admit, /api/registry, /api/ack. What
+    # had no URLs was the ONGOING half -- bulletins, tickets, a project's own
+    # log, baselines. It sat in kernel/control.py callable only from a tool on
+    # the box, which meant the operator was still carrying every message by
+    # hand. That is the thing the exchange exists to stop.
+    #
+    # Gate 1 for reading and answering: a project holds a session already.
+    # Gate 2 to PUBLISH -- that speaks for the server to every project at once.
+    {"code": "20315701", "method": "GET",  "path": "/api/bulletins/",             "prefix": True,  "gate": 1, "handler": "get_bulletins",         "module": "exchange"},
+    {"code": "20315704", "method": "POST", "path": "/api/bulletins",              "prefix": False, "gate": 2, "handler": "post_bulletins",        "module": "exchange"},
+    # Longest-prefix first: /read and /readers must be tested before the bare
+    # /api/bulletin/<n>, or the bare route swallows them.
+    {"code": "20315703", "method": "POST", "path": "/api/bulletin/",              "prefix": True,  "gate": 1, "handler": "post_bulletin_read",    "module": "exchange"},
+    {"code": "20315705", "method": "GET",  "path": "/api/bulletin-readers/",      "prefix": True,  "gate": 1, "handler": "get_bulletin_readers",  "module": "exchange"},
+    {"code": "20315702", "method": "GET",  "path": "/api/bulletin/",              "prefix": True,  "gate": 1, "handler": "get_bulletin",          "module": "exchange"},
+
+    {"code": "20315706", "method": "GET",  "path": "/api/tickets",                "prefix": False, "gate": 1, "handler": "get_tickets",           "module": "exchange"},
+    {"code": "20315707", "method": "POST", "path": "/api/tickets",                "prefix": False, "gate": 1, "handler": "post_tickets",          "module": "exchange"},
+
+    {"code": "20315708", "method": "GET",  "path": "/api/project-log/",           "prefix": True,  "gate": 1, "handler": "get_project_log",       "module": "exchange"},
+    {"code": "20315709", "method": "POST", "path": "/api/project-log/",           "prefix": True,  "gate": 1, "handler": "post_project_log",      "module": "exchange"},
+
+    {"code": "20315710", "method": "GET",  "path": "/api/baselines/",             "prefix": True,  "gate": 1, "handler": "get_baselines",         "module": "exchange"},
+    {"code": "20315711", "method": "POST", "path": "/api/baselines/",             "prefix": True,  "gate": 1, "handler": "post_baselines",        "module": "exchange"},
+
+    # The bank. Gate 2 to deposit -- that is handing the server a secret.
+    # Collect is gate 1 because a project must be able to fetch its own.
+    {"code": "20315712", "method": "GET",  "path": "/api/bank",                   "prefix": False, "gate": 2, "handler": "get_bank",              "module": "exchange"},
+    {"code": "20315714", "method": "POST", "path": "/api/bank/collect",           "prefix": False, "gate": 1, "handler": "post_bank_collect",     "module": "exchange"},
+    {"code": "20315713", "method": "POST", "path": "/api/bank",                   "prefix": False, "gate": 2, "handler": "post_bank",             "module": "exchange"},
+
     # ── AI ────────────────────────────────────────────────────────────────────
     {"code": "20307701", "method": "GET",  "path": "/api/ai/config",              "prefix": False, "gate": 1, "handler": "get_ai_config",          "module": "ai"},
     {"code": "20307702", "method": "POST", "path": "/api/ai/chat",                "prefix": False, "gate": 1, "handler": "post_ai_chat",           "module": "ai"},
@@ -119,27 +241,23 @@ ROUTES = [
 ]
 
 
-def dispatch(method: str, path: str) -> dict | None:
-    """Find the matching route entry for a method + path.
-
-    Returns the route dict or None if no match.
-    Prefix routes match if path.startswith(route['path']).
-    Exact routes require path == route['path'].
-    """
-    for route in ROUTES:
-        if route["method"] != method:
-            continue
-        if route["prefix"]:
-            if path.startswith(route["path"]):
-                return route
-        else:
-            if path == route["path"]:
-                return route
-    return None
+# Removed here: an earlier `dispatch(method, path) -> dict | None` that did a
+# linear scan of ROUTES. It was rebound -- and so made unreachable -- by the
+# real `dispatch(handler, method, path, ...)` defined further down this same
+# module, and its lookup logic survives as `resolve()` below (same semantics,
+# but indexed). No caller ever reached it: the only call site in the repo is
+# server.py:_route, which uses the six-argument form.
 
 
 def routes_by_module() -> dict:
-    """Return ROUTES grouped by module name. Useful for /api/registry."""
+    """Return ROUTES grouped by module name.
+
+    KEPT DESPITE HAVING NO CALLERS. handlers/status.py:get_sitemap
+    (GET /api/sitemap) hand-maintains a second, parallel list of every route
+    with its description. That list is already drifting from ROUTES. This
+    function is the seam for generating the sitemap from the one real table --
+    deleting it would remove the only piece of the fix that already exists.
+    """
     result = {}
     for r in ROUTES:
         result.setdefault(r["module"], []).append(r)
@@ -196,8 +314,16 @@ def resolve(method, path):
     r = _EXACT.get((method, path))
     if r is not None:
         return r
+    # METHOD MATTERS HERE. This loop used to match on path alone, so a POST to
+    # a prefix declared GET dispatched into the GET handler -- which then blew
+    # up on arity, because GET handlers take (handler, path, params) and POST
+    # handlers take (handler, path, params, body).
+    #
+    # It went unnoticed because no prefix had both verbs until /api/registry/
+    # did. Every prefix route was effectively method-agnostic, including
+    # /proxy/ and /api/docker/action/.
     for r in _PREFIX:
-        if path.startswith(r['path']):
+        if r['method'] == method and path.startswith(r['path']):
             return r
     return None
 
@@ -231,8 +357,65 @@ def shadow_report():
         return list(_shadow_denials)
 
 
+# Hosts that are PUBLIC by design and must serve the splash and nothing else.
+# Kept in step with handlers/identity.py:SPLASH_HOSTS via the same env var.
+SPLASH_HOSTS = [h.strip().lower() for h in os.environ.get(
+    'HUB_SPLASH_HOSTS', 'flarevault.dev,www.flarevault.dev').split(',') if h.strip()]
+
+# The only paths a splash host may reach. Everything else is 404 — not 403,
+# which would confirm the route exists.
+SPLASH_ALLOW = ('/', '/mobile', '/desktop', '/manifest.json', '/sw.js')
+
+# Paths on the apex that are NOT the public login space. These reach the API
+# because there is a person behind them -- Cloudflare Access is scoped to
+# these paths, so a request only arrives here having already signed in.
+#
+# The guard above still applies to everything else: the apex must never expose
+# /api/config and friends, which is what it did for four minutes when a second
+# hostname was added without its own Access app.
+SPLASH_BEHIND_LOGIN = ('/fleet', '/flareshub', '/s/', '/api/lobby', '/api/door',
+                       '/ui/', '/api/auth/check', '/api/node')
+
+
+# 20200325  _splash_only — the apex must never reach the API
+def _splash_only(handler, path):
+    """Door 1 is a PUBLIC page, so it cannot sit behind Access. That means the
+    hostname serving it reaches this origin with no gate in front of it at all.
+
+    Gates here run in shadow mode unless HUB_ENFORCE_GATES is set, so 'gate 1'
+    stops nothing. Pointing the apex at this origin without this check would
+    publish /api/config, /api/status, /api/containers and the rest to the open
+    internet.
+
+    That is not hypothetical. A second hostname was added to this origin
+    earlier tonight without an Access app, and https://<that host>/api/config
+    returned the hub's configuration to anyone who asked, for about four
+    minutes.
+
+    So a splash host gets the splash and the PWA files it needs, and 404 for
+    everything else. This holds whether or not gate enforcement is ever
+    switched on, because it does not depend on gates.
+    """
+    try:
+        host = (handler.headers.get('Host', '') or '').split(':')[0].lower()
+    except Exception:
+        return False
+    if host not in SPLASH_HOSTS:
+        return False
+    p = path.split('?')[0]
+    if p in SPLASH_ALLOW:
+        return False
+    if any(p == a or p.startswith(a) for a in SPLASH_BEHIND_LOGIN):
+        return False
+    return True
+
+
 def dispatch(handler, method, path, params=None, body=None, db_conn_fn=None):
     """Route one request. Returns True if handled, False to fall through."""
+    if _splash_only(handler, path):
+        handler.send_response(404)
+        handler.end_headers()
+        return True
     route = resolve(method, path)
     if route is None:
         return False

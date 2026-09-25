@@ -13,6 +13,7 @@ from datetime import datetime
 from kernel.db   import db_conn
 from kernel.db  import db_conn as _db_conn
 from kernel.log import log_activity as _log, _ntfy_send as _ntfy
+from kernel import auth as _auth
 from kernel.auth import (
     check_auth, gate_check, gate_create,
     _totp_hotp, totp_verify, totp_new_secret, totp_verify_secret, totp_uri,
@@ -93,11 +94,26 @@ def _journal_add(type_, body, user=''):
 
 # 20305701  GET /api/auth/check — check auth status
 def get_auth_check(handler, path, params):
+    """# 20305701  GET /api/auth/check — am I signed in, and by which door?
+
+    `via` was missing and the page needed it. Arriving through Cloudflare
+    Access there is no token to store -- the identity rides on the tunnel with
+    every request -- so a page that cannot tell the two doors apart will keep
+    showing a username and password box to somebody who already signed in with
+    Google. Two logins for one door.
+
+    'cf-access' means the Access email was accepted because the request came
+    down the tunnel. 'local' means a session token from the hub's own login,
+    which is the path that must keep working when Cloudflare or Google is
+    having a bad day.
+    """
     sess = check_auth(handler)
     if sess:
-        handler.send_json({'ok': True, 'user': sess['user']})
+        handler.send_json({'ok': True, 'user': sess['user'],
+                           'via': sess.get('via', 'local'),
+                           'role': sess.get('role', '')})
     else:
-        handler.send_json({'ok': False}, 401)
+        handler.send_json({'ok': False, 'door': 'login.flarevault.dev'}, 401)
 
 
 # 20305702  GET /api/users — list users
@@ -169,12 +185,10 @@ def post_auth_login(handler, path, params, body):
     user = _user_auth(username, password)
     if user:
         token = secrets.token_hex(32)
-        with _users_lock:
-            _sessions[token] = {
-                'user': username,
-                'role': user.get('role', 'admin'),
-                'created': datetime.now().isoformat(),
-            }
+        # Write-through to SQLite so the session survives a restart. This used
+        # to be a bare dict assignment, which is why every deploy logged
+        # everyone out.
+        _auth.session_put(token, username, user.get('role', 'admin'), via=door)
         # The hub previously recorded NOTHING about logins, successful or
         # failed, on a box reachable from the internet. Both are now events.
         prior_fails = _fail_counts.pop((username, ip), 0)
@@ -212,7 +226,7 @@ def post_auth_login(handler, path, params, body):
 def post_auth_logout(handler, path, params, body):
     token = body.get('token', '')
     with _users_lock:
-        sess = _sessions.pop(token, None)
+        sess = _auth.session_pop(token)
     if sess:
         _log(_db_conn, f'logout: {sess.get("user", "?")}', 'auth', 'login',
              f'ip={_client_ip(handler)}', 'info')

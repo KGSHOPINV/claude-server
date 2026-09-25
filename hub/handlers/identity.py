@@ -15,6 +15,35 @@ PORT        = int(os.environ.get('HUB_PORT', 8765))
 _BASE_DIR   = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))  # hub/
 APP_PATH    = os.path.join(_BASE_DIR, 'app.html')
 MOBILE_PATH = os.path.join(_BASE_DIR, 'mobile.html')
+SPLASH_PATH = os.path.join(_BASE_DIR, 'splash.html')
+
+# Hostnames that get the PUBLIC splash instead of the app. The zone apex is
+# public by definition, so it must never serve the hub: a page that lists
+# servers and projects to anyone who types the domain is a map for someone
+# else.
+#
+# Placeholder until FlareVault serves its own. Set HUB_SPLASH_HOSTS to change
+# it without touching code.
+SPLASH_HOSTS = [h.strip().lower() for h in os.environ.get(
+    'HUB_SPLASH_HOSTS', 'flarevault.dev,www.flarevault.dev').split(',') if h.strip()]
+
+# Hostnames that get the LOBBY instead of the app. dashboard.<zone> is a
+# different page from app.html: one card per server, and picking one routes you
+# into that server. It is chosen on HOST for the same reason the splash is --
+# so that lobby.html is unreachable by path on a node hostname, which is
+# service-token-only and must never carry a human-shaped page.
+#
+# Set HUB_DASHBOARD_HOSTS to change it without touching code.
+DASHBOARD_HOSTS = [h.strip().lower() for h in os.environ.get(
+    'HUB_DASHBOARD_HOSTS', 'flarevault.dev,www.flarevault.dev').split(',') if h.strip()]
+
+# ONE DOMAIN, PAGES BEHIND ONE LOGIN -- not a subdomain per screen.
+#
+# This was dashboard.flarevault.dev. That name belongs to FlareVault, and a
+# hostname per screen means a Cloudflare app, a DNS record and an ingress rule
+# every time a page is added. The apex is the public login space; FlareSHub is
+# a PATH behind it.
+FLARESHUB_PATHS = ('/fleet', '/flareshub')
 UI_DIR      = os.path.join(_BASE_DIR, 'ui')
 
 # Only these extensions are ever served from ui/. No wildcard static hosting.
@@ -56,6 +85,50 @@ def _machine_id():
 
 def serve_app(handler, path, params):
     """# 20301701  GET / /mobile /desktop — serve app.html or mobile.html"""
+    # The apex is public. Decide on HOST before anything else -- a request that
+    # arrived at flarevault.dev must never fall through to the app, whatever
+    # its path or user-agent.
+    host = (handler.headers.get('Host', '') or '').split(':')[0].lower()
+    if host in SPLASH_HOSTS and path in ('/', '/mobile', '/desktop'):
+        try:
+            with open(SPLASH_PATH, 'rb') as f:
+                body = f.read()
+            handler.send_response(200)
+            handler.send_header('Content-Type', 'text/html; charset=utf-8')
+            handler.send_header('Content-Length', str(len(body)))
+            # Public page, no session, nothing personal -- but say so, so a
+            # proxy never caches it as if it were an authenticated response.
+            # no-cache, not max-age. This is a LOGIN SPACE: edge-caching it
+            # for five minutes meant Cloudflare served a stale copy of
+            # whatever it saw first -- including the 404s from before this
+            # hostname had DNS -- and no amount of fixing the origin showed
+            # through. A public page is not the same as a cacheable one.
+            handler.send_header('Cache-Control', 'no-cache')
+            handler.end_headers()
+            handler.wfile.write(body)
+        except FileNotFoundError:
+            handler.send_response(404)
+            handler.end_headers()
+        return
+
+    # Same decision, one host further in: dashboard.<zone> is the lobby, not
+    # the app. A request that arrived there must never fall through to
+    # app.html -- the app is one server's control room, and serving it here is
+    # exactly the mistake the lobby exists to undo.
+    #
+    # Lazy import, and the reason is blast radius: this module answers '/' for
+    # every hostname this origin has. A lobbyhost that is missing or broken
+    # then takes the app down everywhere rather than on the dashboard host
+    # alone. Imported here, the failure stays where the feature is.
+    # The apex: '/' is the PUBLIC login space and must stay public, so it is
+    # handled by the splash block above. FlareSHub sits behind it on a path,
+    # and Cloudflare Access is scoped to that path rather than the hostname --
+    # which is what lets one domain hold a public door and a private room.
+    if host in DASHBOARD_HOSTS and path.split('?')[0] in FLARESHUB_PATHS:
+        from handlers.lobbyhost import serve_lobby  # noqa: PLC0415
+        serve_lobby(handler, path, params)
+        return
+
     ua = handler.headers.get('User-Agent', '')
     is_mobile = any(x in ua for x in ('Mobile', 'Android', 'iPhone', 'iPad', 'iPod', 'BlackBerry', 'Windows Phone'))
     if path == '/' and is_mobile:
@@ -105,8 +178,25 @@ def serve_manifest(handler, path, params):
 
 
 def serve_sw(handler, path, params):
-    """# 20301704  GET /sw.js"""
-    sw = b"self.addEventListener('fetch', () => {});"
+    """# 20301704  GET /sw.js — served from ui/sw.js, at ROOT scope
+
+    The file lives in ui/ but is served from / because a service worker can
+    only control the paths at or below the URL it was served from. At /ui/sw.js
+    it would control ui/ and nothing else, which is useless for both the install
+    prompt and notifications.
+
+    The previous body was one line -- an empty fetch listener -- and app.html
+    never registered it. That is why "Install app" never appeared and why no
+    notification could be shown: showNotification() requires a registration.
+
+    The inline fallback keeps a hub with a missing ui/ serving something valid
+    rather than a 500, because a broken service worker can wedge a PWA.
+    """
+    try:
+        with open(os.path.join(UI_DIR, 'sw.js'), 'rb') as f:
+            sw = f.read()
+    except Exception:
+        sw = b"self.addEventListener('fetch', () => {});"
     handler.send_response(200)
     handler.send_header('Content-Type', 'application/javascript')
     handler.send_header('Content-Length', str(len(sw)))

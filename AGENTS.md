@@ -130,18 +130,23 @@ routes while app.html sends a token on 16 calls. `HUB_ENFORCE_GATES=1` arms it;
 
 ## Services running (key ones)
 
-### fks-services
-- hub :8765, flarevault-node :7777, flarevault-monitor, n8n :5678
-- postgres :5432, redis :6379, postgraphile :5000, supabase :8000
-- netdata :19999, portainer :9443, surrealdb :8001
+Not listed here. Two hand-typed port lists stood at this spot and were one of
+four service inventories in the repo that disagreed with each other. Ask the node:
 
-### ksgcohub
-- hub :8765, nginx-proxy-mgr :81, ntfy :8085, n8n :5678
-- surrealdb :8001, uptime-kuma :3001, netdata :19999
-- portainer :9443, dozzle :8090, redis :6379, homepage :3000
-- Cloudflare Tunnel: hub.ksgco.app → :8765, ntfy.ksgco.app → :8085
+```bash
+curl -s <hub>/api/receipt  | jq '.containers'   # running, with ports
+curl -s <hub>/api/services | jq                 # catalogue + live docker state
+curl -s <hub>/api/ports    | jq                 # what is actually listening
+```
 
-Full service list with compose paths: `knowledge/registry.json` under `services[]`.
+The catalogue those endpoints enrich is `SERVICES` in `hub/kernel/collect.py`.
+`hub/CONSTITUTION.md` §4: a BOM is derived, never written by hand. Port *lanes*
+for new services are the one prose part — `PORTS.md` and `MASTER.md` §2.
+
+Caveat worth keeping: **Nextcloud on ksgcohub is a snap on `8181`**, so it is
+absent from `docker ps` and from the receipt's container list; only `/api/ports`
+sees it. Cloudflare Tunnel on ksgcohub maps `hub.ksgco.app` → `:8765` and
+`ntfy.ksgco.app` → `:8085`; fks-services has no tunnel.
 
 ---
 

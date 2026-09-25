@@ -53,10 +53,25 @@ def _targets():
 
 # 20200342  _post — one attempt against one path
 def _post(url, payload, token):
+    # The cloudflare path goes through Access, which refuses anything without
+    # a service token -- the node hostnames are deliberately closed to humans.
+    # So the credential rides along when we hold one. Over tailscale or lan
+    # there is no Access in the way and these headers are simply ignored.
+    #
+    # The User-Agent is not decoration. Cloudflare's Browser Integrity Check
+    # sits in FRONT of Access and answers 403/1010 to anything that looks
+    # automated, which reads exactly like the token being rejected.
+    headers = {'Content-Type': 'application/json',
+               'X-Flare-Token': token or '',
+               'User-Agent': 'FlareSHub-Node/1.0'}
+    try:
+        from kernel import svctoken as _svc
+        headers.update(_svc.edge_headers())
+    except Exception:
+        pass          # no token: tailscale and lan still work
     req = urllib.request.Request(
         url, data=json.dumps(payload).encode(),
-        headers={'Content-Type': 'application/json',
-                 'X-Flare-Token': token or ''},
+        headers=headers,
         method='POST')
     with urllib.request.urlopen(req, timeout=TIMEOUT) as r:
         return r.status, r.read(2048).decode('utf-8', 'replace')
