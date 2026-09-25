@@ -94,11 +94,26 @@ def _journal_add(type_, body, user=''):
 
 # 20305701  GET /api/auth/check — check auth status
 def get_auth_check(handler, path, params):
+    """# 20305701  GET /api/auth/check — am I signed in, and by which door?
+
+    `via` was missing and the page needed it. Arriving through Cloudflare
+    Access there is no token to store -- the identity rides on the tunnel with
+    every request -- so a page that cannot tell the two doors apart will keep
+    showing a username and password box to somebody who already signed in with
+    Google. Two logins for one door.
+
+    'cf-access' means the Access email was accepted because the request came
+    down the tunnel. 'local' means a session token from the hub's own login,
+    which is the path that must keep working when Cloudflare or Google is
+    having a bad day.
+    """
     sess = check_auth(handler)
     if sess:
-        handler.send_json({'ok': True, 'user': sess['user']})
+        handler.send_json({'ok': True, 'user': sess['user'],
+                           'via': sess.get('via', 'local'),
+                           'role': sess.get('role', '')})
     else:
-        handler.send_json({'ok': False}, 401)
+        handler.send_json({'ok': False, 'door': 'login.flarevault.dev'}, 401)
 
 
 # 20305702  GET /api/users — list users

@@ -4067,13 +4067,36 @@ let HUB_TOKEN = sessionStorage.getItem('hub_token') || '';
 let HUB_USER  = sessionStorage.getItem('hub_user')  || '';
 
 async function checkLogin() {
-  if (!HUB_TOKEN) { showLogin(); return; }
+  // ASK THE SERVER FIRST, ALWAYS.
+  //
+  // This used to bail to the login form whenever sessionStorage held no
+  // token -- so arriving through Cloudflare Access, already signed in with
+  // Google, still showed a username and password box. Two logins for one
+  // door, which is the thing the whole entry chain exists to remove.
+  //
+  // The server already knows: kernel/auth.check_auth accepts the Access
+  // email when the request came down the tunnel (HUB_CF_TRUST_IP). The page
+  // just never asked. So ask with whatever token we have, which may be none,
+  // and let the server decide.
   try {
-    const r = await fetch(API+'/api/auth/check', {headers:{'X-Hub-Token':HUB_TOKEN}});
+    const r = await fetch(API+'/api/auth/check',
+      {headers: HUB_TOKEN ? {'X-Hub-Token':HUB_TOKEN} : {}});
     const d = await r.json();
-    if (d.ok) { hideLogin(); }
-    else { HUB_TOKEN=''; HUB_USER=''; sessionStorage.removeItem('hub_token'); showLogin(); }
-  } catch { hideLogin(); } // server offline — let them in but limit ops
+    if (d.ok) {
+      HUB_USER = d.user || HUB_USER;
+      if (d.via === 'cf-access') {
+        // No token to store -- the identity rides on every request through
+        // the tunnel. Storing a fake one would break the local door later.
+        const badge = document.getElementById('hub-user-badge');
+        if (badge) badge.textContent = '⚙ ' + HUB_USER;
+      }
+      hideLogin();
+      return;
+    }
+  } catch { hideLogin(); return; } // server offline — let them in, ops will fail loudly
+  // Genuinely nobody: clear anything stale and show the local door.
+  HUB_TOKEN=''; HUB_USER=''; sessionStorage.removeItem('hub_token');
+  showLogin();
 }
 
 function showLogin() { document.getElementById('login-gate').classList.add('show'); setTimeout(()=>document.getElementById('login-pass').focus(),100); }
