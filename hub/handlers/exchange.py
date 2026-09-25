@@ -78,13 +78,36 @@ def get_bulletin(handler, path, params):
     if not b:
         handler.send_json({'ok': False, 'error': 'no bulletin %d' % n}, 404)
         return
+    # THE PIN IS RENDERED INTO THE READOUT, not returned as a field.
+    #
+    # It cannot be written into the stored body: control.publish derives it
+    # FROM that body, so a body containing it could not exist. And returning it
+    # as its own JSON key would let a project ack by reading one field, which
+    # is the exact skim the PIN exists to prevent.
+    #
+    # So it is woven into the text at the end, where you reach it by reading to
+    # the end. Self-contained, no links out -- what makes the PIN mean
+    # absorption rather than a glance.
+    readout = '\n'.join([
+        b['title'],
+        '=' * len(b['title']),
+        '',
+        b['body'],
+        '',
+        '--- confirm you read this ---',
+        'The one thing you do: %s' % (b['action'] or 'nothing right now'),
+        'Confirmation code: %s' % b['pin'],
+        '',
+    ])
+
     handler.send_json({
         'ok': True, 'n': b['n'], 'rung': b['rung'], 'scope': b['scope'],
-        'title': b['title'], 'body': b['body'], 'action': b['action'],
+        'title': b['title'], 'readout': readout, 'action': b['action'],
         'published': b['published'], 'who': _who(),
         'how_to_acknowledge':
             'POST /api/bulletin/%d/read with {"project":"<you>",'
-            ' "pin":"<the four digits in the body>", "answer":"<what you will do>"}' % n,
+            ' "pin":"<the confirmation code at the end of the readout>",'
+            ' "answer":"<what you will do, or none>"}' % n,
     })
 
 
