@@ -127,6 +127,17 @@ ROUTES = [
     {"code": "20306703", "method": "POST", "path": "/api/incidents",              "prefix": False, "gate": 1, "handler": "post_incidents",         "module": "events"},
     {"code": "20306704", "method": "POST", "path": "/api/activity",               "prefix": False, "gate": 1, "handler": "post_activity",          "module": "events"},
 
+    # The notification path. HOLDING is activity_log above; these two are LIVE.
+    # Gate 1: a stream of what the server is doing is not public, and this is
+    # the same session the page already holds -- no second credential.
+    {"code": "20306705", "method": "GET",  "path": "/api/events/stream",          "prefix": False, "gate": 1, "handler": "get_events_stream",    "module": "events_stream"},
+    {"code": "20306706", "method": "GET",  "path": "/api/events/since",           "prefix": False, "gate": 1, "handler": "get_events_since",     "module": "events_stream"},
+    # Gate 0: it names files and says whether they are there. It returns no
+    # event content, so it is safe to ask before you can log in -- which is
+    # exactly when you need it, because "notifications are broken" and "I
+    # cannot log in" have the same first question.
+    {"code": "20306707", "method": "GET",  "path": "/api/events/self",            "prefix": False, "gate": 0, "handler": "get_events_self",      "module": "events_stream"},
+
     # ── AI ────────────────────────────────────────────────────────────────────
     {"code": "20307701", "method": "GET",  "path": "/api/ai/config",              "prefix": False, "gate": 1, "handler": "get_ai_config",          "module": "ai"},
     {"code": "20307702", "method": "POST", "path": "/api/ai/chat",                "prefix": False, "gate": 1, "handler": "post_ai_chat",           "module": "ai"},

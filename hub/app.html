@@ -1114,6 +1114,7 @@ body.desk-mode #desk-exit { display:flex; align-items:center; gap:6px; }
 </div>
 
 <script src="/ui/registry.js"></script>
+<script src="/ui/notify.js"></script>
 <script>
 'use strict';
 const API = window.location.origin;  // works from any host — localhost, Tailscale IP, LAN IP
@@ -2996,8 +2997,34 @@ function setCfgSection(section) {
       <div id="cfg-tab-alerts" class="cfg-tab-pane hidden">
         <div class="vs-section">
           <div style="font-size:11px;color:var(--muted);margin-bottom:10px;line-height:1.6">
-            Push alerts go to <strong style="color:var(--text)">ntfy</strong> on port 8085.<br>
-            Subscribe on your phone: <code style="font-family:var(--mono)">server-alerts</code> topic.
+            Notifications come from <strong style="color:var(--text)">this hub</strong> &mdash;
+            same origin, same login, no second account.<br>
+            Delivered while the hub is open or installed. A fully closed app
+            needs Web Push, which is not built yet.
+          </div>
+          <div class="vs-row"><label>Permission</label>
+            <code id="ntf-perm" style="font-family:var(--mono);font-size:11px;color:var(--muted)">&hellip;</code>
+          </div>
+          <div class="vs-row"><label>Stream</label>
+            <code id="ntf-stream" style="font-family:var(--mono);font-size:11px;color:var(--muted)">&hellip;</code>
+          </div>
+          <div class="vs-row"><label>Minimum level</label>
+            <select id="ntf-level" class="vs-inp" style="width:120px" onchange="HubNotify.setLevel(this.value)">
+              <option value="info">info (everything)</option>
+              <option value="warn">warn</option>
+              <option value="high">high</option>
+              <option value="critical">critical only</option>
+            </select>
+          </div>
+          <div style="margin-top:10px;display:flex;gap:6px">
+            <button class="btn p" onclick="enableNotifications()">Enable notifications</button>
+          </div>
+          <div style="font-size:11px;color:var(--muted);margin:14px 0 8px;line-height:1.6;
+                      border-top:1px solid var(--border);padding-top:10px">
+            <strong style="color:var(--text)">ntfy</strong> is installed on 8085 and has
+            published <strong style="color:var(--text)">nothing</strong> &mdash; the hub has
+            never held a token for it. It is kept for the one thing the above
+            cannot do: reach a phone with everything closed.
           </div>
           <div class="vs-row"><label>ntfy URL</label>
             <a href="http://${SRV}:8085" target="_blank" style="color:var(--accent);font-size:11px;font-family:var(--mono)">:8085</a>
@@ -3034,6 +3061,7 @@ function setCfgSection(section) {
         </div>
       </div>`;
     loadAISettings();
+    refreshNotifyPanel();
 
   // ── SYSTEM ────────────────────────────────────────────────────────────────
   } else if (section === 'system') {
@@ -4049,7 +4077,16 @@ async function checkLogin() {
 }
 
 function showLogin() { document.getElementById('login-gate').classList.add('show'); setTimeout(()=>document.getElementById('login-pass').focus(),100); }
-function hideLogin() { document.getElementById('login-gate').classList.remove('show'); }
+function hideLogin() {
+  document.getElementById('login-gate').classList.remove('show');
+  // Notifications start when the gate opens, not on page load: before this
+  // point there is no session, so the stream would only be refused. Idempotent
+  // -- hideLogin runs on cached-session, fresh-login and server-offline paths.
+  if (window.HubNotify && !window._hubNotifyStarted) {
+    window._hubNotifyStarted = true;
+    HubNotify.start();
+  }
+}
 
 async function doLogin() {
   const user = document.getElementById('login-user').value.trim();
@@ -4078,6 +4115,31 @@ async function doLogin() {
 document.addEventListener('keydown', e=>{
   if (e.key==='Enter' && document.getElementById('login-gate').classList.contains('show')) doLogin();
 });
+
+// 20301716  enableNotifications — must run from a click. Browsers refuse the
+// permission prompt outside a user gesture, so this cannot live in start().
+async function enableNotifications() {
+  if (!window.HubNotify) { alert('notify.js did not load'); return; }
+  const p = await HubNotify.enable();
+  if (p !== 'granted') {
+    alert(p === 'denied'
+      ? 'Blocked in the browser. Reset it in the site settings — the page cannot ask again once denied.'
+      : 'Notifications not available here (' + p + '). Over plain http:// on the LAN the browser has no secure context; use the Tailscale or Cloudflare hostname.');
+  }
+  if (!window._hubNotifyStarted) { window._hubNotifyStarted = true; HubNotify.start(); }
+  refreshNotifyPanel();
+}
+
+function refreshNotifyPanel() {
+  if (!window.HubNotify) return;
+  const s = HubNotify.status();
+  const perm = document.getElementById('ntf-perm');
+  const str  = document.getElementById('ntf-stream');
+  const lvl  = document.getElementById('ntf-level');
+  if (perm) perm.textContent = s.permission;
+  if (str)  str.textContent  = s.stream + (s.last_id ? ' · at #' + s.last_id : '');
+  if (lvl)  lvl.value = s.level;
+}
 
 function doLogout() {
   fetch(API+'/api/auth/logout',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({token:HUB_TOKEN})});
