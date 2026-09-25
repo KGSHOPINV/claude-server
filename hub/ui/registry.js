@@ -61,6 +61,14 @@ window.HUB_VIEWS = {
   blank:      {icon:'○',  title:'New Pane',   mount:null, hidden:true},
   federation: {icon:'🛰', title:'Federation', mount:null},
 
+  /* Registered 2026-09-25. The server picker — the view that makes this one
+   * build talk to any node instead of only the box that served it.
+   * No `file:true` on purpose: fleet.js lives at ui/fleet.js beside ui/data.js
+   * (it is infrastructure, not one more pane) and is loaded by its own script
+   * tag in app.html. Setting file:true here would ALSO make the loader below
+   * fetch /ui/views/fleet.js, which does not exist, and 404 on every load. */
+  fleet:      {icon:'🖧', title:'Fleet',      mount:null},
+
   /* Registered 2026-09-22. All nine rendered from the switch but had no entry
    * here, so a third of what the app can display was unreachable from the nav
    * — findable only by already knowing the view key. */

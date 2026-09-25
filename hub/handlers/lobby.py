@@ -325,8 +325,21 @@ def _target(path, prefix):
             (parts[1].strip().lower() if len(parts) > 1 else ''))
 
 
+# What the lobby will fetch from another node on an operator's behalf.
+#
+# Read-only and enumerated. These are the views a fleet operator needs to see
+# about a box they are not standing on; each is a GET the node already answers
+# and none of them change anything. Adding to this list means deciding that the
+# lobby's service token -- which opens EVERY node -- may reach one more place.
+PROXY_ALLOW = {
+    'node', 'status', 'containers', 'services', 'ports', 'storage',
+    'docker/images', 'docker/volumes', 'docker/stats', 'docker/diagnostics',
+    'integrations', 'activity', 'incidents', 'events/self', 'manifest',
+}
+
+
 # 20316713  _proxy_node — fetch a node's self-description over a service token
-def _proxy_node(node_id):
+def _proxy_node(node_id, sub='node'):
     """Returns (payload, error_dict). Exactly one of the two is None.
 
     Rule 6 of the spec: the flareshub-<id> endpoints refuse humans entirely.
@@ -381,7 +394,28 @@ def _proxy_node(node_id):
         return None, {'error': 'insecure_node_url',
                       'fix': 'node_url must be https — refusing to send a '
                              'service token over plaintext'}
-    req = urllib.request.Request(base + '/api/node', headers=dict(headers))
+    # PASSTHROUGH, ON AN ALLOWLIST.
+    #
+    # Without this the lobby proxies /api/node and nothing else, so every view
+    # but the picker is refused for a remote server -- which makes the frontend
+    # bilateral in name only. The alternative the UI would otherwise reach for
+    # is answering from the LOCAL box, silently showing you ksgcohub's
+    # containers under a card labelled fks-services. That is the worst bug a
+    # fleet UI can have, so the path is opened deliberately here rather than
+    # papered over there.
+    #
+    # An ALLOWLIST, not sanitisation. The lobby holds a credential that opens
+    # every node; forwarding an arbitrary caller-supplied path with it is a
+    # confused-deputy hole -- the browser cannot reach a node, but it could ask
+    # the lobby to. Read-only, no query strings, no traversal, and anything not
+    # named here is refused by default rather than filtered.
+    if sub not in PROXY_ALLOW:
+        return None, {'error': 'remote_path_unsupported', 'path': sub,
+                      'allowed': sorted(PROXY_ALLOW),
+                      'fix': 'the lobby only proxies read-only views a node '
+                             'publishes; writes are a layer-3 step-up and '
+                             'belong to FlareVault'}
+    req = urllib.request.Request(base + '/api/' + sub, headers=dict(headers))
     try:
         with urllib.request.urlopen(req, timeout=PROXY_TIMEOUT) as r:
             return json.loads(r.read().decode('utf-8')), None
@@ -520,11 +554,27 @@ def get_lobby_server(handler, path, params):
     can = {name: _allows(role, name)[0]
            for name in ('logs', 'console', 'containers', 'restart', 'vault')}
 
+    # ?view= names which of the node's read-only views to fetch. Default is
+    # its self-description, so the existing drill-in call is unchanged.
+    sub = (params.get('view') or 'node').strip().strip('/')
+
     if node_id == self_id:
         # Central describing itself. Reading its own node payload locally is
         # not a proxy hop, and pretending otherwise (looping through its own
         # public hostname and service token) would make the lobby depend on
         # its own tunnel being up to describe the machine it is running on.
+        #
+        # For any other view of itself the caller should just call /api/<view>
+        # directly -- it is the same origin. Saying so beats quietly proxying
+        # the local box to itself and burning a tunnel round trip.
+        if sub != 'node':
+            handler.send_json({'ok': False, 'server': _self_row(), 'can': can,
+                               'source': 'derived',
+                               'finding': {'error': 'self_is_local',
+                                           'fix': 'this is the box you are '
+                                                  'already talking to — call '
+                                                  '/api/%s directly' % sub}}, 400)
+            return
         try:
             from handlers.node import node_payload   # noqa: PLC0415
             payload, err = node_payload(), None
@@ -532,7 +582,7 @@ def get_lobby_server(handler, path, params):
             payload, err = None, {'error': 'self_read_failed', 'detail': str(e)}
         source = 'derived'
     else:
-        payload, err = _proxy_node(node_id)
+        payload, err = _proxy_node(node_id, sub)
         source = 'proxy'
 
     rec = _fleet.fleet().get(node_id) or {}

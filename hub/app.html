@@ -1114,6 +1114,11 @@ body.desk-mode #desk-exit { display:flex; align-items:center; gap:6px; }
 </div>
 
 <script src="/ui/registry.js"></script>
+<!-- data.js before fleet.js, and both after registry.js: fleet.js hangs its
+     mount on window.HUB_VIEWS.fleet, which registry.js creates. Classic
+     scripts in document order, so this is the load order. -->
+<script src="/ui/data.js"></script>
+<script src="/ui/fleet.js"></script>
 <script src="/ui/notify.js"></script>
 <script>
 'use strict';
