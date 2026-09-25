@@ -134,11 +134,19 @@ def step4():
             code = subprocess.run(
                 ['curl', '-s', '-o', '/dev/null', '-w', '%{http_code}', '-m', '12',
                  'https://' + host], capture_output=True, text=True, timeout=20).stdout.strip()
-            live = code in ('200', '302')   # 302 = Access login, which is correct
+            # 200 open · 302 Access login · 401 service-token-only, which is
+            # what a NODE hostname must answer to a browser. Treating 401 as
+            # dead marked a correctly-gated, fully-enrolled node as unenrolled.
+            #
+            # None of these prove the ORIGIN is reachable -- all three can be
+            # minted at the Cloudflare edge without touching the box. What
+            # they prove is that the hostname exists and something is guarding
+            # it, which is what this step is actually asking.
+            live = code in ('200', '302', '401')
         except Exception:
             live = False
     if calls and live:
-        return True, 'bootstrap enrols and %s answers' % host
+        return True, 'bootstrap enrols and %s answers (HTTP %s)' % (host, code)
     if live:
         return False, '%s is live, but bootstrap does not call enroll.sh — not one flow' % host
     if calls:
