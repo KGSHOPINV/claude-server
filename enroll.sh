@@ -85,12 +85,21 @@ step "2. Preflight"
 command -v curl    >/dev/null || die "curl not installed"
 command -v python3 >/dev/null || die "python3 not installed"
 [ -n "$ZONE" ] || die "--zone is required (e.g. --zone ksgdev.com)"
-# Primary: derived from the id, stable forever. Alias: readable, and a rename
-# is allowed to move it, because nothing authoritative depends on it.
+# Derived from the id, stable forever.
 HOSTNAME_FQDN="${ID_LABEL}.${ZONE}"
-ALIAS_FQDN="${NODE_NAME}.${ZONE}"
+
+# NO READABLE ALIAS. There was one -- ${NODE_NAME}.${ZONE} -- and it put the
+# hub on the public internet with no gate in front of it for about four
+# minutes. The Access application is created for ONE domain, so the second
+# hostname reached the same origin ungated, and with HUB_ENFORCE_GATES unset
+# the router's gates only record what they would have refused. A stranger
+# could read /api/config.
+#
+# One hostname gets an Access app, so there is exactly one hostname. If a
+# second is ever wanted it needs its own Access application created in the
+# same breath, and an alias is not worth that.
+ALIAS_FQDN=""
 ok "target     : https://${HOSTNAME_FQDN} -> http://localhost:${HUB_PORT}"
-ok "alias      : https://${ALIAS_FQDN} -> same hub"
 
 # the hub must actually be running, or we would publish a dead endpoint
 HUB_CODE=$(curl -s -m 8 -o /dev/null -w '%{http_code}' "http://127.0.0.1:${HUB_PORT}/api/my-ip" || echo 000)
@@ -147,11 +156,72 @@ ACCOUNT_ID=$(cf GET "/zones/${ZONE_ID}" | jq_py 'print((d.get("result") or {}).g
 ok "zone       : ${ZONE} (${ZONE_ID:0:8}…)"
 
 if [ "$DRY_RUN" = "1" ]; then
-  step "DRY RUN — stopping before any change"
-  echo "  would create tunnel   : hub-${NODE_NAME}"
-  echo "  would create DNS      : ${HOSTNAME_FQDN}"
-  echo "  would create Access   : ${HOSTNAME_FQDN}"
-  echo "  would install service : cloudflared (host systemd)"
+  step "DRY RUN — reading only, changing nothing"
+  # This block used to print a fixed list -- "would create tunnel hub-<node>",
+  # "would install service" -- because it exited BEFORE the adopt logic ran. So
+  # it announced the exact behaviour that took this box down, while the real
+  # run would have adopted instead. A dry run that misreports the plan is worse
+  # than no dry run: it is a rehearsal of a different script.
+  #
+  # It now performs the same read-only discovery the real run does.
+  DR_TUNNEL=""
+  if [ -f /etc/cloudflared/token ]; then
+    DR_TUNNEL=$(sudo -n cat /etc/cloudflared/token 2>/dev/null | python3 -c '
+import sys, json, base64
+t = sys.stdin.read().strip()
+try:
+    print(json.loads(base64.b64decode(t + "=" * (-len(t) % 4))).get("t",""))
+except Exception:
+    print("")' 2>/dev/null || echo "")
+  fi
+
+  if [ -n "$DR_TUNNEL" ]; then
+    DR_NAME=$(cf GET "/accounts/${ACCOUNT_ID}/cfd_tunnel/${DR_TUNNEL}" \
+      | jq_py 'print((d.get("result") or {}).get("name",""))')
+    echo "  tunnel      : ADOPT '${DR_NAME}' (${DR_TUNNEL:0:8}…) — this host already runs it"
+    echo "  service     : left alone (already serving this tunnel)"
+  else
+    echo "  tunnel      : create hub-${NODE_NAME} (nothing running here to adopt)"
+    echo "  service     : cloudflared install — existing token backed up first"
+  fi
+
+  DR_CUR=$(cf GET "/accounts/${ACCOUNT_ID}/cfd_tunnel/${DR_TUNNEL:-none}/configurations" 2>/dev/null)
+  echo "$DR_CUR" | HOSTNAME_FQDN="$HOSTNAME_FQDN" ALIAS_FQDN="$ALIAS_FQDN" python3 -c '
+import json, os, sys
+mine = [h for h in (os.environ["HOSTNAME_FQDN"], os.environ.get("ALIAS_FQDN","")) if h]
+try:
+    cur = ((json.load(sys.stdin).get("result") or {}).get("config") or {}).get("ingress") or []
+except Exception:
+    cur = []
+have = [r["hostname"] for r in cur if r.get("hostname")]
+add  = [h for h in mine if h not in have]
+print("  ingress     : %d existing hostname(s) kept, %d added" % (len(have), len(add)))
+for h in have: print("                  keep  %s" % h)
+for h in add:  print("                  ADD   %s" % h)
+' 2>/dev/null || echo "  ingress     : could not read current config"
+
+  for FQDN in "$HOSTNAME_FQDN" "$ALIAS_FQDN"; do
+    [ -n "$FQDN" ] || continue
+    EX=$(cf GET "/zones/${ZONE_ID}/dns_records?name=${FQDN}" \
+      | jq_py 'r=d.get("result") or [];print(r[0]["content"] if r else "")')
+    if [ -n "$EX" ]; then
+      echo "  dns         : ${FQDN} exists -> ${EX:0:20}… (would be repointed)"
+    else
+      echo "  dns         : ${FQDN} would be created"
+    fi
+  done
+
+  EXAPP=$(cf GET "/accounts/${ACCOUNT_ID}/access/apps" \
+    | jq_py "r=d.get('result') or [];print(next((a['id'] for a in r if a.get('domain')=='${HOSTNAME_FQDN}'),''))")
+  if [ -n "$EXAPP" ]; then
+    NPOL=$(cf GET "/accounts/${ACCOUNT_ID}/access/apps/${EXAPP}/policies" | jq_py 'print(len(d.get("result") or []))')
+    echo "  access      : app exists (${EXAPP:0:8}…) with ${NPOL} policy(ies)"
+    [ "${NPOL:-0}" = "0" ] && echo "                  would ADD allow policy for ${ALLOW_EMAIL:-<none given>}"
+  else
+    echo "  access      : would create app + allow policy for ${ALLOW_EMAIL:-<none given>}"
+  fi
+  echo
+  echo "  nothing above was changed."
   exit 0
 fi
 
