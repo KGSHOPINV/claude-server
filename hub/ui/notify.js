@@ -90,24 +90,36 @@
 
   // 20301714  catchUp — what happened while nothing was connected
   async function catchUp() {
+    const t = token();
+    const missed = [];
+    // The server answers 50 rows at a time and says whether more remain. Pages
+    // rather than one call, because /since filters AFTER the SQL limit: a quiet
+    // filter can return an empty page with thousands of rows still behind it,
+    // and a single call would mistake that for "nothing happened".
+    // Capped, because catching up is not worth a hundred round trips -- past
+    // the cap we jump to the head and say so.
+    let pages = 0;
     try {
-      const t = token();
-      const r = await fetch('/api/events/since?id=' + lastId() + '&level=' + level()
-                            + (t ? '&token=' + encodeURIComponent(t) : ''),
-                            { headers: t ? { 'X-Hub-Token': t } : {} });
-      const d = await r.json();
-      if (d && d.events && d.events.length) {
-        setLast(d.last_id);
-        // One summary, not thirty. A queue that dumps a week of backlog as
-        // individual notifications is a queue you turn off.
-        if (d.events.length > 3) {
-          show({ source: 'hub', action: d.events.length + ' events while you were away',
-                 detail: d.events[d.events.length - 1].action, category: 'catchup' });
-        } else { d.events.forEach(show); }
-      } else if (d && typeof d.head === 'number' && !lastId()) {
-        setLast(d.head);
+      while (pages < 20) {
+        pages++;
+        const r = await fetch('/api/events/since?id=' + lastId() + '&level=' + level()
+                              + (t ? '&token=' + encodeURIComponent(t) : ''),
+                              { headers: t ? { 'X-Hub-Token': t } : {} });
+        const d = await r.json();
+        if (!d) break;
+        if (d.events && d.events.length) missed.push(...d.events);
+        if (typeof d.last_id === 'number') setLast(d.last_id);
+        if (!d.more) break;
       }
-    } catch (_) {}
+    } catch (_) { return; }
+
+    if (!missed.length) return;
+    // One summary, not thirty. A queue that dumps a week of backlog as
+    // individual notifications is a queue you turn off.
+    if (missed.length > 3) {
+      show({ source: 'hub', action: missed.length + ' events while you were away',
+             detail: missed[missed.length - 1].action, category: 'catchup' });
+    } else { missed.forEach(show); }
   }
 
   // 20301715  enable — called from a click. Browsers refuse the permission

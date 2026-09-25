@@ -10,6 +10,10 @@ document is wrong and the unit has stopped being liftable.
 | `ui/notify.js` | 20301711 | registers the worker, holds the connection, catches up | endpoints exist and nothing calls them |
 | `app.html` → `enableNotifications()` | 20301716 | the Enable button | permission can never be asked for |
 
+Endpoints: `GET /api/events/stream` (SSE), `GET /api/events/since` (catch-up),
+`GET /api/events/self` (the self-check). Publishing reuses the hub's existing
+`POST /api/activity` — this unit adds no write path of its own.
+
 Ask the unit itself rather than trusting this table:
 
 ```bash
@@ -36,6 +40,41 @@ The holding layer is why the live layer can be this small. The client sends the
 last id it saw; the server replays from there. A dropped connection is a
 non-event, not a lost notification — so there is no queue, no ack, no retry
 table, and nothing to get out of sync.
+
+## Publishing and subscribing — the ntfy shapes, without ntfy
+
+Publish from anything that can curl. This is the `curl -d "msg" ntfy.sh/topic`
+equivalent, and it already existed:
+
+```bash
+curl -s -X POST http://localhost:8765/api/activity   -H 'Content-Type: application/json'   -d '{"action":"backup finished","source":"backup","category":"backup","level":"warn"}'
+```
+
+Subscribe to a slice rather than the firehose — ntfy's topics, as query
+parameters:
+
+| Parameter | Meaning |
+|---|---|
+| `level=` | minimum severity: `info` `warn` `high` `critical` (default `warn`) |
+| `cat=` | categories, comma separated |
+| `src=` | sources, same syntax |
+| `-name` | a leading minus excludes instead of includes |
+
+```
+/api/events/stream?cat=backup,deploy      only those two
+/api/events/stream?src=-docker            everything except docker
+```
+
+Filtering happens on the server, not in the client: a phone on a bad connection
+should not be sent a thousand rows so the browser can drop 990.
+
+**The cursor follows what was examined, not what was delivered.** SQL applies
+its row limit before the filter runs, so a page of 50 can match nothing while
+thousands of rows sit behind it. A cursor that only advanced past *delivered*
+rows would re-read the same window forever and deliver nothing, permanently,
+with no error anywhere — a silent stall caused by nothing worse than a quiet
+filter. `/since` therefore returns `more`, and the client pages until it is
+false.
 
 ## Why not ntfy
 

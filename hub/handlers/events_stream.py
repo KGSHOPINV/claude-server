@@ -87,7 +87,39 @@ LEVELS = {'info': 0, 'warn': 1, 'high': 2, 'error': 2, 'critical': 3}
 DEFAULT_MIN = 'warn'
 
 
-def _rows_after(last_id, min_level):
+# ntfy's one genuinely good idea was TOPICS: subscribe to the slice you care
+# about, not the firehose. The rows already carry source and category, so the
+# same thing costs a query parameter rather than a broker.
+#
+#   ?cat=backup,deploy     only those categories
+#   ?src=docker            only that source
+#   ?cat=-docker           everything EXCEPT docker  (leading minus = exclude)
+#
+# Filtering here rather than in the client on purpose: a phone on a bad
+# connection should not be sent a thousand rows so the browser can drop 990.
+def _match(field, spec):
+    if not spec:
+        return True
+    want = [s.strip().lower() for s in spec.split(',') if s.strip()]
+    excl = [w[1:] for w in want if w.startswith('-')]
+    incl = [w for w in want if not w.startswith('-')]
+    f = (field or '').lower()
+    if f in excl:
+        return False
+    return (f in incl) if incl else True
+
+
+def _rows_after(last_id, min_level, cat='', src=''):
+    """Returns (matching rows, highest id EXAMINED).
+
+    The two are not the same and the difference is load-bearing. SQL applies
+    LIMIT before the filter runs, so a window of 50 rows can yield nothing --
+    and a caller that advances its cursor only past DELIVERED rows would then
+    re-read the same 50 forever and deliver nothing, permanently, with no error
+    anywhere. A silent stall triggered by nothing more than a quiet filter.
+
+    So the cursor follows what was LOOKED AT, not what was sent.
+    """
     floor = LEVELS.get(min_level, 1)
     try:
         conn = db_conn()
@@ -97,15 +129,19 @@ def _rows_after(last_id, min_level):
             (last_id,)).fetchall()
         conn.close()
     except Exception:
-        return []
+        return [], last_id
     out = []
+    seen_to = last_id
     for r in rows:
+        seen_to = r['id']
         if LEVELS.get(r['level'], 0) < floor:
+            continue
+        if not _match(r['category'], cat) or not _match(r['source'], src):
             continue
         out.append({'id': r['id'], 'ts': r['ts'], 'source': r['source'],
                     'category': r['category'], 'action': r['action'],
                     'detail': r['detail'], 'level': r['level']})
-    return out
+    return out, seen_to
 
 
 def _last_id():
@@ -125,6 +161,8 @@ def get_events_stream(handler, path, params):
     Params:
       since=<id>     resume from an id the client already has
       level=<name>   minimum level, default warn
+      cat=<list>     categories, comma separated; -name excludes
+      src=<list>     sources, same syntax
 
     The client sends the last id it saw, so a reconnect loses nothing: the rows
     are in activity_log whether anyone was listening or not. That is what makes
@@ -138,6 +176,8 @@ def get_events_stream(handler, path, params):
         # A client with no history should not be buried in backlog on connect.
         last = _last_id()
     min_level = (params.get('level') or DEFAULT_MIN).lower()
+    cat = params.get('cat') or ''
+    src = params.get('src') or ''
 
     try:
         handler.send_response(200)
@@ -160,16 +200,19 @@ def get_events_stream(handler, path, params):
         except Exception:
             return False          # client went away; that is normal, not an error
 
-    if not send('open', {'since': last, 'level': min_level, 'tick': TICK}):
+    if not send('open', {'since': last, 'level': min_level, 'cat': cat,
+                         'src': src, 'tick': TICK}):
         return
 
     started = time.time()
     while time.time() - started < MAX_SECONDS:
-        rows = _rows_after(last, min_level)
+        rows, seen_to = _rows_after(last, min_level, cat, src)
         for r in rows:
-            last = r['id']
             if not send('activity', r):
                 return
+        # Past everything examined, including what the filter dropped. See
+        # _rows_after: advancing only past delivered rows stalls the stream.
+        last = max(last, seen_to)
         if not rows:
             # A comment line keeps the connection alive through a proxy that
             # would otherwise drop it as idle. It is not an event and no client
@@ -197,11 +240,18 @@ def get_events_since(handler, path, params):
     except Exception:
         last = 0
     min_level = (params.get('level') or DEFAULT_MIN).lower()
-    rows = _rows_after(last, min_level)
+    cat = params.get('cat') or ''
+    src = params.get('src') or ''
+    rows, seen_to = _rows_after(last, min_level, cat, src)
+    head = _last_id()
+    # last_id is where to RESUME FROM, which is past the filtered-out rows too.
+    # Returning the last delivered id instead would make a client with a quiet
+    # filter re-request the same window every time it woke up.
     handler.send_json({'events': rows,
-                       'last_id': rows[-1]['id'] if rows else last,
-                       'level': min_level,
-                       'head': _last_id()})
+                       'last_id': max(last, seen_to),
+                       'level': min_level, 'cat': cat, 'src': src,
+                       'head': head,
+                       'more': seen_to < head})
 
 
 # 20314703  GET /api/events/self — the part that checks itself
