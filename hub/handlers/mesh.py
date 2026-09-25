@@ -365,6 +365,14 @@ def get_mesh_registry(handler, path, params):
         'ref':       ref,
         'generated': datetime.now().isoformat(timespec='seconds'),
         'summary': {
+            # EXCLUDES CENTRAL. A central node does not heartbeat to itself, so
+            # it can never appear in this list. GET /api/lobby counts the same
+            # fleet PLUS central, so the two legitimately differ by one and
+            # that difference is not drift. Said here because two endpoints
+            # answering 'how many servers' with different numbers is exactly
+            # the shape of defect this project keeps deleting, and someone
+            # will otherwise spend an afternoon proving it is fine.
+            'counts':       'nodes reporting to central; central itself is not counted',
             'nodes':        len(nodes),
             'reporting':    len(reporting),
             # Summed only over nodes that actually reported. Counting a silent
