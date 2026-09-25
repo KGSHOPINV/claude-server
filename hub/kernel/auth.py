@@ -132,6 +132,30 @@ CF_HEADER   = 'Cf-Access-Authenticated-User-Email'
 CF_EMAILS   = [e.strip().lower() for e in os.environ.get('HUB_CF_EMAILS', '').split(',') if e.strip()]
 CF_ROLE     = os.environ.get('HUB_CF_ROLE', 'admin')
 
+# The SERVICE door. Cloudflare Access forwards Cf-Access-Client-Id to the
+# origin when a SERVICE TOKEN authenticated the request -- which is how the
+# lobby reaches a node, because node hostnames refuse humans outright.
+#
+# Without this a drill-in delivers the node's real UI and then shows its login
+# box, because app.html calls /api/auth/check and the node has no human
+# session to check: the lobby came with a machine credential, not a person.
+# Two logins for one door, which is the thing the entry chain exists to
+# remove.
+#
+# Trusted on the SAME terms as the email: only from the tunnel's own address.
+# Anything on the tailnet or the LAN can invent this header, so the path is
+# what makes it safe, never the header.
+#
+# The session it grants is deliberately the SAME level as the Google door --
+# layer 1 and 2. A service token must not be a way to reach further than the
+# human who is holding it, and gate 2/3 still demand their own proof.
+CF_CLIENT_HEADER = 'Cf-Access-Client-Id'
+# Which client ids may act as the lobby. Empty means any id Access accepted,
+# which is already narrow: Access only forwards the header after validating
+# the token against the app's own policy.
+CF_CLIENTS  = [c.strip().lower() for c in
+               os.environ.get('HUB_CF_CLIENTS', '').split(',') if c.strip()]
+
 
 # ── Internal helpers ───────────────────────────────────────────────────────────
 
@@ -171,6 +195,34 @@ def access_identity(handler):
     return email
 
 
+# 20200313  service_identity — the lobby, arriving with a service token
+def service_identity(handler):
+    """Return a name for the calling SERVICE, or None.
+
+    Same rule as access_identity: HUB_CF_TRUST_IP must be set AND the request
+    must have arrived from that address. cloudflared only forwards what Access
+    already approved, so the network path is the proof.
+
+    Returns a pseudo-user, not a person. Whoever reads the session should be
+    able to tell a machine from a human, so the name says which.
+    """
+    if not CF_TRUST_IP:
+        return None
+    try:
+        src = handler.client_address[0]
+    except Exception:
+        return None
+    if src != CF_TRUST_IP:
+        return None
+    cid = (handler.headers.get(CF_CLIENT_HEADER, '') or '').strip().lower()
+    if not cid:
+        return None
+    if CF_CLIENTS and cid not in CF_CLIENTS:
+        return None
+    # Never the whole id in a session record that gets logged and listed.
+    return 'lobby:' + cid.split('.')[0][:12]
+
+
 # 20200304  check_auth — validate session token from header or query param
 def check_auth(handler):
     token = handler.headers.get('X-Hub-Token','')
@@ -197,6 +249,12 @@ def check_auth(handler):
     email = access_identity(handler)
     if email:
         return {'user': email, 'role': CF_ROLE, 'via': 'cf-access'}
+    # Third door: the lobby, holding a service token. Checked AFTER the human
+    # doors so a real person is always identified as themselves rather than as
+    # the machine that carried their request.
+    svc = service_identity(handler)
+    if svc:
+        return {'user': svc, 'role': CF_ROLE, 'via': 'cf-service'}
     return None
 
 # ── TOTP ──────────────────────────────────────────────────────────────────────

@@ -278,6 +278,42 @@ def _self_row():
     status 'self' rather than 'healthy': this row was read now, not remembered,
     and the two must not be presentable as the same kind of fact.
     """
+    # DERIVE THE SAME FACTS A NODE REPORTS. These used to be None, 0 and '',
+    # so central's card showed a name and nothing else while every remote card
+    # showed containers, projects and attention. That reads as "the box you are
+    # standing on is not really a server" -- and it is the same machine,
+    # running the same code, that can answer all of this about itself without
+    # a network hop.
+    #
+    # node_payload() is the identical function a node runs before beating, so
+    # the numbers on this card mean exactly what the numbers on the others do.
+    # Deriving them any other way would make central's card a second
+    # definition of "how many containers", which is how two screens start
+    # disagreeing.
+    projects = containers = None
+    attention = 0
+    os_name = uptime = ''
+    try:
+        from handlers.node import node_payload   # noqa: PLC0415
+        p = node_payload() or {}
+        projs = p.get('projects') or []
+        projects = len(projs)
+        containers = sum(len(x.get('containers') or []) for x in projs)
+        os_name = p.get('os', '') or ''
+        uptime = p.get('uptime', '') or ''
+        att = p.get('attention') or {}
+        # Same shape as a remote row's count: how many things want a human,
+        # not what they are. Names belong behind the drill-in.
+        attention = (len(att.get('unassigned_containers') or [])
+                     + len(att.get('projects_without_ksg_label') or [])
+                     + (1 if att.get('not_enrolled') else 0)
+                     + len(att.get('storage') or []))
+    except Exception:
+        # Report, never repair. A card with blank counts is honest; a card with
+        # invented ones is not, and this is central describing itself -- if it
+        # cannot, that is worth seeing rather than papering over.
+        pass
+
     return {
         'server_id':    _id.server_id(),
         'name':         _id.node_name(),
@@ -285,11 +321,11 @@ def _self_row():
         'missed_beats': 0,
         'last_seen':    _now(),
         'reachability': [],
-        'projects':     None,
-        'containers':   None,
-        'attention':    0,
-        'os':           '',
-        'uptime':       '',
+        'projects':     projects,
+        'containers':   containers,
+        'attention':    attention,
+        'os':           os_name,
+        'uptime':       uptime,
         'self':         True,
         'source':       'derived',
     }
@@ -335,6 +371,18 @@ PROXY_ALLOW = {
     'node', 'status', 'containers', 'services', 'ports', 'storage',
     'docker/images', 'docker/volumes', 'docker/stats', 'docker/diagnostics',
     'integrations', 'activity', 'incidents', 'events/self', 'manifest',
+    # auth/check is here so a drill-in does not show the node's LOGIN BOX.
+    # app.html asks it before rendering; without it the operator crosses one
+    # door, lands on the real node's real UI, and is asked to sign in again --
+    # the exact second login the entry chain exists to remove.
+    #
+    # It leaks nothing: it reports whether the CALLER is authenticated and by
+    # which door, and the caller here is the lobby's service token. The node
+    # answers about the request in front of it, not about anyone else.
+    'auth/check',
+    # The node's own identity and sitemap. Both are things it publishes about
+    # itself and both are gate 0 or 1 reads.
+    'identity', 'sitemap', 'my-ip',
 }
 
 
