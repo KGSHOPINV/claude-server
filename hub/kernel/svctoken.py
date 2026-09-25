@@ -211,6 +211,10 @@ def _utc():
 
 
 # 20200401  _node_facts — the zone, read from the machine rather than hardcoded
+# Sent on every outbound node call. See headers_for() for why this matters.
+USER_AGENT = 'FlareSHub-Lobby/1.0'
+
+
 def _node_facts():
     """Law I: derive, do not maintain. The zone is whatever enroll.sh actually
     put in ~/.flare/node.json, not a constant in this file that drifts the
@@ -512,8 +516,21 @@ def headers_for(node_id):
         cid, sec, _ = _read()
         if not cid or not sec:
             return {}
+        # USER-AGENT IS NOT OPTIONAL, and this cost an hour to find.
+        #
+        # Cloudflare's Browser Integrity Check sits IN FRONT of Access and
+        # blocks requests whose user agent looks automated. urllib sends
+        # 'Python-urllib/3.x', so a perfectly valid service token came back
+        # 403 with error code 1010 -- which reads exactly like Access
+        # refusing the credential, and sent me auditing the token, the policy
+        # and the app config while the request was never reaching Access at
+        # all.
+        #
+        # 1010 is BIC. 403 from Access looks different. Anything calling a
+        # node through the edge must identify itself.
         return {'CF-Access-Client-Id': cid,
-                'CF-Access-Client-Secret': sec.reveal()}
+                'CF-Access-Client-Secret': sec.reveal(),
+                'User-Agent': USER_AGENT}
     except Exception:
         return {}
 
