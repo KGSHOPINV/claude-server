@@ -43,13 +43,30 @@ from kernel.ssh import ssh_run
 
 def _master():
     """The code ref this server is running. Derived, never stored -- a stored
-    copy would be the exact drift this whole system exists to catch."""
+    copy would be the exact drift this whole system exists to catch.
+
+    CWD IS NOT OPTIONAL. This ran git with no cwd, so it inherited the
+    service's, which is the user's home -- not a git repository. git failed,
+    this returned '', and every consumer read that as "unknown".
+
+    The cost was silent and total: _congruence() treats a missing ref as
+    unknown rather than congruent, correctly, so /api/mesh/fleet has reported
+    ref=None and congruent=None since the day it was written. The one check
+    that answers "are both servers running the same build" has never once
+    been able to answer, while the two servers drifted apart and back.
+
+    Anchored to this file's own location instead, which is inside the repo by
+    construction.
+    """
+    import os                                   # noqa: PLC0415
+    repo = os.path.dirname(os.path.dirname(os.path.dirname(
+        os.path.abspath(__file__))))            # handlers/ -> hub/ -> repo
     try:
         r = subprocess.run(['git', 'rev-parse', '--short', 'HEAD'],
-                           capture_output=True, text=True, timeout=5)
+                           capture_output=True, text=True, timeout=5, cwd=repo)
         return r.stdout.strip() if r.returncode == 0 else ''
     except Exception:
-        return ''
+        return 
 
 
 def _who():
