@@ -127,34 +127,88 @@ if [ "$DRY_RUN" = "1" ]; then
   exit 0
 fi
 
-# ── 4. tunnel (idempotent) ───────────────────────────────────────────────────
+# ── 4. tunnel — ADOPT what the host already runs ─────────────────────────────
+#
+# This block used to do two things that take a working server off the internet,
+# and it did both to THIS box: it always created/selected a tunnel named
+# hub-<node> regardless of what cloudflared was already running, and then the
+# ingress PUT below replaced the ENTIRE ingress array with one hostname.
+#
+# On ksgcohub that meant: make a second tunnel, repoint the host service at it,
+# and drop the nine hostnames the live tunnel was serving -- including every
+# fksinv production name. It is also how /etc/cloudflared/token got destroyed.
+#
+# ONE BOX, ONE TUNNEL, MANY HOSTNAMES. If this host already runs a tunnel, that
+# is the tunnel. We add a hostname to it. We never make a second one and never
+# repoint the service.
 step "4. Tunnel"
-TUNNEL_NAME="hub-${NODE_NAME}"
-TUNNEL_ID=$(cf GET "/accounts/${ACCOUNT_ID}/cfd_tunnel?name=${TUNNEL_NAME}&is_deleted=false" \
-  | jq_py 'r=d.get("result") or [];print(r[0]["id"] if r else "")')
 
-if [ -n "$TUNNEL_ID" ]; then
-  warn "tunnel '${TUNNEL_NAME}' already exists — reusing (${TUNNEL_ID:0:8}…)"
-else
-  RESP=$(cf POST "/accounts/${ACCOUNT_ID}/cfd_tunnel" \
-    "{\"name\":\"${TUNNEL_NAME}\",\"config_src\":\"cloudflare\"}")
-  TUNNEL_ID=$(echo "$RESP" | jq_py 'print((d.get("result") or {}).get("id",""))')
-  [ -n "$TUNNEL_ID" ] || die "tunnel create failed: $(echo "$RESP" | head -c 300)"
-  ok "tunnel     : created ${TUNNEL_ID:0:8}…"
+# What is this host already running? The service token carries the tunnel id.
+RUNNING_TUNNEL_ID=""
+if [ -f /etc/cloudflared/token ]; then
+  RUNNING_TUNNEL_ID=$(sudo -n cat /etc/cloudflared/token 2>/dev/null | python3 -c '
+import sys, json, base64
+t = sys.stdin.read().strip()
+try:
+    print(json.loads(base64.b64decode(t + "=" * (-len(t) % 4))).get("t", ""))
+except Exception:
+    print("")' 2>/dev/null || echo "")
 fi
 
-TUNNEL_TOKEN=$(cf GET "/accounts/${ACCOUNT_ID}/cfd_tunnel/${TUNNEL_ID}/token" | jq_py 'print(d.get("result",""))')
-[ -n "$TUNNEL_TOKEN" ] || die "could not fetch tunnel token"
+if [ -n "$RUNNING_TUNNEL_ID" ]; then
+  TUNNEL_ID="$RUNNING_TUNNEL_ID"
+  TUNNEL_NAME=$(cf GET "/accounts/${ACCOUNT_ID}/cfd_tunnel/${TUNNEL_ID}" \
+    | jq_py 'print((d.get("result") or {}).get("name",""))')
+  ADOPTED=1
+  ok "tunnel     : adopting the one this host already runs — '${TUNNEL_NAME}' (${TUNNEL_ID:0:8}…)"
+else
+  ADOPTED=0
+  TUNNEL_NAME="hub-${NODE_NAME}"
+  TUNNEL_ID=$(cf GET "/accounts/${ACCOUNT_ID}/cfd_tunnel?name=${TUNNEL_NAME}&is_deleted=false" \
+    | jq_py 'r=d.get("result") or [];print(r[0]["id"] if r else "")')
+  if [ -n "$TUNNEL_ID" ]; then
+    warn "tunnel '${TUNNEL_NAME}' exists but nothing runs it here — reusing (${TUNNEL_ID:0:8}…)"
+  else
+    RESP=$(cf POST "/accounts/${ACCOUNT_ID}/cfd_tunnel" \
+      "{\"name\":\"${TUNNEL_NAME}\",\"config_src\":\"cloudflare\"}")
+    TUNNEL_ID=$(echo "$RESP" | jq_py 'print((d.get("result") or {}).get("id",""))')
+    [ -n "$TUNNEL_ID" ] || die "tunnel create failed: $(echo "$RESP" | head -c 300)"
+    ok "tunnel     : created ${TUNNEL_ID:0:8}…"
+  fi
+  TUNNEL_TOKEN=$(cf GET "/accounts/${ACCOUNT_ID}/cfd_tunnel/${TUNNEL_ID}/token" | jq_py 'print(d.get("result",""))')
+  [ -n "$TUNNEL_TOKEN" ] || die "could not fetch tunnel token"
+fi
 
-# ingress: this hostname -> the local hub. catch-all 404 so nothing else leaks.
-cf PUT "/accounts/${ACCOUNT_ID}/cfd_tunnel/${TUNNEL_ID}/configurations" "$(cat <<JSON
-{"config":{"ingress":[
-  {"hostname":"${HOSTNAME_FQDN}","service":"http://localhost:${HUB_PORT}"},
-  {"service":"http_status:404"}
-]}}
-JSON
-)" >/dev/null
-ok "ingress    : ${HOSTNAME_FQDN} -> http://localhost:${HUB_PORT}"
+# ── ingress: MERGE, never replace ────────────────────────────────────────────
+# The API takes the whole array, so a naive PUT deletes every rule it does not
+# mention. Read what is there, upsert this one hostname, keep the catch-all
+# last, and refuse to write if the result would lose a hostname.
+step "4b. Ingress"
+CUR=$(cf GET "/accounts/${ACCOUNT_ID}/cfd_tunnel/${TUNNEL_ID}/configurations")
+NEW_INGRESS=$(echo "$CUR" | HOSTNAME_FQDN="$HOSTNAME_FQDN" HUB_PORT="$HUB_PORT" python3 -c '
+import json, os, sys
+host = os.environ["HOSTNAME_FQDN"]
+svc  = "http://localhost:" + os.environ["HUB_PORT"]
+try:
+    cur = ((json.load(sys.stdin).get("result") or {}).get("config") or {}).get("ingress") or []
+except Exception:
+    cur = []
+named   = [r for r in cur if r.get("hostname")]
+before  = {r["hostname"] for r in named}
+named   = [r for r in named if r["hostname"] != host]
+named.append({"hostname": host, "service": svc})
+after   = {r["hostname"] for r in named}
+lost    = before - after
+if lost:
+    sys.stderr.write("REFUSING: would drop " + ", ".join(sorted(lost)) + "\n")
+    sys.exit(1)
+named.append({"service": "http_status:404"})
+print(json.dumps({"config": {"ingress": named}}))
+') || die "ingress merge refused — existing hostnames would have been lost"
+
+KEPT=$(echo "$CUR" | jq_py 'print(len([r for r in (((d.get("result") or {}).get("config") or {}).get("ingress") or []) if r.get("hostname")]))')
+cf PUT "/accounts/${ACCOUNT_ID}/cfd_tunnel/${TUNNEL_ID}/configurations" "$NEW_INGRESS" >/dev/null
+ok "ingress    : ${HOSTNAME_FQDN} -> http://localhost:${HUB_PORT}  (${KEPT} existing hostname(s) preserved)"
 
 # ── 5. DNS (idempotent) ──────────────────────────────────────────────────────
 step "5. DNS"
@@ -202,8 +256,30 @@ if ! command -v cloudflared >/dev/null; then
 else
   ok "cloudflared: already present ($(cloudflared --version 2>&1 | head -1))"
 fi
-sudo cloudflared service install "$TUNNEL_TOKEN" >/dev/null 2>&1 \
-  || warn "service install returned non-zero — may already be installed"
+# THE LINE THAT TOOK THIS BOX DOWN.
+#
+# `cloudflared service install <token>` OVERWRITES /etc/cloudflared/token and
+# repoints the host service at whatever tunnel that token belongs to. It ran
+# unconditionally. On a host already running a tunnel with other hostnames on
+# it, that silently moves the machine to a different tunnel and every existing
+# hostname stops resolving to anything. It is also how this box lost its token
+# while the live tunnel kept serving nine hostnames from memory alone -- one
+# restart away from an outage nobody would have connected to this script.
+#
+# If we adopted the running tunnel, the service is already correct. Touching it
+# can only break it.
+if [ "$ADOPTED" = "1" ]; then
+  ok "cloudflared: already serving this tunnel — service left alone"
+else
+  [ -n "${TUNNEL_TOKEN:-}" ] || die "no tunnel token and no running tunnel to adopt"
+  if [ -f /etc/cloudflared/token ]; then
+    BK="/etc/cloudflared/token.bak.$(date +%Y%m%d-%H%M%S)"
+    sudo -n cp -p /etc/cloudflared/token "$BK" 2>/dev/null \
+      && warn "existing token backed up to ${BK}"
+  fi
+  sudo cloudflared service install "$TUNNEL_TOKEN" >/dev/null 2>&1 \
+    || warn "service install returned non-zero — may already be installed"
+fi
 sudo systemctl enable --now cloudflared >/dev/null 2>&1 || true
 sleep 3
 systemctl is-active --quiet cloudflared && ok "cloudflared: running" || warn "cloudflared not active — check: journalctl -u cloudflared -n 40"
