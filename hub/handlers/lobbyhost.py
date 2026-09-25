@@ -547,17 +547,41 @@ def serve_lobby(handler, path, params):
         import json as _json                      # noqa: PLC0415
         from handlers import lobby as _lobby      # noqa: PLC0415
 
+        from kernel.auth import check_auth        # noqa: PLC0415
+        from kernel import identity as _idm        # noqa: PLC0415
+        from handlers.door import DOOR_ROLE, DOOR_CEILING  # noqa: PLC0415
+
+        # get_lobby reads a ROLE JWT from Authorization. A page request
+        # carries only the Access identity, so mint the same token /api/door
+        # would have issued for this person -- same role, same ceiling, same
+        # issuer. Not a shortcut past the check: the check still runs, it is
+        # just handed the credential the browser would have fetched.
+        sess = check_auth(handler)
+        if not sess:
+            raise RuntimeError('no session behind this page request')
+        tok = _idm.issue(sess.get('user') or 'operator', DOOR_ROLE, ttl=1800,
+                         extra={'via': sess.get('via', 'local'),
+                                'ceiling': DOOR_CEILING})
+
         class _Cap(object):
-            """Catches the handler's send_json instead of writing a response."""
-            def __init__(self, h):
-                self.headers = h.headers
+            """Catches send_json instead of writing a response, and carries the
+            minted Bearer so get_lobby authenticates exactly as it would for a
+            real request."""
+            def __init__(self, h, bearer):
+                base = {}
+                try:
+                    base = {k: v for k, v in h.headers.items()}
+                except Exception:
+                    base = {}
+                base['Authorization'] = 'Bearer ' + bearer
+                self.headers = base
                 self.client_address = getattr(h, 'client_address', ('', 0))
                 self.path = getattr(h, 'path', '/')
                 self.payload = None
             def send_json(self, data, status=200):
                 self.payload = (status, data)
 
-        cap = _Cap(handler)
+        cap = _Cap(handler, tok)
         _lobby.get_lobby(cap, '/api/lobby', {})
         if cap.payload and cap.payload[0] == 200:
             boot = _json.dumps(cap.payload[1])
