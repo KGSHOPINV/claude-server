@@ -19,7 +19,13 @@ WHAT MAKES IT SAFE -- in order of how much each actually contributes:
 
   read-once (project scope)  gone the moment it is collected
   TTL                        gone anyway, read or not
-  never backed up            excluded by name in tools/backup.sh, not by luck
+  never backed up            BY ACCIDENT OF SCOPE, NOT BY AN EXCLUSION.
+                             This line used to claim backup.sh excludes bank.db
+                             by name. It does not. backup.sh names server.db
+                             and control.db and copies nothing else out of
+                             db/, so this file is missed rather than refused.
+                             Add a db/*.db sweep to backup.sh and the secrets
+                             start being copied, silently.
   never logged               the read is logged; the VALUE never is
   encryption at rest         defence in depth, NOT the guarantee -- see below
 

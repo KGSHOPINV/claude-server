@@ -95,6 +95,16 @@ ROUTES = [
     {"code": "20312702", "method": "POST", "path": "/api/mesh/register",          "prefix": False, "gate": 0, "handler": "post_mesh_register",   "module": "mesh"},
     {"code": "20312703", "method": "GET",  "path": "/api/mesh/fleet",             "prefix": False, "gate": 1, "handler": "get_mesh_fleet",       "module": "mesh"},
 
+    # ── The lobby (module 16) — dashboard.<zone>, central mode ───────────────
+    # Gate 1 here is a DECLARATION, not the control. A gate level cannot say
+    # "this role may see these three servers and must not learn the others
+    # exist", so every one of these does its own role check inside. That also
+    # survives HUB_ENFORCE_GATES being unset, which it currently is.
+    {"code": "20316701", "method": "GET",  "path": "/api/lobby",                 "prefix": False, "gate": 1, "handler": "get_lobby",          "module": "lobby"},
+    {"code": "20316702", "method": "GET",  "path": "/api/lobby/server/",         "prefix": True,  "gate": 1, "handler": "get_lobby_server",   "module": "lobby"},
+    {"code": "20316703", "method": "POST", "path": "/api/lobby/server/",         "prefix": True,  "gate": 2, "handler": "post_lobby_action",  "module": "lobby"},
+    {"code": "20316704", "method": "POST", "path": "/api/lobby/vault",           "prefix": False, "gate": 3, "handler": "post_lobby_vault",   "module": "lobby"},
+
     # ── Federation ───────────────────────────────────────────────────────────
     {"code": "20303701", "method": "GET",  "path": "/api/federation",             "prefix": False, "gate": 1, "handler": "get_federation",         "module": "federation"},
     {"code": "20303702", "method": "POST", "path": "/api/federation",             "prefix": False, "gate": 1, "handler": "post_federation",        "module": "federation"},
