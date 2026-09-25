@@ -336,6 +336,20 @@
            '</a>';
   }
 
+  // The server injects window.__LOBBY__ at render time. Using it means this
+  // page makes NO API call on the apex -- which matters because /fleet and
+  // /api are separate Cloudflare Access apps with separate sessions, so a
+  // fetch to /api gets a cross-origin redirect to the Access login that
+  // fetch() cannot follow. The browser calls that CORS; the cause is two apps.
+  //
+  // The fetch path stays as a fallback. If injection ever fails the page
+  // produces a diagnosable error instead of a blank screen.
+  function boot() {
+    var d = window.__LOBBY__;
+    if (d && d.ok) { render(d); return true; }
+    return false;
+  }
+
   function render(d) {
     var id = d.identity || {};
     $('who').innerHTML = 'Signed in as <code>' + es(id.sub || '?') +
@@ -392,7 +406,11 @@
     });
   }
 
-  start();
+  // Injected data first. start() is the fallback and only runs if the server
+  // could not render the payload -- on the apex that fallback will fail with a
+  // CORS error, which is the diagnosable outcome we want rather than a blank
+  // page pretending nothing happened.
+  if (!boot()) { start(); }
 })();
 </script>
 </body>

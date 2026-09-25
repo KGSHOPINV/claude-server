@@ -503,8 +503,30 @@ def serve_lobby(handler, path, params):
     this origin answers to, including the node hostnames, and a human-shaped
     page on a service-token-only host invites a human policy onto it.
 
-    The page itself carries no data. It fetches /api/door then /api/lobby, so a
-    cached copy discloses nothing and there is no state here to get stale.
+    THE PAGE DOES NOT FETCH. It used to call /api/door and then /api/lobby,
+    and on the apex that breaks in a way worth writing down.
+
+    /fleet and /api are SEPARATE Cloudflare Access applications, so they have
+    separate sessions. Signing in for /fleet does not authenticate /api. Access
+    answers the fetch with a 302 to its login on kgco.cloudflareaccess.com --
+    a cross-ORIGIN redirect, which fetch() cannot follow, so the browser
+    reports it as a CORS failure with no Access-Control-Allow-Origin. The
+    console blames CORS; the cause is two apps and one session.
+
+    A NAVIGATION survives that redirect fine -- which is why clicking into a
+    server still works and only the page's own fetches died.
+
+    So the server injects what the page needs. It already holds the answer at
+    render time: this request came through Access, so there is an identity, and
+    the lobby data is one local call away. No token round trip, no second app,
+    nothing to be refused.
+
+    The injected data is exactly what /api/lobby would have returned for THIS
+    identity -- same function, same role scoping. A client still cannot see a
+    server they do not hold, because the same _visible() decides it.
+
+    Cache-Control is no-store as a result: this page now carries fleet data,
+    so it must not sit in a proxy or a back-button cache.
     """
     fpath = os.path.join(
         os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'lobby.html')
@@ -515,13 +537,46 @@ def serve_lobby(handler, path, params):
         handler.send_response(404)
         handler.end_headers()
         return
+
+    # Build the same payload /api/lobby would have produced, and hand it to the
+    # page as a global. Failure is reported, never papered over: the page falls
+    # back to fetching, which at least produces a diagnosable error rather than
+    # an empty screen.
+    boot = 'null'
+    try:
+        import json as _json                      # noqa: PLC0415
+        from handlers import lobby as _lobby      # noqa: PLC0415
+
+        class _Cap(object):
+            """Catches the handler's send_json instead of writing a response."""
+            def __init__(self, h):
+                self.headers = h.headers
+                self.client_address = getattr(h, 'client_address', ('', 0))
+                self.path = getattr(h, 'path', '/')
+                self.payload = None
+            def send_json(self, data, status=200):
+                self.payload = (status, data)
+
+        cap = _Cap(handler)
+        _lobby.get_lobby(cap, '/api/lobby', {})
+        if cap.payload and cap.payload[0] == 200:
+            boot = _json.dumps(cap.payload[1])
+    except Exception:
+        boot = 'null'
+
+    tag = ('<script>window.__LOBBY__ = ' + boot + ';</script>').encode('utf-8')
+    # After <head> so the page's own script, which runs later, can read it.
+    if b'<head>' in body:
+        body = body.replace(b'<head>', b'<head>' + tag, 1)
+    else:
+        body = tag + body
     handler.send_response(200)
     handler.send_header('Content-Type', 'text/html; charset=utf-8')
     handler.send_header('Content-Length', str(len(body)))
     # The shell is public-shaped; everything it shows arrives over an
     # authenticated fetch. no-cache rather than a max-age so a deploy is picked
     # up on the next load, which matters for the page an operator lands on.
-    handler.send_header('Cache-Control', 'no-cache')
+    handler.send_header('Cache-Control', 'no-store')
     handler.end_headers()
     handler.wfile.write(body)
 
