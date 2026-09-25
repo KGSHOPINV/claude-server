@@ -100,6 +100,9 @@ ROUTES = [
     # "this role may see these three servers and must not learn the others
     # exist", so every one of these does its own role check inside. That also
     # survives HUB_ENFORCE_GATES being unset, which it currently is.
+    # The connector: a login becomes a role the lobby can read. Layers 1-2
+    # only -- 3 and 4 are space FlareVault is holding.
+    {"code": "20319701", "method": "GET",  "path": "/api/door",                  "prefix": False, "gate": 1, "handler": "get_door",           "module": "door"},
     {"code": "20316701", "method": "GET",  "path": "/api/lobby",                 "prefix": False, "gate": 1, "handler": "get_lobby",          "module": "lobby"},
     {"code": "20316702", "method": "GET",  "path": "/api/lobby/server/",         "prefix": True,  "gate": 1, "handler": "get_lobby_server",   "module": "lobby"},
     {"code": "20316703", "method": "POST", "path": "/api/lobby/server/",         "prefix": True,  "gate": 2, "handler": "post_lobby_action",  "module": "lobby"},
