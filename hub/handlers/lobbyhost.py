@@ -770,12 +770,19 @@ def _serve_local(handler, rest):
         handler.end_headers()
         return
     from kernel import identity as _idl   # noqa: PLC0415
-    body, ferr = _inject(body, _idl.server_id())
-    if ferr is not None:
-        _finding(handler, 502, ferr.get('error', 'inject_failed'),
-                 ferr.get('fix', ''))
+    sid = _idl.server_id()
+    # Same signature the remote path uses: (body, prefix, name). Called with
+    # two arguments this raised TypeError and the shim silently never landed,
+    # which is how the page kept showing its own login while every check said
+    # the route was fine.
+    shimmed, why = _inject(body, PREFIX + sid, _idl.node_name() or sid)
+    if why:
+        _finding(handler, 502, why,
+                 'this box app shell could not be prepared for the /s/ prefix; '
+                 'without the shim its API calls cross into another Access app '
+                 'and it shows a login it cannot complete')
         return
-    _send_bytes(handler, 200, 'text/html; charset=utf-8', body)
+    _send_bytes(handler, 200, 'text/html; charset=utf-8', shimmed)
 
 
 # 20318703  POST /s/<id>/* — refused, naming the seam that refuses it
