@@ -93,9 +93,24 @@ cf() { # cf METHOD PATH [JSON_BODY]
 }
 jq_py() { python3 -c "import sys,json;d=json.load(sys.stdin);$1" 2>/dev/null || true; }
 
+# DO NOT GATE ON /user/tokens/verify.
+#
+# It returned 401 "1000 Invalid API Token" for a token that answered 200 on
+# every endpoint this script actually uses -- zones, cfd_tunnel and access/apps.
+# Verified 2026-09-24. That gate refused a working token and blocked enrolment
+# for a full day while the token was blamed.
+#
+# So it is reported, never enforced. The token is proved by USING it: the zone
+# lookup below is the first real call and it fails loudly on its own if the
+# token cannot do the job. An endpoint that can only say yes-or-no about a
+# credential is a worse judge than the endpoints that need it.
 VERIFY=$(cf GET /user/tokens/verify | jq_py 'print(d.get("success"))')
-[ "$VERIFY" = "True" ] || die "token rejected by Cloudflare (Invalid API Token). Create one with: Zone>DNS>Edit, Account>Cloudflare Tunnel>Edit, Account>Access Apps>Edit"
-ok "token      : valid"
+if [ "$VERIFY" = "True" ]; then
+  ok "token      : verify endpoint accepts it"
+else
+  warn "token      : /user/tokens/verify rejects it -- continuing anyway."
+  warn "             that endpoint is not authoritative; the calls below are."
+fi
 
 ZONE_ID=$(cf GET "/zones?name=${ZONE}" | jq_py 'r=d.get("result") or [];print(r[0]["id"] if r else "")')
 [ -n "$ZONE_ID" ] || die "zone '${ZONE}' not visible to this token — check the token's zone scope"
