@@ -108,6 +108,18 @@ ROUTES = [
     {"code": "20316703", "method": "POST", "path": "/api/lobby/server/",         "prefix": True,  "gate": 2, "handler": "post_lobby_action",  "module": "lobby"},
     {"code": "20316704", "method": "POST", "path": "/api/lobby/vault",           "prefix": False, "gate": 3, "handler": "post_lobby_vault",   "module": "lobby"},
 
+    # ── Route into a server (module 18) — dashboard.<zone>/s/<id>/ ──────────
+    # The lobby LISTS; this is where you actually go. GET only: writes do not
+    # cross nodes, and the POST entry exists so a write is refused BY NAME
+    # rather than 404ing as though the route were gone.
+    #
+    # serve_lobby has no entry on purpose. A path would make lobby.html
+    # reachable on every hostname this origin answers to, including the
+    # service-token-only node hostnames. identity.serve_app dispatches to it
+    # on Host, the same way the splash does.
+    {"code": "20318702", "method": "GET",  "path": "/s/",                        "prefix": True,  "gate": 1, "handler": "route_into_server",  "module": "lobbyhost"},
+    {"code": "20318703", "method": "POST", "path": "/s/",                        "prefix": True,  "gate": 1, "handler": "refuse_write",       "module": "lobbyhost"},
+
     # ── The outbox (module 17) — outbound, staged and collected ──────────────
     # Build-order item 1. The hole the eleven-step flow sat over: the intake
     # message left the machine only because a human pasted it.

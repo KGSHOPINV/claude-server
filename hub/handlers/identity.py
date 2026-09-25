@@ -26,6 +26,16 @@ SPLASH_PATH = os.path.join(_BASE_DIR, 'splash.html')
 # it without touching code.
 SPLASH_HOSTS = [h.strip().lower() for h in os.environ.get(
     'HUB_SPLASH_HOSTS', 'flarevault.dev,www.flarevault.dev').split(',') if h.strip()]
+
+# Hostnames that get the LOBBY instead of the app. dashboard.<zone> is a
+# different page from app.html: one card per server, and picking one routes you
+# into that server. It is chosen on HOST for the same reason the splash is --
+# so that lobby.html is unreachable by path on a node hostname, which is
+# service-token-only and must never carry a human-shaped page.
+#
+# Set HUB_DASHBOARD_HOSTS to change it without touching code.
+DASHBOARD_HOSTS = [h.strip().lower() for h in os.environ.get(
+    'HUB_DASHBOARD_HOSTS', 'dashboard.flarevault.dev').split(',') if h.strip()]
 UI_DIR      = os.path.join(_BASE_DIR, 'ui')
 
 # Only these extensions are ever served from ui/. No wildcard static hosting.
@@ -86,6 +96,20 @@ def serve_app(handler, path, params):
         except FileNotFoundError:
             handler.send_response(404)
             handler.end_headers()
+        return
+
+    # Same decision, one host further in: dashboard.<zone> is the lobby, not
+    # the app. A request that arrived there must never fall through to
+    # app.html -- the app is one server's control room, and serving it here is
+    # exactly the mistake the lobby exists to undo.
+    #
+    # Lazy import, and the reason is blast radius: this module answers '/' for
+    # every hostname this origin has. A lobbyhost that is missing or broken
+    # then takes the app down everywhere rather than on the dashboard host
+    # alone. Imported here, the failure stays where the feature is.
+    if host in DASHBOARD_HOSTS and path in ('/', '/mobile', '/desktop'):
+        from handlers.lobbyhost import serve_lobby  # noqa: PLC0415
+        serve_lobby(handler, path, params)
         return
 
     ua = handler.headers.get('User-Agent', '')
