@@ -820,13 +820,56 @@ if command -v ufw &>/dev/null; then
   ok "Firewall: 22 (SSH) + 8765 (Hub) open"
 fi
 
+# ── Enrolment ─────────────────────────────────────────────────────────────────
+# THE PREMISE: install -> hostname -> reachable, as ONE operation.
+#
+# bootstrap and enroll were two commands, so a fresh server ended at "installed,
+# now go configure Cloudflare" -- which plan/BUILT-VS-ASKED.md names as the
+# thing that has never once been attempted in code. This closes it.
+#
+# Skipped, never failed, when the zone or the token is absent. A server with a
+# working hub and no public hostname is a correct outcome; refusing to finish
+# bootstrap because Cloudflare was not configured would make the common case
+# depend on the optional one.
+step 9 "Enrolment"
+ZONE_FILE="$HOME/.flare/zone"
+ENROLL_ZONE="${FLARE_ZONE:-}"
+[ -z "$ENROLL_ZONE" ] && [ -r "$ZONE_FILE" ] && ENROLL_ZONE=$(cat "$ZONE_FILE" 2>/dev/null | tr -d '
+')
+
+HAVE_TOKEN=0
+[ -n "${CF_API_TOKEN:-}" ] && HAVE_TOKEN=1
+[ -r "$HOME/.cf-token" ] && HAVE_TOKEN=1
+[ -r /etc/flare/token ] && HAVE_TOKEN=1
+
+if [ -z "$ENROLL_ZONE" ]; then
+  warn "no zone — skipping. Set FLARE_ZONE or write it to ~/.flare/zone, then:"
+  warn "  ./enroll.sh --zone <yourzone>"
+elif [ "$HAVE_TOKEN" = "0" ]; then
+  warn "no Cloudflare token — skipping. Put it at ~/.cf-token (chmod 600), then:"
+  warn "  ./enroll.sh --zone ${ENROLL_ZONE}"
+elif [ ! -x "$(dirname "$0")/enroll.sh" ] && [ ! -f "$(dirname "$0")/enroll.sh" ]; then
+  warn "enroll.sh not beside bootstrap.sh — skipping"
+else
+  ok "zone ${ENROLL_ZONE}, token present — enrolling"
+  bash "$(dirname "$0")/enroll.sh" --zone "$ENROLL_ZONE" ||     warn "enrolment did not complete — the hub is still up; re-run ./enroll.sh"
+fi
+
+# The hostname this node ended with, if any. Printed below so the operator sees
+# a live address rather than being told to go and find one.
+PUBLIC_HOST=""
+if [ -r "$HOME/.flare/node.json" ]; then
+  PUBLIC_HOST=$(python3 -c "import json;print((json.load(open('$HOME/.flare/node.json')) or {}).get('hostname',''))" 2>/dev/null || echo "")
+fi
+
 # ── Done ─────────────────────────────────────────────────────────────────────
 echo -e "
 ${BOLD}${GREEN}  ══════════════════════════════════════════${RESET}
 ${BOLD}${GREEN}  ✓  Hub is live${RESET}
 
   ${BOLD}Open in your browser:${RESET}
-  ${CYAN}  http://${SERVER_IP}:8765${RESET}
+  ${CYAN}  http://${SERVER_IP}:8765${RESET}${PUBLIC_HOST:+
+  ${CYAN}  https://${PUBLIC_HOST}${RESET}  (public, behind Cloudflare Access)}
 
   ${BOLD}Login:${RESET}
     Username:  admin
