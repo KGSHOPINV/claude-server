@@ -36,6 +36,9 @@ while [ $# -gt 0 ]; do
     --node)    NODE_NAME="$2"; shift 2;;
     --zone)    ZONE="$2";      shift 2;;
     --port)    HUB_PORT="$2";  shift 2;;
+    # Accepted and ignored. Node endpoints are service-token only now, so
+    # there is no human identity to allow here. Kept so an old command line
+    # does not die; it warns below instead.
     --email)   ALLOW_EMAIL="$2"; shift 2;;
     --dry-run) DRY_RUN=1;      shift;;
     *) die "unknown argument: $1";;
@@ -76,6 +79,7 @@ print("fvn_" + hashlib.sha256(sys.stdin.read().strip().encode()).hexdigest()[:6]
 # fvn_685a59 -> fvn-685a59; underscores are not legal in a hostname label.
 ID_LABEL=$(printf '%s' "$SERVER_ID" | tr '_' '-')
 
+[ -n "$ALLOW_EMAIL" ] && warn "--email is ignored: node endpoints are service-token only (humans use login.${ZONE:-<zone>})"
 ok "machine-id : $MACHINE_ID"
 ok "server id  : $SERVER_ID"
 ok "node       : $NODE_NAME  (label only — not used in any hostname)"
@@ -85,8 +89,15 @@ step "2. Preflight"
 command -v curl    >/dev/null || die "curl not installed"
 command -v python3 >/dev/null || die "python3 not installed"
 [ -n "$ZONE" ] || die "--zone is required (e.g. --zone ksgdev.com)"
-# Derived from the id, stable forever.
-HOSTNAME_FQDN="${ID_LABEL}.${ZONE}"
+# flareshub-<id>.<zone>, per the FlareVault login-flow spec. This is a NODE
+# endpoint, not a human door: the lobby at dashboard.<zone> proxies to it with
+# a service token and a person browsing here is refused outright.
+#
+# The full server id is kept, underscore swapped for a hyphen, rather than
+# trimmed to 685a59. Nobody ever types this -- it is service-token only -- so
+# there is no cost to length, and a hostname that contains the id verbatim can
+# be matched back to /api/node without a lookup table.
+HOSTNAME_FQDN="flareshub-${ID_LABEL}.${ZONE}"
 
 # NO READABLE ALIAS. There was one -- ${NODE_NAME}.${ZONE} -- and it put the
 # hub on the public internet with no gate in front of it for about four
@@ -216,9 +227,9 @@ for h in add:  print("                  ADD   %s" % h)
   if [ -n "$EXAPP" ]; then
     NPOL=$(cf GET "/accounts/${ACCOUNT_ID}/access/apps/${EXAPP}/policies" | jq_py 'print(len(d.get("result") or []))')
     echo "  access      : app exists (${EXAPP:0:8}…) with ${NPOL} policy(ies)"
-    [ "${NPOL:-0}" = "0" ] && echo "                  would ADD allow policy for ${ALLOW_EMAIL:-<none given>}"
+    [ "${NPOL:-0}" = "0" ] && echo "                  would ADD service-token-only policy"
   else
-    echo "  access      : would create app + allow policy for ${ALLOW_EMAIL:-<none given>}"
+    echo "  access      : would create app + service-token-only policy"
   fi
   echo
   echo "  nothing above was changed."
@@ -360,22 +371,26 @@ POL_COUNT=$(cf GET "/accounts/${ACCOUNT_ID}/access/apps/${APP_ID}/policies" \
   | jq_py 'print(len(d.get("result") or []))')
 if [ "${POL_COUNT:-0}" != "0" ]; then
   ok "access     : ${POL_COUNT} policy(ies) already attached"
-elif [ -n "$ALLOW_EMAIL" ]; then
-  cf POST "/accounts/${ACCOUNT_ID}/access/apps/${APP_ID}/policies" "$(cat <<JSON
-{"name":"Allow ${ALLOW_EMAIL}","decision":"allow","precedence":1,
- "include":[{"email":{"email":"${ALLOW_EMAIL}"}}]}
+else
+  # SERVICE TOKEN ONLY. Spec rule 6: node endpoints "refuse humans entirely".
+  #
+  # This used to attach an allow policy for --email, which made every node a
+  # human-facing door. That is backwards: the ONLY human gate is
+  # login.<zone>, and the lobby at dashboard.<zone> reaches nodes internally
+  # with a service token. A person who finds this hostname gets nothing.
+  #
+  # any_valid_service_token rather than a specific token id, so rotating the
+  # lobby's credential does not require re-running enrolment on every node.
+  cf POST "/accounts/${ACCOUNT_ID}/access/apps/${APP_ID}/policies" "$(cat <<'JSON'
+{"name":"FlareSHub service token only","decision":"non_identity","precedence":1,
+ "include":[{"any_valid_service_token":{}}]}
 JSON
 )" >/dev/null
   RECHECK=$(cf GET "/accounts/${ACCOUNT_ID}/access/apps/${APP_ID}/policies" \
     | jq_py 'print(len(d.get("result") or []))')
   [ "${RECHECK:-0}" != "0" ] \
-    && ok "access     : allow policy for ${ALLOW_EMAIL}" \
+    && ok "access     : service-token-only (humans refused)" \
     || die "policy create reported success but the app still has none — check Access>Apps>Edit"
-else
-  # Refuse rather than leave a door that looks locked and is actually bricked.
-  die "Access app ${APP_ID} has no policy and no --email was given.
-     Without one, ${HOSTNAME_FQDN} sends you to a Google login that always
-     denies you. Re-run with:  --email you@example.com"
 fi
 
 # ── 7. cloudflared as a HOST service ─────────────────────────────────────────
