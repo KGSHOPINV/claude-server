@@ -78,6 +78,9 @@ import urllib.parse
 import urllib.request
 from http.cookies import SimpleCookie
 
+from kernel import router as _router
+from kernel.db import db_conn as _dbconn
+
 # The prefix every route-into-a-server sits under. One place, because the shim
 # injected into proxied HTML has to agree with the router exactly or the app
 # silently calls the LOBBY's API while displaying a remote server's name.
@@ -724,18 +727,34 @@ def _serve_local(handler, rest):
     """The app shell off disk for the document paths, and a finding for
     anything else.
 
-    /s/<self>/api/... is never requested in practice, because the local page is
-    served without the prefix shim and therefore calls /api/... directly. If it
-    IS requested, saying so beats quietly answering -- the caller has a
-    same-origin route to the real endpoint and should use it, and a second path
-    to the same data is a second place for an auth check to be forgotten.
+    THE LOCAL PAGE GETS THE SHIM TOO, and this was wrong for hours.
+
+    It used to be served raw, on the reasoning that the lobby origin IS this
+    box so its root-absolute calls already land correctly. They land on the
+    right ORIGIN and the wrong ACCESS APP. flarevault.dev/api is its own
+    Cloudflare Access application with its own session; /s/ is another. A page
+    opened under /s/<self>/ that calls /api/auth/check crosses from one to the
+    other, gets a redirect to a login it cannot follow, and shows its own login
+    box instead -- which is exactly what an operator saw after signing in.
+
+    With the shim its calls become /s/<self>/api/..., which stays inside the
+    SAME app and the same session. The request then arrives here and is served
+    locally, so there is still no tunnel hop.
     """
     from handlers import identity as _identity   # noqa: PLC0415
 
     if rest not in _DOC_PATHS:
-        _finding(handler, 400, 'self_is_local',
-                 'this is the box you are already talking to — call %s '
-                 'directly on this origin' % (rest or '/'))
+        # An API or UI path under /s/<self>/. The shim now produces these, so
+        # answer them from this origin rather than refusing -- refusing was
+        # only correct while the local page was served raw.
+        if rest.startswith('/api/') or rest.startswith('/ui/')                 or rest == '/manifest.json':
+            handler.path = rest
+            if _router.dispatch(handler, 'GET', rest.split('?')[0], {}, None,
+                                _dbconn):
+                return
+        _finding(handler, 404, 'not_served_here',
+                 'the lobby serves this box own app shell and API under '
+                 'this prefix; %s is neither' % (rest or '/'))
         return
 
     ua = handler.headers.get('User-Agent', '') or ''
@@ -749,6 +768,12 @@ def _serve_local(handler, rest):
     except FileNotFoundError:
         handler.send_response(404)
         handler.end_headers()
+        return
+    from kernel import identity as _idl   # noqa: PLC0415
+    body, ferr = _inject(body, _idl.server_id())
+    if ferr is not None:
+        _finding(handler, 502, ferr.get('error', 'inject_failed'),
+                 ferr.get('fix', ''))
         return
     _send_bytes(handler, 200, 'text/html; charset=utf-8', body)
 
