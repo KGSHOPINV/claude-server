@@ -7,6 +7,7 @@ Auth is enforced at the router level — no handler can skip it.
 import base64
 import hashlib
 import hmac
+import json
 import os
 import secrets
 import struct
@@ -149,7 +150,13 @@ CF_ROLE     = os.environ.get('HUB_CF_ROLE', 'admin')
 # The session it grants is deliberately the SAME level as the Google door --
 # layer 1 and 2. A service token must not be a way to reach further than the
 # human who is holding it, and gate 2/3 still demand their own proof.
-CF_CLIENT_HEADER = 'Cf-Access-Client-Id'
+# NOT Cf-Access-Client-Id. I assumed that one and it is never sent.
+#
+# Captured from a real request through the edge: Access forwards
+# Cf-Access-Jwt-Assertion and nothing else identifying. A service token's
+# identity is the `common_name` claim inside that JWT -- the client id. A human
+# session carries `email` instead, which is how the two are told apart.
+CF_JWT_HEADER = 'Cf-Access-Jwt-Assertion'
 # Which client ids may act as the lobby. Empty means any id Access accepted,
 # which is already narrow: Access only forwards the header after validating
 # the token against the app's own policy.
@@ -214,7 +221,28 @@ def service_identity(handler):
         return None
     if src != CF_TRUST_IP:
         return None
-    cid = (handler.headers.get(CF_CLIENT_HEADER, '') or '').strip().lower()
+    raw = (handler.headers.get(CF_JWT_HEADER, '') or '').strip()
+    if not raw:
+        return None
+    # The payload is READ, not verified. Verifying would mean fetching and
+    # caching Cloudflare's signing keys, and it would buy nothing here: this
+    # header is only believed when the request arrived from the tunnel's own
+    # address, and cloudflared forwards only what Access already validated.
+    # The trust is the path. If that ever stops being true, verification does
+    # not save us either, because anything that can reach this port can send
+    # any header it likes.
+    try:
+        parts = raw.split('.')
+        if len(parts) != 3:
+            return None
+        pad = parts[1] + '=' * (-len(parts[1]) % 4)
+        claims = json.loads(base64.urlsafe_b64decode(pad))
+    except Exception:
+        return None
+    # common_name is the service token's client id. A human session has `email`
+    # and no common_name, and that one is access_identity's business -- it has
+    # already been consulted by the time we get here.
+    cid = (claims.get('common_name') or '').strip().lower()
     if not cid:
         return None
     if CF_CLIENTS and cid not in CF_CLIENTS:
