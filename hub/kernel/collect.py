@@ -752,6 +752,16 @@ def _port_scan_loop():
     while True:
         try:
             _do_port_snapshot()
+            # The same sweep that notices ports notices the band, the lane map,
+            # the data root, the roster and the code ref -- and publishes a
+            # bulletin when one of them MOVED. Imported here, not at the top,
+            # because changewatch reads this module's constants and a top-level
+            # import each way is a cycle. Inside the existing try on purpose:
+            # the snapshot has already committed by this point, and a watcher
+            # that could stall the port scan would be worse than the silence it
+            # replaces. See kernel/changewatch.py.
+            from kernel import changewatch as _changewatch
+            _changewatch.publish()
         except Exception:
             pass
         time.sleep(300)  # Scan every 5 minutes
