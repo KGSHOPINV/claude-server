@@ -53,16 +53,43 @@ MACHINE_ID=$(cat /etc/machine-id)
 # hostname label rules: lowercase alnum + hyphen
 echo "$NODE_NAME" | grep -qE '^[a-z0-9][a-z0-9-]{0,30}[a-z0-9]$' \
   || die "--node '$NODE_NAME' is not a valid hostname label (lowercase, alnum, hyphen)"
+# THE HOSTNAME COMES FROM THE ID, NOT FROM WHAT THE BOX IS CALLED.
+#
+# It used to be hub-${NODE_NAME}, where NODE_NAME defaulted to `hostname -s`
+# and could be overridden with --node. That is how DNS on flarevault.dev ended
+# up holding hub-ksgco while the machine is called ksgcohub: someone typed
+# --node ksgco once, and a typo became permanent DNS pointing at a tunnel that
+# nothing runs.
+#
+# A name anyone can type is a name anyone can get wrong, and it changes when
+# the box is renamed. The server id is derived from /etc/machine-id, survives
+# renames and IP changes, and cannot collide. So it is the address.
+#
+# Derived here with the SAME algorithm as hub/kernel/identity.py. If these two
+# ever disagree the node answers to a name the fleet does not know it by, so
+# they are computed identically on purpose.
+SERVER_ID=$(printf '%s' "$MACHINE_ID" | python3 -c '
+import sys, hashlib
+print("fvn_" + hashlib.sha256(sys.stdin.read().strip().encode()).hexdigest()[:6])')
+[ -n "$SERVER_ID" ] || die "could not derive server id from machine-id"
+# fvn_685a59 -> fvn-685a59; underscores are not legal in a hostname label.
+ID_LABEL=$(printf '%s' "$SERVER_ID" | tr '_' '-')
+
 ok "machine-id : $MACHINE_ID"
-ok "node       : $NODE_NAME"
+ok "server id  : $SERVER_ID"
+ok "node       : $NODE_NAME  (readable alias only — the id is the address)"
 
 # ── 2. preflight ─────────────────────────────────────────────────────────────
 step "2. Preflight"
 command -v curl    >/dev/null || die "curl not installed"
 command -v python3 >/dev/null || die "python3 not installed"
 [ -n "$ZONE" ] || die "--zone is required (e.g. --zone ksgdev.com)"
-HOSTNAME_FQDN="hub-${NODE_NAME}.${ZONE}"
+# Primary: derived from the id, stable forever. Alias: readable, and a rename
+# is allowed to move it, because nothing authoritative depends on it.
+HOSTNAME_FQDN="${ID_LABEL}.${ZONE}"
+ALIAS_FQDN="${NODE_NAME}.${ZONE}"
 ok "target     : https://${HOSTNAME_FQDN} -> http://localhost:${HUB_PORT}"
+ok "alias      : https://${ALIAS_FQDN} -> same hub"
 
 # the hub must actually be running, or we would publish a dead endpoint
 HUB_CODE=$(curl -s -m 8 -o /dev/null -w '%{http_code}' "http://127.0.0.1:${HUB_PORT}/api/my-ip" || echo 000)
@@ -185,18 +212,20 @@ fi
 # last, and refuse to write if the result would lose a hostname.
 step "4b. Ingress"
 CUR=$(cf GET "/accounts/${ACCOUNT_ID}/cfd_tunnel/${TUNNEL_ID}/configurations")
-NEW_INGRESS=$(echo "$CUR" | HOSTNAME_FQDN="$HOSTNAME_FQDN" HUB_PORT="$HUB_PORT" python3 -c '
+NEW_INGRESS=$(echo "$CUR" | HOSTNAME_FQDN="$HOSTNAME_FQDN" ALIAS_FQDN="$ALIAS_FQDN" \
+                            HUB_PORT="$HUB_PORT" python3 -c '
 import json, os, sys
-host = os.environ["HOSTNAME_FQDN"]
-svc  = "http://localhost:" + os.environ["HUB_PORT"]
+svc   = "http://localhost:" + os.environ["HUB_PORT"]
+mine  = [h for h in (os.environ["HOSTNAME_FQDN"], os.environ.get("ALIAS_FQDN","")) if h]
 try:
     cur = ((json.load(sys.stdin).get("result") or {}).get("config") or {}).get("ingress") or []
 except Exception:
     cur = []
 named   = [r for r in cur if r.get("hostname")]
 before  = {r["hostname"] for r in named}
-named   = [r for r in named if r["hostname"] != host]
-named.append({"hostname": host, "service": svc})
+named   = [r for r in named if r["hostname"] not in mine]
+for h in mine:
+    named.append({"hostname": h, "service": svc})
 after   = {r["hostname"] for r in named}
 lost    = before - after
 if lost:
@@ -213,16 +242,24 @@ ok "ingress    : ${HOSTNAME_FQDN} -> http://localhost:${HUB_PORT}  (${KEPT} exis
 # ── 5. DNS (idempotent) ──────────────────────────────────────────────────────
 step "5. DNS"
 CNAME_TARGET="${TUNNEL_ID}.cfargotunnel.com"
-REC_ID=$(cf GET "/zones/${ZONE_ID}/dns_records?name=${HOSTNAME_FQDN}" \
-  | jq_py 'r=d.get("result") or [];print(r[0]["id"] if r else "")')
-BODY="{\"type\":\"CNAME\",\"name\":\"${HOSTNAME_FQDN}\",\"content\":\"${CNAME_TARGET}\",\"proxied\":true}"
-if [ -n "$REC_ID" ]; then
-  cf PUT "/zones/${ZONE_ID}/dns_records/${REC_ID}" "$BODY" >/dev/null
-  warn "dns        : record existed — updated to ${CNAME_TARGET:0:16}…"
-else
-  cf POST "/zones/${ZONE_ID}/dns_records" "$BODY" >/dev/null
-  ok "dns        : ${HOSTNAME_FQDN} -> ${CNAME_TARGET:0:16}…"
-fi
+
+# Both names, same tunnel. A record that already exists is REPOINTED at the
+# tunnel this host actually runs -- which is the repair for the state this zone
+# is in now, where hub-ksgco.flarevault.dev points at a tunnel with zero
+# connections and has never served anything.
+for FQDN in "$HOSTNAME_FQDN" "$ALIAS_FQDN"; do
+  [ -n "$FQDN" ] || continue
+  REC_ID=$(cf GET "/zones/${ZONE_ID}/dns_records?name=${FQDN}" \
+    | jq_py 'r=d.get("result") or [];print(r[0]["id"] if r else "")')
+  BODY="{\"type\":\"CNAME\",\"name\":\"${FQDN}\",\"content\":\"${CNAME_TARGET}\",\"proxied\":true}"
+  if [ -n "$REC_ID" ]; then
+    cf PUT "/zones/${ZONE_ID}/dns_records/${REC_ID}" "$BODY" >/dev/null
+    warn "dns        : ${FQDN} existed — repointed to ${CNAME_TARGET:0:16}…"
+  else
+    cf POST "/zones/${ZONE_ID}/dns_records" "$BODY" >/dev/null
+    ok "dns        : ${FQDN} -> ${CNAME_TARGET:0:16}…"
+  fi
+done
 
 # ── 6. Access (idempotent) ───────────────────────────────────────────────────
 # Nothing public is created without a gate in front of it.
