@@ -98,7 +98,12 @@ def serve_app(handler, path, params):
             handler.send_header('Content-Length', str(len(body)))
             # Public page, no session, nothing personal -- but say so, so a
             # proxy never caches it as if it were an authenticated response.
-            handler.send_header('Cache-Control', 'public, max-age=300')
+            # no-cache, not max-age. This is a LOGIN SPACE: edge-caching it
+            # for five minutes meant Cloudflare served a stale copy of
+            # whatever it saw first -- including the 404s from before this
+            # hostname had DNS -- and no amount of fixing the origin showed
+            # through. A public page is not the same as a cacheable one.
+            handler.send_header('Cache-Control', 'no-cache')
             handler.end_headers()
             handler.wfile.write(body)
         except FileNotFoundError:

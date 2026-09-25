@@ -543,6 +543,7 @@ def serve_lobby(handler, path, params):
     # back to fetching, which at least produces a diagnosable error rather than
     # an empty screen.
     boot = 'null'
+    role_cookie = ''
     try:
         import json as _json                      # noqa: PLC0415
         from handlers import lobby as _lobby      # noqa: PLC0415
@@ -585,6 +586,7 @@ def serve_lobby(handler, path, params):
         _lobby.get_lobby(cap, '/api/lobby', {})
         if cap.payload and cap.payload[0] == 200:
             boot = _json.dumps(cap.payload[1])
+            role_cookie = tok
     except Exception:
         boot = 'null'
 
@@ -597,10 +599,27 @@ def serve_lobby(handler, path, params):
     handler.send_response(200)
     handler.send_header('Content-Type', 'text/html; charset=utf-8')
     handler.send_header('Content-Length', str(len(body)))
-    # The shell is public-shaped; everything it shows arrives over an
-    # authenticated fetch. no-cache rather than a max-age so a deploy is picked
-    # up on the next load, which matters for the page an operator lands on.
+    # This page now carries fleet data, so it must not sit in a proxy or a
+    # back-button cache.
     handler.send_header('Cache-Control', 'no-store')
+
+    # THE CARRIER COOKIE, set here rather than by the page.
+    #
+    # lobby.html used to write it after fetching /api/door. That fetch is gone
+    # -- it was the cross-app call the browser reported as CORS -- so nothing
+    # wrote the cookie any more, and clicking a server went nowhere:
+    # route_into_server had no role token to verify and refused silently.
+    #
+    # A card click is a NAVIGATION and carries no headers, only cookies, which
+    # is the whole reason this cookie exists. Path=/s/ so it is sent on
+    # exactly one prefix and nowhere else. Safe only because /s/ is GET-only;
+    # if a write ever lands under that prefix this becomes a CSRF hole, and
+    # that is stated at refuse_write too.
+    if role_cookie:
+        handler.send_header(
+            'Set-Cookie',
+            '%s=%s; Path=/s/; Max-Age=1800; SameSite=Strict; Secure; HttpOnly'
+            % (ROLE_COOKIE, role_cookie))
     handler.end_headers()
     handler.wfile.write(body)
 
