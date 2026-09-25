@@ -168,12 +168,19 @@ def get_context(handler, path, params):
 def get_sitemap(handler, path, params):
     """# 20302716  GET /api/sitemap — derived from the router, not maintained
 
-    This was a hand-written list of paths and descriptions. It had drifted, as
-    hand-written lists do: it advertised GET and POST /api/vault -- "Encrypted
-    credential vault" -- which kernel/router.py reserves and deliberately never
-    implements, with the note that if the prefix ever appears, something has
-    gone wrong. So the server's own public map offered a credential store that
-    does not exist and must not.
+    This was a hand-written list of paths and descriptions, and deriving it
+    instead corrected the wrong thing about it.
+
+    I assumed it had drifted, because it advertised GET and POST /api/vault
+    while kernel/router.py line 38 says the prefix is RESERVED AND DELIBERATELY
+    UNIMPLEMENTED. It had not drifted. Sixty-six lines below that comment, the
+    same file routes both verbs to real handlers in config.py, and the live
+    server answers them. The hand-written list was telling the truth and the
+    doctrine comment above it was the lie.
+
+    Deriving does not fix that -- the vault still appears here, because it is
+    still served. It only means this endpoint can no longer be wrong on its
+    own. Whether /api/vault should exist at all is a decision, not a drift.
 
     It now reads kernel.router.ROUTES, which is the same table that dispatches
     every request. A route cannot be advertised unless it is served, and cannot
