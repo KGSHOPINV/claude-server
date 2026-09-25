@@ -11,9 +11,18 @@
   replaces this file and nothing else changes. Anything clever here would have
   to be unpicked then.
 
+  THIS PAGE IS THE LOGIN SPACE and nothing else. It is the only public thing
+  on this domain; everything else -- FlareSHub at /fleet, a server at
+  /s/<id>/ -- sits behind Cloudflare Access on a path.
+
   It says what this is and offers the one door. It does not list servers, name
-  projects, or hint at what is behind the gate -- this page is public, and a
-  public page that enumerates your infrastructure is a map for someone else.
+  projects, or hint at what is behind the gate. A public page that enumerates
+  your infrastructure is a map for someone else.
+
+  One domain, pages behind one login. Not a subdomain per screen: that costs a
+  DNS record, an ingress rule and an Access app every time a page is added,
+  and each one is a chance to create the door without the lock -- which has
+  already happened once on this account.
 -->
 <style>
   :root{
@@ -57,7 +66,7 @@
     <h1>FlareVault</h1>
     <p>Private infrastructure. Access is by invitation.</p>
 
-    <a class="enter" href="/hub">Sign in</a>
+    <a class="enter" href="/fleet">Sign in</a>
 
     <div class="foot">
       Locked out? The hub is always reachable over Tailscale with a local

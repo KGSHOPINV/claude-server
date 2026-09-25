@@ -35,7 +35,15 @@ SPLASH_HOSTS = [h.strip().lower() for h in os.environ.get(
 #
 # Set HUB_DASHBOARD_HOSTS to change it without touching code.
 DASHBOARD_HOSTS = [h.strip().lower() for h in os.environ.get(
-    'HUB_DASHBOARD_HOSTS', 'dashboard.flarevault.dev').split(',') if h.strip()]
+    'HUB_DASHBOARD_HOSTS', 'flarevault.dev,www.flarevault.dev').split(',') if h.strip()]
+
+# ONE DOMAIN, PAGES BEHIND ONE LOGIN -- not a subdomain per screen.
+#
+# This was dashboard.flarevault.dev. That name belongs to FlareVault, and a
+# hostname per screen means a Cloudflare app, a DNS record and an ingress rule
+# every time a page is added. The apex is the public login space; FlareSHub is
+# a PATH behind it.
+FLARESHUB_PATHS = ('/fleet', '/flareshub')
 UI_DIR      = os.path.join(_BASE_DIR, 'ui')
 
 # Only these extensions are ever served from ui/. No wildcard static hosting.
@@ -107,7 +115,11 @@ def serve_app(handler, path, params):
     # every hostname this origin has. A lobbyhost that is missing or broken
     # then takes the app down everywhere rather than on the dashboard host
     # alone. Imported here, the failure stays where the feature is.
-    if host in DASHBOARD_HOSTS and path in ('/', '/mobile', '/desktop'):
+    # The apex: '/' is the PUBLIC login space and must stay public, so it is
+    # handled by the splash block above. FlareSHub sits behind it on a path,
+    # and Cloudflare Access is scoped to that path rather than the hostname --
+    # which is what lets one domain hold a public door and a private room.
+    if host in DASHBOARD_HOSTS and path.split('?')[0] in FLARESHUB_PATHS:
         from handlers.lobbyhost import serve_lobby  # noqa: PLC0415
         serve_lobby(handler, path, params)
         return
