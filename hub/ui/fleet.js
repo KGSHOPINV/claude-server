@@ -334,8 +334,11 @@
     box.innerHTML = '<div style="padding:10px;font-size:11px;color:var(--muted)">Reading ' +
       esc(sid) + ' through the lobby…</div>';
 
-    const r = await window.HubData.request(
-      window.location.origin + '/api/lobby/server/' + encodeURIComponent(sid) + '?view=status');
+    /* get(), not request(): request() is the raw wrapper and carries no role
+     * JWT, so this returned 401 while the token sat cached one function away.
+     * get() adds the Bearer, routes through the lobby, and lets the server
+     * own the allowlist. */
+    const r = await window.HubData.get('status', { server: sid });
     const d = r && r.data || {};
 
     if (!r.ok || d.ok === false) {
