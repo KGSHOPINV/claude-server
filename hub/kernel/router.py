@@ -309,8 +309,50 @@ def shadow_report():
         return list(_shadow_denials)
 
 
+# Hosts that are PUBLIC by design and must serve the splash and nothing else.
+# Kept in step with handlers/identity.py:SPLASH_HOSTS via the same env var.
+SPLASH_HOSTS = [h.strip().lower() for h in os.environ.get(
+    'HUB_SPLASH_HOSTS', 'flarevault.dev,www.flarevault.dev').split(',') if h.strip()]
+
+# The only paths a splash host may reach. Everything else is 404 — not 403,
+# which would confirm the route exists.
+SPLASH_ALLOW = ('/', '/mobile', '/desktop', '/manifest.json', '/sw.js')
+
+
+# 20200325  _splash_only — the apex must never reach the API
+def _splash_only(handler, path):
+    """Door 1 is a PUBLIC page, so it cannot sit behind Access. That means the
+    hostname serving it reaches this origin with no gate in front of it at all.
+
+    Gates here run in shadow mode unless HUB_ENFORCE_GATES is set, so 'gate 1'
+    stops nothing. Pointing the apex at this origin without this check would
+    publish /api/config, /api/status, /api/containers and the rest to the open
+    internet.
+
+    That is not hypothetical. A second hostname was added to this origin
+    earlier tonight without an Access app, and https://<that host>/api/config
+    returned the hub's configuration to anyone who asked, for about four
+    minutes.
+
+    So a splash host gets the splash and the PWA files it needs, and 404 for
+    everything else. This holds whether or not gate enforcement is ever
+    switched on, because it does not depend on gates.
+    """
+    try:
+        host = (handler.headers.get('Host', '') or '').split(':')[0].lower()
+    except Exception:
+        return False
+    if host not in SPLASH_HOSTS:
+        return False
+    return path.split('?')[0] not in SPLASH_ALLOW
+
+
 def dispatch(handler, method, path, params=None, body=None, db_conn_fn=None):
     """Route one request. Returns True if handled, False to fall through."""
+    if _splash_only(handler, path):
+        handler.send_response(404)
+        handler.end_headers()
+        return True
     route = resolve(method, path)
     if route is None:
         return False
