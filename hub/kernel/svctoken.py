@@ -211,6 +211,32 @@ def _utc():
 
 
 # 20200401  _node_facts — the zone, read from the machine rather than hardcoded
+# 20200412  edge_headers — the Access credential, not bound to any node
+def edge_headers():
+    """The service token headers alone, for a call whose URL is already known.
+
+    headers_for(node_id) validates the id because it also builds the URL. The
+    heartbeat does not need that: its target comes from central_url in the
+    identity file, and the token is account-wide -- the node policy is
+    any_valid_service_token, so one token opens every node.
+
+    Returns {} when no token is held, which means DO NOT CALL. A heartbeat
+    that goes out without the credential is refused at the edge and reads as
+    the node being down.
+    """
+    try:
+        if not have_token():
+            return {}
+        cid, sec, _ = _read()
+        if not cid or not sec:
+            return {}
+        return {'CF-Access-Client-Id': cid,
+                'CF-Access-Client-Secret': sec.reveal(),
+                'User-Agent': USER_AGENT}
+    except Exception:
+        return {}
+
+
 # Sent on every outbound node call. See headers_for() for why this matters.
 USER_AGENT = 'FlareSHub-Lobby/1.0'
 
