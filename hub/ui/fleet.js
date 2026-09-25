@@ -307,7 +307,70 @@
       layerStrip(d.layer) +
       (compact ? '' : doorStrip(d.doors)) +
       rows.map(r => card(r, r.server_id === cur)).join('') +
+      '<div id="fleet-' + key + '-detail"></div>' +
       targetNote(rows, cur);
+
+    // A picker that only highlights a card is a list. Selecting a server has
+    // to SHOW that server, or the operator clicks, sees nothing move, and
+    // concludes the switcher is broken -- which is exactly what happened.
+    if (cur) V.detail(key, cur);
+  };
+
+  /* Drill in. Reads the node THROUGH THE LOBBY -- never the node hostname,
+   * which answers 403 to a browser by design.
+   *
+   * Everything here is reported, never repaired: if the node is unreachable
+   * the finding and its suggested fix are what render. Showing the local
+   * box's numbers under a remote server's name is the one failure this whole
+   * layer exists to make impossible. */
+  V.detail = async function (key, sid) {
+    const box = document.getElementById('fleet-' + key + '-detail');
+    if (!box || !window.HubData) return;
+    if (window.HubData.isSelf(sid)) {
+      box.innerHTML = '<div style="padding:8px 10px;font-size:10px;color:var(--muted2)">' +
+        'This is the box serving this page — its own views read it directly.</div>';
+      return;
+    }
+    box.innerHTML = '<div style="padding:10px;font-size:11px;color:var(--muted)">Reading ' +
+      esc(sid) + ' through the lobby…</div>';
+
+    const r = await window.HubData.request(
+      window.location.origin + '/api/lobby/server/' + encodeURIComponent(sid) + '?view=status');
+    const d = r && r.data || {};
+
+    if (!r.ok || d.ok === false) {
+      const f = d.finding || {};
+      box.innerHTML =
+        '<div style="padding:10px;border-top:1px solid var(--border)">' +
+        '<div style="font-size:11px;color:var(--red)">could not read ' + esc(sid) + '</div>' +
+        '<div style="font-size:10px;color:var(--muted);margin-top:4px">' +
+          esc(f.error || ('HTTP ' + (r.status || '?'))) + '</div>' +
+        (f.fix ? '<div style="font-size:10px;color:var(--muted2);margin-top:3px">' +
+                 esc(f.fix) + '</div>' : '') +
+        '</div>';
+      return;
+    }
+
+    const s = d.server || {};
+    const p = d.payload || d.node || {};
+    const cell = (k, v) => v === undefined || v === null || v === ''
+      ? '' : '<div style="display:flex;justify-content:space-between;padding:2px 0">' +
+             '<span style="color:var(--muted2)">' + esc(k) + '</span>' +
+             '<span style="font-family:var(--mono)">' + esc(String(v)) + '</span></div>';
+    box.innerHTML =
+      '<div style="padding:10px;border-top:1px solid var(--border);font-size:10px">' +
+      '<div style="font-size:11px;margin-bottom:6px">' + esc(s.name || sid) +
+        ' <span style="color:var(--muted2)">read through the lobby</span></div>' +
+      cell('server id', s.server_id || sid) +
+      cell('status', s.status) +
+      cell('containers', s.containers) +
+      cell('projects', s.projects) +
+      cell('needs attention', s.attention) +
+      cell('os', s.os) +
+      cell('uptime', s.uptime) +
+      cell('last seen', s.last_seen) +
+      cell('mode', p.mode) +
+      '</div>';
   };
 
   /* Says out loud where the rest of the app is now reading from, and — when
@@ -325,11 +388,11 @@
       Other views are pointed at <strong>${esc(row.name)}</strong>, read through the
       lobby's service token — the browser never calls a node hostname, which
       refuses humans by design.
-      <div style="color:var(--muted2);margin-top:3px">Limit: the lobby proxies
-      <code>/api/node</code> only, so views wanting other endpoints will say
-      <code>remote_path_unsupported</code> rather than quietly show local data.
-      Writes do not cross nodes at all — that is the layer 3 seam FlareVault
-      owns.</div>
+      <div style="color:var(--muted2);margin-top:3px">Reads are proxied from an
+      allowlist of the node's own views. Anything outside it says
+      <code>remote_path_unsupported</code> rather than quietly showing local
+      data. Writes do not cross nodes at all — that is the layer 3 seam
+      FlareVault owns.</div>
     </div>`;
   }
 
