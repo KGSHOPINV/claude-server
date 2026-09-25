@@ -30,12 +30,13 @@ warn(){ echo -e "  ${YELLOW}!${RESET} $*"; }
 die(){  echo -e "  ${RED}✗${RESET} $*" >&2; exit 1; }
 step(){ echo -e "\n${BOLD}${CYAN}$*${RESET}"; }
 
-NODE_NAME=""; ZONE=""; DRY_RUN=0; HUB_PORT="${HUB_PORT:-8765}"
+NODE_NAME=""; ZONE=""; DRY_RUN=0; HUB_PORT="${HUB_PORT:-8765}"; ALLOW_EMAIL=""
 while [ $# -gt 0 ]; do
   case "$1" in
     --node)    NODE_NAME="$2"; shift 2;;
     --zone)    ZONE="$2";      shift 2;;
     --port)    HUB_PORT="$2";  shift 2;;
+    --email)   ALLOW_EMAIL="$2"; shift 2;;
     --dry-run) DRY_RUN=1;      shift;;
     *) die "unknown argument: $1";;
   esac
@@ -275,8 +276,36 @@ JSON
 )" | jq_py 'print((d.get("result") or {}).get("id",""))')
   [ -n "$APP_ID" ] || die "Access app create failed — check the token has Access>Apps>Edit"
   ok "access     : app created"
-  warn "no policy attached yet — add an allow policy for your Google address in"
-  warn "Zero Trust > Access > Applications, or the app denies everyone by default"
+fi
+
+# THE POLICY. An Access app with no policy denies EVERY identity after login,
+# so the hostname 302s to a Google sign-in that can never succeed. This step
+# used to print a warning telling you to go add one in the dashboard by hand --
+# and on this account that warning was not acted on, so app 0f070dc3 has sat
+# with "policies": [] since it was created. A warning is not a step.
+#
+# Checked and created idempotently, because an app that already has a policy
+# must not get a second, looser one bolted on.
+POL_COUNT=$(cf GET "/accounts/${ACCOUNT_ID}/access/apps/${APP_ID}/policies" \
+  | jq_py 'print(len(d.get("result") or []))')
+if [ "${POL_COUNT:-0}" != "0" ]; then
+  ok "access     : ${POL_COUNT} policy(ies) already attached"
+elif [ -n "$ALLOW_EMAIL" ]; then
+  cf POST "/accounts/${ACCOUNT_ID}/access/apps/${APP_ID}/policies" "$(cat <<JSON
+{"name":"Allow ${ALLOW_EMAIL}","decision":"allow","precedence":1,
+ "include":[{"email":{"email":"${ALLOW_EMAIL}"}}]}
+JSON
+)" >/dev/null
+  RECHECK=$(cf GET "/accounts/${ACCOUNT_ID}/access/apps/${APP_ID}/policies" \
+    | jq_py 'print(len(d.get("result") or []))')
+  [ "${RECHECK:-0}" != "0" ] \
+    && ok "access     : allow policy for ${ALLOW_EMAIL}" \
+    || die "policy create reported success but the app still has none — check Access>Apps>Edit"
+else
+  # Refuse rather than leave a door that looks locked and is actually bricked.
+  die "Access app ${APP_ID} has no policy and no --email was given.
+     Without one, ${HOSTNAME_FQDN} sends you to a Google login that always
+     denies you. Re-run with:  --email you@example.com"
 fi
 
 # ── 7. cloudflared as a HOST service ─────────────────────────────────────────
