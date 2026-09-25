@@ -117,6 +117,16 @@ ROUTES = [
     # reachable on every hostname this origin answers to, including the
     # service-token-only node hostnames. identity.serve_app dispatches to it
     # on Host, the same way the splash does.
+    # FlareSHub, the page you land on after the login space. A real route, not
+    # a fall-through from serve_app: that one only ever answers /, /mobile and
+    # /desktop, so /fleet never reached the host dispatch and 404'd.
+    #
+    # Gate 0 because Cloudflare Access is scoped to this PATH and has already
+    # decided there is a person here. The page itself then fetches /api/door
+    # and /api/lobby, both of which do their own checks -- a hostile request
+    # that reached this path gets an empty shell and nothing else.
+    {"code": "20318701", "method": "GET",  "path": "/fleet",                     "prefix": False, "gate": 0, "handler": "serve_lobby",        "module": "lobbyhost"},
+    {"code": "20318704", "method": "GET",  "path": "/flareshub",                 "prefix": False, "gate": 0, "handler": "serve_lobby",        "module": "lobbyhost"},
     {"code": "20318702", "method": "GET",  "path": "/s/",                        "prefix": True,  "gate": 1, "handler": "route_into_server",  "module": "lobbyhost"},
     {"code": "20318703", "method": "POST", "path": "/s/",                        "prefix": True,  "gate": 1, "handler": "refuse_write",       "module": "lobbyhost"},
 
