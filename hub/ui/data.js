@@ -294,7 +294,6 @@
    * and say what it cannot show. It is NOT silently answered from the local
    * box: that would put another server's name over this server's numbers,
    * which is the single worst bug a bilateral UI can have. */
-  const REMOTE_PATHS = ['node', ''];
 
   function apiUrl(path) {
     let p = String(path == null ? '' : path).replace(/^\/+/, '');
@@ -311,8 +310,12 @@
       return request(p.url, { headers: authHeaders(o.headers) });
     }
 
+    /* ?view= names which of the node's read-only views to fetch. Without it
+     * every remote read returned that node's /api/node and the caller had to
+     * pretend that was what it asked for. */
     const res = await request(
-      ORIGIN + '/api/lobby/server/' + encodeURIComponent(want),
+      ORIGIN + '/api/lobby/server/' + encodeURIComponent(want)
+             + '?view=' + encodeURIComponent(p.path),
       { headers: await lobbyHeaders() });
 
     /* The drill-in's own failures pass through untouched: 404 no_such_server
@@ -321,13 +324,11 @@
      * never repair — the same rule the Python half follows. */
     if (!res.ok) return res;
 
-    if (REMOTE_PATHS.indexOf(p.path) < 0) {
-      return { ok: false, status: res.status, error: 'remote_path_unsupported',
-               detail: '/api/' + p.path + ' cannot be read on another node: the '
-                     + 'lobby proxies /api/node only. Adding a general '
-                     + 'cross-node proxy is a change to handlers/lobby.py.',
-               data: res.data };
-    }
+    /* The allowlist lives in handlers/lobby.py (PROXY_ALLOW) and the server
+     * refuses anything outside it with remote_path_unsupported. A second copy
+     * of that list here would be a second source of truth that goes stale --
+     * this one already had, claiming the lobby proxies /api/node only, hours
+     * after the passthrough landed. Let the server answer. */
     return res;
   }
 
