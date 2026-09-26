@@ -59,8 +59,8 @@ HTTPS_PORTS = {9443, 9090}
 # MIGRATION, not a cutover. Existing projects keep their ports until they choose
 # to move; only new ones are held to this. fksinv sits at 10100/10101 and
 # babyhelp at 12080, and neither is urgent.
-PROJECT_BAND_FLOOR = 12000
-PROJECT_BAND_CEIL  = 18999
+PROJECT_BAND_FLOOR = 7100
+PROJECT_BAND_CEIL  = 7899
 # 100 per project. The band has to hold everything a project will ever publish,
 # because the alternative is what fksinv and babyhelp already are: ports picked
 # one at a time from whatever was free that day, leaving a project scattered
@@ -79,7 +79,7 @@ PROJECT_BAND_CEIL  = 18999
 # Suggested, never enforced. The band is the boundary; the split inside it
 # belongs to the project, which knows its own shape better than the hub does.
 # Outgrowing 100 is a ticket, not a violation.
-PROJECT_BAND_SIZE  = 100
+PROJECT_BAND_SIZE  = 20
 
 DOCKER_ROOT = os.environ.get('HUB_DOCKER_ROOT', '/srv/docker')
 
