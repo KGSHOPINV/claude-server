@@ -407,7 +407,16 @@ PORT_LANES = [
     {'name': 'AI',             'color': 'purple',  'ranges': [(11000, 11999)]},
     {'name': 'Tools',          'color': 'blue',    'ranges': [(8000, 8999)]},
     {'name': 'Supabase Stack', 'color': 'teal',    'ranges': [(10000, 10999)]},
-    {'name': 'Projects',       'color': 'green',   'ranges': [(12000, 18999)]},
+    # DERIVED, never a second copy. This was a hardcoded (12000, 18999) beside
+    # PROJECT_BAND_FLOOR/CEIL above, and a partial revert moved the constants
+    # to 7100-7899 and left this at 12000-18999. The live server then handed
+    # projects ports from one range while labelling a different range as
+    # theirs -- and changewatch published a bulletin announcing the lane that
+    # was not being served.
+    #
+    # One definition. Two things that must agree cannot be written twice.
+    {'name': 'Projects',       'color': 'green',
+     'ranges': [(PROJECT_BAND_FLOOR, PROJECT_BAND_CEIL)]},
 ]
 
 # Flat port → service name registry for quick lookup

@@ -178,7 +178,21 @@ def _facts():
                            cwd=os.path.dirname(BASE_DIR),
                            capture_output=True, text=True, timeout=5)
         ref = r.stdout.strip() if r.returncode == 0 else ''
-        if ref:
+        # NOT WATCHED. A moving git ref is not something a project can act on,
+        # and this fired on EVERY deploy -- twenty bulletins in one day saying
+        # the hub code changed, which is precisely what STATE.md forbids:
+        # "If every bulletin demands work they stop reading them."
+        #
+        # The ref is still published where it belongs: /api/registry and the
+        # server receipt both carry `master`, and staleness is already a
+        # MARKER there for the operator. A marker in a record an operator
+        # reads is not the same thing as mail addressed to a project.
+        #
+        # The version of this worth having fires on control.promote() -- a ref
+        # the server has actually promoted IS a thing to announce. promote()
+        # has no route wired to it yet, so watching it today would make the
+        # fact dead rather than quiet. When that route exists, watch it here.
+        if False and ref:
             out['master'] = ref
     except Exception:
         pass
