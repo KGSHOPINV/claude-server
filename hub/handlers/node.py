@@ -233,9 +233,32 @@ def get_admit(handler, path, params):
     dr = land['data_root']
     data_dir = ('%s/<project>' % dr['path'].rstrip('/')) if dr['dedicated']                else '/srv/docker/<project>/data'
 
+    # WHICH SERVER, AND WHAT IS COMING. THE-PLAN step 6, verbatim: "YOUR GOING
+    # TO ALSO PROVIDE THEM WITH THERE SERVER REIPET AND THERE SERVER ID ... AND
+    # ALSO ALL THE PAENDINDING SHIT THAT IS GOING TO GO DOWN STREAM LATER".
+    # Both were missing.
+    #
+    # server_id: a project learned the node's NAME and machine-id, never
+    # fvn_xxxxxx -- the derived id the whole fleet keys on, which survives a
+    # rename while a hostname does not. A project recording "ksgcohub"
+    # recorded something that can change under it.
+    #
+    # pending: a project told its band is 7100-7899 will bind there. If that
+    # band is due to move it must know AT THE MOMENT IT IS TOLD, not in a
+    # bulletin it may never read. Pending is what makes a receipt honest about
+    # its own shelf life -- and it is why a NEW project can expect zero diffs:
+    # it was told everything, including what is coming, before it built.
+    try:
+        from handlers import registry as _reg   # noqa: PLC0415
+        _pend = _reg._pending()
+    except Exception:
+        _pend = []
+
     handler.send_json({
         'node':        (_enrollment() or {}).get('node', ''),
+        'server_id':   _idm.server_id(),
         'machine_id':  _machine_id(),
+        'pending':     _pend,
         'project':     wanted or None,
         'name_available': (not collision) if wanted else None,
         'existing_projects': existing,
