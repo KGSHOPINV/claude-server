@@ -253,8 +253,14 @@ def post_mesh_register(handler, path, params, body):
 def get_mesh_fleet(handler, path, params):
     """# 20312703  GET /api/mesh/fleet
 
-    On a node this returns an empty fleet and mode:node — which is the truthful
-    answer, and lets one UI talk to either without branching.
+    NO LONGER EMPTY ON A NODE. kernel.fleet reads the zone's `flareshub-*`
+    records, so any box that knows its zone and holds a Cloudflare token
+    enumerates the fleet whether or not anything beats to it. A node with
+    neither still answers an empty fleet, and `summary.register` says why in
+    words instead of leaving a zero to be misread as "no servers".
+
+    Rows from the register alone carry status `enrolled` and no last_seen: we
+    know they exist, we have never heard from them. Never `healthy`.
 
     Each node also carries its `congruence`: congruent, drift or unknown. That
     is a ref comparison and nothing else — a node reporting different paths and

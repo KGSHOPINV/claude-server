@@ -635,8 +635,11 @@ def route_into_server(handler, path, params):
 
     Order of checks, and none of them may be reordered:
 
-      1. central only. A node has no fleet, so this route on a node is 409 and
-         names where the lobby lives.
+      1. can this box see the fleet at all. NOT "is it central" -- any enrolled
+         node may route an operator into a server, because the zone is the
+         register and every node can read it. A box that has no zone and no
+         Cloudflare token genuinely cannot name its peers, and that is the one
+         refusal left: 503, naming what is missing rather than a rank.
       2. a verified role. No identity, no answer -- and the 401 names the door.
       3. VISIBILITY BEFORE EXISTENCE. An id this role may not see and an id
          that was never minted return the same 404. Anything that told them
@@ -658,8 +661,13 @@ def route_into_server(handler, path, params):
     from kernel import identity as _id      # noqa: PLC0415
     from handlers import lobby as _lobby    # noqa: PLC0415
 
-    if not _id.is_central():
-        _lobby._not_central(handler)
+    ok, reg = _lobby._can_serve_lobby()
+    if not ok:
+        # Not "you are not central" any more: this box cannot find out what the
+        # fleet is, and the refusal names what is missing. Any enrolled node may
+        # route an operator into a server; a box with no zone and no Cloudflare
+        # token cannot, because it cannot say which servers there are.
+        _lobby._cannot_discover(handler, reg)
         return
 
     claims, reason = _claims(handler)
@@ -826,11 +834,18 @@ def refuse_write(handler, path, params, body):
     same reason it does in handlers/lobby.py: answering 'not implemented' to
     someone who may not see this server would confirm the server exists.
     """
-    from kernel import identity as _id      # noqa: PLC0415
+    # identity is no longer imported here. It was only ever read for
+    # is_central(), and this route does not depend on rank any more -- the
+    # question is whether this box can name the fleet, which lobby answers.
     from handlers import lobby as _lobby    # noqa: PLC0415
 
-    if not _id.is_central():
-        _lobby._not_central(handler)
+    ok, reg = _lobby._can_serve_lobby()
+    if not ok:
+        # Not "you are not central" any more: this box cannot find out what the
+        # fleet is, and the refusal names what is missing. Any enrolled node may
+        # route an operator into a server; a box with no zone and no Cloudflare
+        # token cannot, because it cannot say which servers there are.
+        _lobby._cannot_discover(handler, reg)
         return
 
     claims, reason = _claims(handler)

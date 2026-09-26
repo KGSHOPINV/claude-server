@@ -90,7 +90,12 @@ ROUTES = [
     {"code": "20313703", "method": "POST", "path": "/api/registry/",              "prefix": True,  "gate": 1, "handler": "post_registry_project","module": "registry"},
     {"code": "20313704", "method": "POST", "path": "/api/ack/",                   "prefix": True,  "gate": 1, "handler": "post_ack",             "module": "registry"},
 
-    # ── Mesh (module 12) — hub-and-spoke: nodes report UP, never laterally ──
+    # ── Mesh (module 12) — beats ENRICH the register; the zone IS the register
+    # Corrected 2026-09-26. This said "hub-and-spoke: nodes report UP, never
+    # laterally". Who exists is answered by the zone's flareshub-* records
+    # (kernel/fleet.discover), so no box has to be up for the fleet to be
+    # visible. These two POSTs still only ever go one way, and a node still
+    # never writes another node's state -- that part was the useful half.
     {"code": "20312701", "method": "POST", "path": "/api/heartbeat",              "prefix": False, "gate": 0, "handler": "post_heartbeat",       "module": "mesh"},
     {"code": "20312702", "method": "POST", "path": "/api/mesh/register",          "prefix": False, "gate": 0, "handler": "post_mesh_register",   "module": "mesh"},
     {"code": "20312703", "method": "GET",  "path": "/api/mesh/fleet",             "prefix": False, "gate": 1, "handler": "get_mesh_fleet",       "module": "mesh"},

@@ -311,9 +311,42 @@ def node_url(node_id):
         zone = _node_facts()['zone']
         if not zone:
             return ''
-        return 'https://flareshub-%s.%s' % (label, zone)
+        return 'https://%s%s.%s' % (hostname_prefix(), label, zone)
     except Exception:
         return ''
+
+
+# 20200413  zone — the zone this box enrolled into, or ''
+def zone():
+    """The zone as a bare string, for a caller that needs the REGISTER rather
+    than one node's URL.
+
+    node_url() answers "where is node X", which is what the lobby needed while
+    the fleet was something a node reported. kernel.fleet now enumerates the
+    fleet FROM the zone, and that question is the other direction: it needs the
+    zone itself, not a hostname built from an id it does not have yet.
+
+    Public so kernel.fleet does not reach into _node_facts(). Same derivation,
+    same refusal on a malformed zone, and '' still means "this box cannot say"
+    rather than "there is no zone". Never raises.
+    """
+    try:
+        return _node_facts()['zone']
+    except Exception:
+        return ''
+
+
+# 20200414  hostname_prefix — the one literal both directions agree on
+def hostname_prefix():
+    """'flareshub-'. Named once, read by node_url()'s format string above and
+    by kernel.fleet when it maps a DNS name back to a server id.
+
+    A second copy of this string in the reverse direction is how the two sides
+    of a round trip drift: the forward one would keep building names the
+    reverse one no longer recognises, and the symptom is a fleet that silently
+    lists nothing.
+    """
+    return 'flareshub-'
 
 
 # 20200404  _key — machine-bound, so a copied file is useless elsewhere

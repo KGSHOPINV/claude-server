@@ -280,7 +280,12 @@ def _row(sid, rec):
         'os':           rec.get('os', ''),
         'uptime':       rec.get('uptime', ''),
         'self':         False,
-        'source':       'heartbeat',
+        # NOT hardcoded to 'heartbeat' any more. kernel.fleet has two sources
+        # now — the zone's register and the beats — and a row discovered from
+        # DNS that claimed it was heard from would be the single most
+        # misleading field on the card: it is exactly the difference between
+        # "this node exists" and "this node is alive".
+        'source':       rec.get('source') or 'heartbeat',
     }
 
 
@@ -503,13 +508,69 @@ def _deny(handler, reason, status=401):
                        'door': DOOR_HOST}, status)
 
 
-def _not_central(handler):
-    """A node is not the lobby. Saying 'not_central' is the honest answer and
-    matches what /api/heartbeat already does; returning an empty lobby instead
-    would read as 'you have no servers', which is a different and wrong fact.
+# 20316714  _can_serve_lobby — may this box answer for the fleet, and if not why
+def _can_serve_lobby():
+    """Returns (ok, meta). ANY ENROLLED NODE MAY SERVE THE LOBBY.
+
+    WHAT THIS REPLACED, AND WHY. Every entry point in this file used to open
+    with `if not _id.is_central(): _not_central(handler)`. That made one box the
+    only one that could show the fleet — a single point of failure for SEEING,
+    and a hierarchy the operator never asked for. The entry is the centre;
+    every server is a node; nobody is special.
+
+    But the refusal could not simply vanish, because a box with no zone and no
+    Cloudflare token GENUINELY CANNOT enumerate its peers. The refusal was
+    right; its REASON was wrong. "I am not central" described a rank. This
+    describes a capability, and names what is missing:
+
+        can it read the register?   kernel.fleet.discover() — zone DNS
+        has anything reported?      kernel.fleet.fleet() — heartbeat records
+
+    Either one is enough. Both absent is the only refusal left, and it is a
+    statement about this box's configuration rather than about its status.
+
+    meta is kernel.fleet's discovery meta, unaltered: zone, cf_token_source (a
+    path or an env var NAME, never a value), why, fix.
     """
-    handler.send_json({'ok': False, 'error': 'not_central', 'mode': _id.mode(),
-                       'lobby': 'dashboard.flarevault.dev'}, 409)
+    _nodes, meta = _fleet.discover()
+    if meta.get('ok'):
+        return True, meta
+    if _fleet.fleet():
+        # Nothing to discover with, but nodes have reported here. A box
+        # receiving beats can answer for what it has been told, and saying
+        # otherwise would throw away knowledge it already holds.
+        return True, meta
+    return False, meta
+
+
+def _cannot_discover(handler, meta):
+    """The one refusal left: this box cannot find out what the fleet is.
+
+    NOT an empty lobby. An empty list reads as "you have no servers", which is
+    a different and wrong fact — the servers are there, this box cannot see
+    them. Same reasoning the old not_central refusal used, applied to the
+    honest reason.
+
+    503, not 409. 409 said the request conflicted with this box's ROLE. Nothing
+    is wrong with the request: the capability is missing here, which is what
+    503 means, and it may be present on the next box the operator tries.
+
+    Report, never repair (Law IV): the `fix` comes from kernel.fleet and names
+    a command, and nothing here retries or falls back to guessing a fleet.
+    """
+    handler.send_json({
+        'ok': False,
+        'error': 'cannot_discover_fleet',
+        'mode': _id.mode(),
+        'server_id': _id.server_id(),
+        'zone': (meta or {}).get('zone', ''),
+        # A path or '$CF_API_TOKEN'. Never the value — Law V holds even in a
+        # refusal, and especially in one an operator will paste into a chat.
+        'cf_token_source': (meta or {}).get('cf_token_source'),
+        'why': (meta or {}).get('why'),
+        'fix': (meta or {}).get('fix'),
+        'door': DOOR_HOST,
+    }, 503)
 
 
 # 20316701  GET /api/lobby — the room, shaped by the role that walked in
@@ -525,8 +586,9 @@ def get_lobby(handler, path, params):
     describing servers the caller must not know about — the classic version of
     this bug is a client seeing `nodes: 7` beside their single row.
     """
-    if not _id.is_central():
-        _not_central(handler)
+    ok, reg = _can_serve_lobby()
+    if not ok:
+        _cannot_discover(handler, reg)
         return
 
     claims, reason = _identity(handler)
@@ -595,8 +657,9 @@ def get_lobby_server(handler, path, params):
     lobby it cannot use. Layer 2 begins where CONTROLS begin, and the `can`
     block below is what the UI renders buttons from.
     """
-    if not _id.is_central():
-        _not_central(handler)
+    ok, reg = _can_serve_lobby()
+    if not ok:
+        _cannot_discover(handler, reg)
         return
 
     claims, reason = _identity(handler)
@@ -689,8 +752,9 @@ def post_lobby_action(handler, path, params, body):
     confirm the server exists — the 501 must sit BEHIND the 404, not in front
     of it.
     """
-    if not _id.is_central():
-        _not_central(handler)
+    ok, reg = _can_serve_lobby()
+    if not ok:
+        _cannot_discover(handler, reg)
         return
 
     claims, reason = _identity(handler)
@@ -747,8 +811,9 @@ def post_lobby_vault(handler, path, params, body):
     roles that have one and get a clear answer when it is pushed, rather than a
     404 that reads as "this feature was removed".
     """
-    if not _id.is_central():
-        _not_central(handler)
+    ok, reg = _can_serve_lobby()
+    if not ok:
+        _cannot_discover(handler, reg)
         return
 
     claims, reason = _identity(handler)

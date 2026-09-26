@@ -1,16 +1,43 @@
 #!/usr/bin/env python3
 """
-# 20200011  kernel.fleet — the fleet registry and status state machine (central)
+# 20200011  kernel.fleet — the fleet registry and status state machine
 
-Hub-and-spoke, per the FlareVault mesh spec (2026-09-22):
+THE ZONE IS THE FLEET REGISTER. Corrected 2026-09-26.
 
-    node -> central    heartbeat, pushed every 30s
-    central -> node    console proxy, on demand when a user drills in
-    node -> node       NEVER. No lateral mesh.
+This file used to open by declaring hub-and-spoke: "central is the only
+aggregator", "node -> node NEVER, no lateral mesh". That was wrong, and it was
+wrong in the expensive direction — it made one box a single point of failure
+for the ability to SEE the fleet, and it invented a hierarchy nobody asked for.
 
-Central is the only aggregator. If central goes down the nodes keep running,
-they just cannot report; when it returns they resume. No split-brain, because
-there is only ever one writer of fleet state.
+The entry is the centre. Every server is a node. Nobody is special.
+
+What makes that work was already true and merely unused: enroll.sh publishes
+every node at a hostname DERIVED FROM ITS OWN SERVER ID,
+
+    flareshub-<server-id-with-underscore-as-hyphen>.<zone>
+
+so listing `flareshub-*` on the zone ENUMERATES THE FLEET. No heartbeat, no
+election, no central box, no agreement to maintain. Confirmed live against
+flarevault.dev on 2026-09-26: two records, flareshub-fvn-3b8c1b and
+flareshub-fvn-685a59. The register is the thing the fleet is already built on.
+
+So the registry now has TWO sources, and they answer different questions:
+
+    zone DNS        WHO EXISTS.   Authoritative, no peer's cooperation needed.
+    heartbeats      WHAT IS TRUE NOW.  Live payload: containers, projects,
+                    attention, os, uptime. Enrichment, never the register.
+
+A node known only from DNS is `enrolled`: we know it exists and we have never
+heard from it. It is never `healthy` — DISCOVERING THAT A NODE EXISTS IS NOT A
+CLAIM ABOUT ITS HEALTH, and collapsing those two would turn the register into
+the same kind of lie a stuck sweeper produces.
+
+WHAT IS STILL TRUE. Nothing here writes to another box, ever. The lateral call
+this file enables is a READ, and only the read the lobby already made:
+kernel/svctoken.py's headers_for/node_url, over Cloudflare, service token only.
+"No lateral mesh" was a rule about state; it is now a rule about WRITES, which
+is the part that actually prevented split-brain. There is still only ever one
+writer of a node's state: that node.
 
 Status is DERIVED from last_seen on every read rather than written by a
 sweeper. A timer that stops running would otherwise leave every node frozen at
@@ -30,8 +57,11 @@ restored is the KNOWLEDGE that the node exists, never a claim about its health.
 """
 import json
 import os
+import re
 import threading
 import time
+import urllib.error
+import urllib.request
 from datetime import datetime, timezone
 
 HEARTBEAT_INTERVAL = 30          # seconds; nodes push on this cadence
@@ -44,8 +74,28 @@ DEGRADED = 'degraded'
 UNREACHABLE = 'unreachable'
 RECOVERING = 'recovering'
 
-_fleet = {}                      # server_id -> record
+# Known from the zone, never heard from. Distinct from ENROLLING, which means
+# "it announced itself and its first beat has not landed yet" — a node that has
+# begun talking to us. ENROLLED means we found it in the register and it has
+# said nothing at all, which may be permanent and is not a fault.
+ENROLLED = 'enrolled'
+
+_fleet = {}                      # server_id -> record, written by heartbeats
 _lock = threading.Lock()
+
+# ── Zone discovery ───────────────────────────────────────────────────────────
+CF_API = 'https://api.cloudflare.com/client/v4'
+DISCOVERY_TTL = 300             # seconds; the register changes at enrolment pace
+DISCOVERY_TIMEOUT = 8           # one read must not hold a page open
+DISCOVERY_MAX_PAGES = 10        # 1000 records; a bound, not an expectation
+
+# The escape hatch, because a box that must not make outbound API calls is a
+# legitimate configuration and should not have to have its zone taken away to
+# get there. Unset means on.
+DISCOVERY_ON = os.environ.get('HUB_FLEET_DISCOVERY', '1').strip() != '0'
+
+_disc = {'at': 0.0, 'nodes': {}, 'meta': None}
+_disc_lock = threading.Lock()
 
 # Beside control.db: this is what central knows about the fleet, and it belongs
 # with the other things that cannot be re-derived from this box alone.
@@ -218,8 +268,267 @@ def _derive_status(rec):
     return rec.get('status', HEALTHY), missed
 
 
+# 20200346  _cf_token — the same places enroll.sh looks, and the VALUE NEVER LEAVES
+def _cf_token():
+    """Returns (token, source). `source` names $CF_API_TOKEN or a file PATH and
+    is safe to put in an API response; the token itself is used here and goes
+    nowhere else — not into a return value a handler renders, not into a log
+    line, not into an exception message.
+
+    The same three places enroll.sh, cf-check.py, situation.py and tracks.py
+    look, written out again rather than imported because those are all in
+    hub/tools/ and tools import kernel, never the other way round. Reversing
+    that for four lines would put a diagnostic tool on the hub's startup path.
+    """
+    t = os.environ.get('CF_API_TOKEN', '').strip()
+    if t:
+        return t, '$CF_API_TOKEN'
+    for p in (os.path.expanduser('~/.cf-token'), '/etc/flare/token'):
+        try:
+            with open(p, encoding='utf-8', errors='ignore') as f:
+                m = re.findall(r'[A-Za-z0-9_\-]{30,}', f.read())
+            if m:
+                return m[0], p
+        except Exception:
+            continue
+    return '', ''
+
+
+# 20200347  _cf_get — one Cloudflare read. GET only, structurally.
+def _cf_get(token, path, timeout=DISCOVERY_TIMEOUT):
+    """Returns (body, why). Exactly one is falsy.
+
+    No method parameter, the same shape situation.py's _cf has and for the same
+    reason: this module cannot be edited into something that writes by passing
+    a string. Discovering the fleet must not be able to change it.
+
+    `why` is a short human sentence. It never contains the token — the only
+    place the token appears is the Authorization header built two lines down.
+    """
+    if not token:
+        return None, 'no Cloudflare API token on this box'
+    req = urllib.request.Request(
+        CF_API + path,
+        headers={'Authorization': 'Bearer ' + token,
+                 'Content-Type': 'application/json',
+                 # Same reason as kernel/svctoken.USER_AGENT: anything this
+                 # project sends through Cloudflare identifies itself.
+                 'User-Agent': 'FlareSHub-Fleet/1.0'})
+    try:
+        with urllib.request.urlopen(req, timeout=timeout) as r:
+            return json.load(r), ''
+    except urllib.error.HTTPError as e:
+        try:
+            body = json.load(e)
+        except Exception:
+            return None, 'HTTP %s from the Cloudflare API' % e.code
+        errs = (body or {}).get('errors') or []
+        if errs:
+            return None, '%s %s' % (errs[0].get('code', ''), errs[0].get('message', ''))
+        return None, 'HTTP %s from the Cloudflare API' % e.code
+    except Exception as e:
+        return None, str(e)[:90]
+
+
+# 20200348  _id_from_hostname — a zone record back to the server id that made it
+def _id_from_hostname(host, zone):
+    """'flareshub-fvn-3b8c1b.flarevault.dev' -> 'fvn_3b8c1b', or ''.
+
+    THE REVERSE OF svctoken.node_url, AND VERIFIED AS SUCH. The forward
+    direction lowercases the id and swaps '_' for '-' (svctoken._label). This
+    undoes the swap on the FIRST hyphen and then runs the candidate back
+    through _label, requiring it to reproduce the label we were given. A
+    reverse mapping that is not checked against the forward one is how the
+    lobby ends up addressing a hostname no node answers to.
+
+    AMBIGUITY, STATED. 'fvn-a-b' has more than one preimage ('fvn_a-b' and
+    'fvn_a_b' both map to it), and this returns the first-hyphen one. It does
+    not bite because a FlareVault id is 'fvn_' plus six hex characters — one
+    underscore, in one place. If ids ever grow a second, the register must
+    carry the id rather than only the name it was built from, and this function
+    is where that would be read.
+
+    '' is the refusal, and it is also the correct answer for every OTHER record
+    in the zone: the apex, www, a mail record. Those are not nodes.
+    """
+    try:
+        from kernel import svctoken as _svc    # noqa: PLC0415
+        h = str(host or '').strip().rstrip('.').lower()
+        z = str(zone or '').strip().rstrip('.').lower()
+        if not h or not z or not h.endswith('.' + z):
+            return ''
+        label = h[:-(len(z) + 1)]
+        pref = _svc.hostname_prefix()
+        if not label.startswith(pref):
+            return ''
+        rest = label[len(pref):]
+        if not rest:
+            return ''
+        candidate = rest.replace('-', '_', 1)
+        # The round trip. If this does not hold, we cannot address the node we
+        # think we found, so we have not found it.
+        return candidate if _svc._label(candidate) == rest else ''
+    except Exception:
+        return ''
+
+
+# 20200349  discover — enumerate the fleet from the zone, with no peer's help
+def discover(force=False):
+    """Returns (nodes, meta). Never raises, never writes, never persists.
+
+    nodes is {server_id: record} for every `flareshub-*` record on this box's
+    zone EXCEPT this box's own id. Each record says only what DNS can support:
+    the id, the hostname, and where it came from. No status beyond `enrolled`,
+    no last_seen, no reachability — a CNAME existing is not a claim that
+    anything answers on it, and writing one in would be inventing health.
+
+    THIS BOX IS EXCLUDED on purpose. A row reading "we have never heard from
+    the machine we are running on" is true and useless; the lobby already
+    derives its own row live (handlers/lobby._self_row), which is a better fact
+    than a remembered one.
+
+    meta is safe to render. It carries `cf_token_source` — a path or the name of
+    an environment variable, NEVER the value — because "there is no token" and
+    "the token cannot see this zone" send an operator to two different places.
+
+    Cached for DISCOVERY_TTL, FAILURES INCLUDED. A box with no token would
+    otherwise attempt an outbound call on every read of the fleet and answer
+    slowly forever; caching the refusal makes the cost of being unconfigured
+    one call per five minutes instead of one per page.
+    """
+    now = time.time()
+    with _disc_lock:
+        if (not force and _disc['meta'] is not None
+                and (now - _disc['at']) < DISCOVERY_TTL):
+            m = dict(_disc['meta'])
+            m['cached'] = True
+            return dict(_disc['nodes']), m
+
+    nodes = {}
+    meta = {'ok': False, 'source': 'zone-dns', 'zone': '',
+            'cf_token_source': None, 'records': 0, 'nodes': 0,
+            'checked': _now(), 'cached': False, 'why': None, 'fix': None}
+
+    def _done():
+        meta['nodes'] = len(nodes)
+        with _disc_lock:
+            _disc['at'] = time.time()
+            _disc['nodes'] = dict(nodes)
+            _disc['meta'] = dict(meta)
+        return dict(nodes), dict(meta)
+
+    if not DISCOVERY_ON:
+        meta['source'] = None
+        meta['why'] = 'zone discovery is switched off (HUB_FLEET_DISCOVERY=0)'
+        meta['fix'] = 'unset HUB_FLEET_DISCOVERY to let this box read the register'
+        return _done()
+
+    try:
+        from kernel import svctoken as _svc    # noqa: PLC0415
+        zone = _svc.zone()
+    except Exception as e:
+        meta['why'] = 'the zone could not be read on this box: %s' % str(e)[:80]
+        meta['fix'] = 'check kernel/svctoken.py is deployed, then restart the hub'
+        return _done()
+
+    meta['zone'] = zone
+    if not zone:
+        # The honest refusal, and the common one: this box has never been
+        # enrolled, so nothing has written ~/.flare/node.json and no
+        # environment names a zone. It is a state, not a fault.
+        meta['why'] = ('this box has no zone, so it cannot name the register '
+                       '(no ~/.flare/node.json and no FLARE_ZONE)')
+        meta['fix'] = ('enroll this box: ./enroll.sh --node <name> --zone <zone>, '
+                       'or set FLARE_ZONE=<zone> if it is enrolled elsewhere')
+        return _done()
+
+    token, src = _cf_token()
+    meta['cf_token_source'] = src or None
+    if not token:
+        meta['why'] = ('no Cloudflare API token on this box, so the zone\'s DNS '
+                       'records cannot be listed')
+        meta['fix'] = ('set CF_API_TOKEN, or write ~/.cf-token (chmod 600) with a '
+                       'token holding Zone:DNS:Read on ' + zone)
+        return _done()
+
+    body, why = _cf_get(token, '/zones?name=' + zone)
+    if not body:
+        meta['why'] = 'zone lookup failed: %s' % why
+        meta['fix'] = ('the token named by cf_token_source cannot read zone %s — '
+                       'check its Zone:DNS:Read scope' % zone)
+        return _done()
+    result = (body or {}).get('result') or []
+    if not result:
+        meta['why'] = 'zone %s is not visible to this token' % zone
+        meta['fix'] = 'check the token\'s zone scope, or the zone name on this box'
+        return _done()
+    zone_id = str((result[0] or {}).get('id') or '')
+    if not zone_id:
+        meta['why'] = 'zone %s resolved to no id' % zone
+        return _done()
+
+    # PAGED, and bounded. A zone larger than DISCOVERY_MAX_PAGES pages reports
+    # what it read and says it was truncated, rather than looking complete.
+    page = 1
+    while page <= DISCOVERY_MAX_PAGES:
+        body, why = _cf_get(
+            token, '/zones/%s/dns_records?per_page=100&page=%d' % (zone_id, page))
+        if not body:
+            meta['why'] = 'DNS listing failed on page %d: %s' % (page, why)
+            meta['fix'] = ('the token can see zone %s but not its DNS records — '
+                           'it needs Zone:DNS:Read' % zone)
+            return _done()
+        recs = (body or {}).get('result') or []
+        meta['records'] += len(recs)
+        for r in recs:
+            sid = _id_from_hostname((r or {}).get('name'), zone)
+            if not sid:
+                continue
+            nodes[sid] = {
+                'server_id': sid,
+                'hostname':  str((r or {}).get('name') or ''),
+                'source':    'zone',
+                'status':    ENROLLED,
+                # Said explicitly rather than left absent, because _derive_status
+                # reads last_seen and "never" must not be confused with "stale".
+                'last_seen': None,
+                'misses':    0,
+            }
+        info = (body or {}).get('result_info') or {}
+        total_pages = int(info.get('total_pages') or 1)
+        if page >= total_pages:
+            break
+        page += 1
+    else:
+        meta['why'] = ('stopped after %d pages — the register may be incomplete'
+                       % DISCOVERY_MAX_PAGES)
+
+    # This box is in its own register. It is not news.
+    try:
+        from kernel import identity as _idm    # noqa: PLC0415
+        nodes.pop(_idm.server_id(), None)
+    except Exception:
+        pass
+
+    meta['ok'] = True
+    return _done()
+
+
 # 20200334  fleet — full state for the UI
 def fleet():
+    """Heartbeat records and zone discovery, merged. Status stays DERIVED.
+
+    THE MERGE RULE, and it only goes one way: DNS may add a node, and may never
+    change what a node said about itself. A record that has been heard from
+    keeps its own status, last_seen, container counts and everything else; all
+    discovery contributes to it is `hostname` and the note that the register
+    also knows it. A node found only in DNS arrives as `enrolled` with no
+    last_seen, which _derive_status leaves alone.
+
+    Discovered rows are NOT persisted into db/fleet.json. That file is what
+    beats have told us, and a node removed from the zone should disappear on
+    the next read rather than linger in a file forever.
+    """
     _restore()
     out = {}
     with _lock:
@@ -229,20 +538,42 @@ def fleet():
         status, missed = _derive_status(rec)
         r['status'] = status
         r['missed_beats'] = missed
+        r.setdefault('source', 'heartbeat')
+        out[sid] = r
+
+    found, _meta = discover()
+    for sid, drec in found.items():
+        if sid in out:
+            # Heard from. Discovery adds the address and says nothing else.
+            out[sid]['hostname'] = out[sid].get('hostname') or drec.get('hostname')
+            out[sid]['in_register'] = True
+            continue
+        r = dict(drec)
+        r['missed_beats'] = 0
+        r['in_register'] = True
         out[sid] = r
     return out
 
 
 def summary():
+    """Counts, plus WHERE THE COUNT CAME FROM.
+
+    The `register` block is the discovery meta verbatim, because a fleet of one
+    has two completely different meanings — "there is one node" and "this box
+    cannot read the register" — and a bare count cannot tell them apart. It
+    carries cf_token_source (a path or an env var NAME) and never a token.
+    """
     _restore()
     f = fleet()
     counts = {}
     for r in f.values():
         counts[r['status']] = counts.get(r['status'], 0) + 1
+    _nodes, reg = discover()
     return {
         'nodes': len(f),
         'by_status': counts,
         'interval': HEARTBEAT_INTERVAL,
         'degraded_after': DEGRADED_AFTER,
         'unreachable_after': UNREACHABLE_AFTER,
+        'register': reg,
     }

@@ -2,6 +2,24 @@
 """
 # 20200012  kernel.heartbeat — the node-side emitter and its fallback chain
 
+HEARTBEATS ARE ENRICHMENT, NOT THE SOURCE OF TRUTH. Corrected 2026-09-26.
+
+Nothing depends on this module for the fleet to be VISIBLE. kernel.fleet
+enumerates the fleet from the zone's `flareshub-*` DNS records, which are
+derived from each node's own server id at enrolment — so who exists is
+answered by the register, with no beat, no election and no box that has to be
+up for the others to be seen.
+
+What a beat carries that DNS cannot: containers, projects, attention, os,
+uptime, and the fact that this node was alive a moment ago. That is worth
+having and it is why this file stays. But a node that never beats, or a
+receiver that is down for a day, costs LIVE DETAIL about a node — never the
+knowledge that the node is there.
+
+Which is also why the emitter is harmless to lose. It was already written that
+way ("A node that cannot reach central on ANY path is not broken"); the
+difference now is that the fleet view is not degraded to nothing while it fails.
+
 Runs only in NODE mode. Every 30s it POSTs this node's /api/node payload to
 central, trying three paths in order:
 
