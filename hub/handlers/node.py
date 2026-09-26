@@ -248,6 +248,11 @@ def get_admit(handler, path, params):
     # bulletin it may never read. Pending is what makes a receipt honest about
     # its own shelf life -- and it is why a NEW project can expect zero diffs:
     # it was told everything, including what is coming, before it built.
+    # Both imported HERE. _idm is imported inside node_payload(), not at module
+    # scope, so referencing it from this function raised NameError and took
+    # /api/admit down completely -- the front door every project knocks on,
+    # returning nothing at all.
+    from kernel import identity as _idm         # noqa: PLC0415
     try:
         from handlers import registry as _reg   # noqa: PLC0415
         _pend = _reg._pending()
