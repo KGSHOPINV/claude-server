@@ -169,7 +169,14 @@ def get_bulletin_readers(handler, path, params):
     current code ref, but whether it has been TOLD. A project can be perfectly
     current and never have heard a word.
     """
-    raw = _target(path, '/api/bulletin/').replace('/readers', '')
+    # The ROUTE is /api/bulletin-readers/<n>; this stripped '/api/bulletin/'.
+    # So _target() found no prefix to remove, returned '', and int('') raised
+    # -- every call answered 400 "bulletin number required", for every input.
+    #
+    # The readers matrix is the most useful thing the server knows: told vs not
+    # told, which is a different question from current vs stale. It has never
+    # once answered it.
+    raw = _target(path, '/api/bulletin-readers/')
     try:
         n = int(raw)
     except Exception:

@@ -236,7 +236,10 @@
 
   function denied(res) {
     var b = (res && res.body) || {};
-    var door = b.door || ('login.' + zone());
+    // The server names the door; only fall back if it did not. It used to
+    // guess 'login.' + zone, and that hostname does not resolve -- a
+    // locked-out operator was being sent somewhere that is not there.
+    var door = b.door || zone();
     $('who').textContent = '';
     show('Not signed in',
          '<p>This lobby did not get a role for you' +

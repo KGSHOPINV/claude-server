@@ -4,11 +4,27 @@
 Hub handler module: users layer (module 05).
 Imports only from kernel/. No direct DB access except via kernel.db.
 """
+import os
 import hashlib
 import json
 import secrets
 import time
 from datetime import datetime
+
+# WHERE TO SEND SOMEONE WHO IS LOCKED OUT.
+#
+# This said login.flarevault.dev, which DOES NOT RESOLVE. Three handlers named
+# it in their 401 bodies, so the one message a locked-out operator sees pointed
+# at a hostname that is not there -- worse than saying nothing, because they
+# would go and try it.
+#
+# It is the name the FlareVault spec reserves for the single human gate, and
+# FlareVault owns its Access policy. Until that hostname exists, the working
+# door is the apex: flarevault.dev serves the public login space and /fleet is
+# the Access gate behind it.
+#
+# Set HUB_DOOR_HOST to login.<zone> the day it resolves; nothing else changes.
+DOOR_HOST = os.environ.get('HUB_DOOR_HOST', 'flarevault.dev')
 
 from kernel.db   import db_conn
 from kernel.db  import db_conn as _db_conn
@@ -113,7 +129,7 @@ def get_auth_check(handler, path, params):
                            'via': sess.get('via', 'local'),
                            'role': sess.get('role', '')})
     else:
-        handler.send_json({'ok': False, 'door': 'login.flarevault.dev'}, 401)
+        handler.send_json({'ok': False, 'door': DOOR_HOST}, 401)
 
 
 # 20305702  GET /api/users — list users

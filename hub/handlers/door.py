@@ -33,6 +33,21 @@ decision point, not two that can drift.
 """
 import os
 
+# WHERE TO SEND SOMEONE WHO IS LOCKED OUT.
+#
+# This said login.flarevault.dev, which DOES NOT RESOLVE. Three handlers named
+# it in their 401 bodies, so the one message a locked-out operator sees pointed
+# at a hostname that is not there -- worse than saying nothing, because they
+# would go and try it.
+#
+# It is the name the FlareVault spec reserves for the single human gate, and
+# FlareVault owns its Access policy. Until that hostname exists, the working
+# door is the apex: flarevault.dev serves the public login space and /fleet is
+# the Access gate behind it.
+#
+# Set HUB_DOOR_HOST to login.<zone> the day it resolves; nothing else changes.
+DOOR_HOST = os.environ.get('HUB_DOOR_HOST', 'flarevault.dev')
+
 from kernel.auth import check_auth
 from kernel import identity as _id
 
@@ -68,7 +83,7 @@ def get_door(handler, path, params):
     if not sess:
         handler.send_json({
             'ok': False, 'error': 'no_session',
-            'door': 'login.flarevault.dev',
+            'door': DOOR_HOST,
             'detail': 'Sign in at the lobby. Over Tailscale, POST '
                       '/api/auth/login with a hub username and password.',
         }, 401)

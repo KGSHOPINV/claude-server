@@ -56,11 +56,27 @@ It is never cached in this module, never logged, and never appears in a
 response body. Law IV: report, never repair — a node that will not answer
 produces a finding and the command to check it, not a retry loop.
 """
+import os
 import json
 import re
 import urllib.error
 import urllib.request
 from datetime import datetime, timezone
+
+# WHERE TO SEND SOMEONE WHO IS LOCKED OUT.
+#
+# This said login.flarevault.dev, which DOES NOT RESOLVE. Three handlers named
+# it in their 401 bodies, so the one message a locked-out operator sees pointed
+# at a hostname that is not there -- worse than saying nothing, because they
+# would go and try it.
+#
+# It is the name the FlareVault spec reserves for the single human gate, and
+# FlareVault owns its Access policy. Until that hostname exists, the working
+# door is the apex: flarevault.dev serves the public login space and /fleet is
+# the Access gate behind it.
+#
+# Set HUB_DOOR_HOST to login.<zone> the day it resolves; nothing else changes.
+DOOR_HOST = os.environ.get('HUB_DOOR_HOST', 'flarevault.dev')
 
 from kernel import fleet as _fleet
 from kernel import identity as _id
@@ -484,7 +500,7 @@ def _deny(handler, reason, status=401):
     """One shape for every refusal, so the UI has one branch. The reason names
     what is missing, never what exists."""
     handler.send_json({'ok': False, 'error': reason,
-                       'door': 'login.flarevault.dev'}, status)
+                       'door': DOOR_HOST}, status)
 
 
 def _not_central(handler):
