@@ -481,7 +481,13 @@ body.desk-mode #desk-exit { display:flex; align-items:center; gap:6px; }
   /* Top bar — compact */
   #top { font-size:10px; gap:6px; padding:0 8px; flex-wrap:nowrap; overflow:hidden; }
   #top .tbtn { display:none; }
-  #top .tbtn:last-child { display:flex; } /* keep Refresh */
+  /* Keep Refresh and Search on a phone.
+     :last-child matched NOTHING -- the last child of #top-r is
+     <span id="hub-user-badge">, not a button -- so all three were hidden and a
+     phone had no refresh and no way to open the command palette without a
+     physical Ctrl+K. The comment said "keep Refresh"; the selector kept none.
+     Named classes, so moving a button cannot silently hide it again. */
+  #top .tbtn.m-keep { display:flex; }
 
   /* Workspace fills full width */
   #wsarea { width:100%; }
@@ -895,8 +901,8 @@ body.desk-mode #desk-exit { display:flex; align-items:center; gap:6px; }
   <span class="chip" title="System power draw (ACPI)">⚡ <span id="t-pwr">—</span>W</span>
   <div id="top-r">
     <span style="color:var(--muted);font-family:var(--mono);font-size:10px" id="t-clock"></span>
-    <button class="tbtn" onclick="hardRefresh()">↻ Refresh</button>
-    <button class="tbtn" onclick="openCmdPal()" title="Global search (Ctrl+K)">⌘ Search</button>
+    <button class="tbtn m-keep" onclick="hardRefresh()">↻ Refresh</button>
+    <button class="tbtn m-keep" onclick="openCmdPal()" title="Global search (Ctrl+K)">⌘ Search</button>
     <button class="tbtn" onclick="enterDeskMode()" title="Desk Mode — focus your widgets" id="desk-btn">⊡ Desk</button>
     <span id="hub-user-badge" style="font-size:10px;color:var(--muted2);padding:0 6px;cursor:pointer" onclick="openView('settings')" title="Settings">⚙</span>
   </div>
@@ -1143,7 +1149,7 @@ async function saveAIConfig() {
   const provider = document.getElementById('ai-provider')?.value;
   const api_key  = document.getElementById('ai-key')?.value.trim();
   if (!api_key) { alert('Enter an API key first.'); return; }
-  await fetch(API + 'ai/config', {method:'POST', headers:{'Content-Type':'application/json','X-Hub-Token':localStorage.getItem('hub_token')||''}, body: JSON.stringify({provider, api_key})});
+  await fetch(API + '/api/ai/config', {method:'POST', headers:{'Content-Type':'application/json','X-Hub-Token':localStorage.getItem('hub_token')||''}, body: JSON.stringify({provider, api_key})});
   document.getElementById('ai-test-result').textContent = 'Saved. Click Test to verify.';
 }
 
@@ -1151,7 +1157,7 @@ async function testAIChat() {
   const el = document.getElementById('ai-test-result');
   el.textContent = 'Testing...';
   try {
-    const r = await fetch(API + 'ai/chat', {method:'POST', headers:{'Content-Type':'application/json','X-Hub-Token':localStorage.getItem('hub_token')||''}, body: JSON.stringify({message:'Reply with just: OK'})});
+    const r = await fetch(API + '/api/ai/chat', {method:'POST', headers:{'Content-Type':'application/json','X-Hub-Token':localStorage.getItem('hub_token')||''}, body: JSON.stringify({message:'Reply with just: OK'})});
     const d = await r.json();
     el.textContent = d.error ? 'Error: ' + d.error : 'Works! Provider: ' + d.provider;
   } catch(e) { el.textContent = 'Network error: ' + e.message; }
@@ -1159,7 +1165,7 @@ async function testAIChat() {
 
 async function loadAISettings() {
   try {
-    const r = await fetch(API + 'ai/config');
+    const r = await fetch(API + '/api/ai/config');
     const d = await r.json();
     const sel = document.getElementById('ai-provider');
     if (sel && d.provider) sel.value = d.provider;
@@ -1169,7 +1175,7 @@ async function loadAISettings() {
 }
 
 async function downloadManifest() {
-  const r = await fetch(API + 'manifest');
+  const r = await fetch(API + '/api/manifest');
   const data = await r.json();
   const blob = new Blob([JSON.stringify(data, null, 2)], {type: 'application/json'});
   const url = URL.createObjectURL(blob);
@@ -2056,11 +2062,7 @@ function mountPaneContent(wsId, paneId, viewType, viewConfig, body) {
           <div style="display:flex;gap:6px;align-items:center;margin-left:auto">
             <select id="act-cat-${key}" class="vs-inp" style="font-size:11px;padding:2px 6px" onchange="loadActivity('${key}')">
               <option value="">All</option>
-              <option value="container">Docker</option>
-              <option value="note">Notes</option>
-              <option value="startup">Startup</option>
-              <option value="general">General</option>
-            </select>
+              <option value="container">container</option><option value="startup">startup</option><option value="fleet">fleet</option><option value="login">login</option><option value="heartbeat">heartbeat</option><option value="server">server</option><option value="deploy">deploy</option><option value="collect">collect</option><option value="note">note</option></select>
             <button class="btn" style="padding:2px 10px;font-size:11px" onclick="loadActivity('${key}')">↻ Refresh</button>
           </div>
         </div>

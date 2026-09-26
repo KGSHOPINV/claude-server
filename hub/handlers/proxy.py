@@ -183,7 +183,7 @@ def _get_files(path):
     safe = path.replace('..', '').replace('~', '').strip()
     if not safe.startswith('/'):
         safe = get_server_info().get('home_dir', os.path.expanduser('~'))
-    r = ssh_run(f"ls -lah --time-style=short-iso '{safe}' 2>&1 | head -60")
+    r = ssh_run(f"ls -lah --time-style=long-iso '{safe}' 2>&1 | head -60")
     return {'path': safe, 'listing': r.get('output', ''), 'error': r.get('error', '') if not r.get('online') else ''}
 
 
