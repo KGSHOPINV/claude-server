@@ -25,7 +25,27 @@ SPLASH_PATH = os.path.join(_BASE_DIR, 'splash.html')
 # Placeholder until FlareVault serves its own. Set HUB_SPLASH_HOSTS to change
 # it without touching code.
 SPLASH_HOSTS = [h.strip().lower() for h in os.environ.get(
-    'HUB_SPLASH_HOSTS', 'flarevault.dev,www.flarevault.dev').split(',') if h.strip()]
+    'HUB_SPLASH_HOSTS', 'flarevault.dev').split(',') if h.strip()]
+
+# ALIASES REDIRECT. THEY NEVER SERVE.
+#
+# www.flarevault.dev used to be a SPLASH host, so router._splash_only let every
+# SPLASH_BEHIND_LOGIN path through it -- on the comment's stated assumption
+# that "Cloudflare Access is scoped to these paths". That is true of the apex
+# and false of its alias: an Access app on flarevault.dev/fleet does not cover
+# www.flarevault.dev/fleet, because they are different hostnames.
+#
+# The result was live: www.flarevault.dev/api/node served machine_id, the LAN
+# address and the container inventory to the open internet, while the apex
+# correctly answered 302.
+#
+# So an alias now serves NOTHING. It answers 301 to the canonical host, every
+# path, and the gating lives in exactly one place. A second hostname that
+# serves is a second set of Access apps to keep in step, and the one that
+# drifts is the one nobody is looking at.
+REDIRECT_HOSTS = [h.strip().lower() for h in os.environ.get(
+    'HUB_REDIRECT_HOSTS', 'www.flarevault.dev').split(',') if h.strip()]
+CANONICAL_HOST = os.environ.get('HUB_CANONICAL_HOST', 'flarevault.dev')
 
 # Hostnames that get the LOBBY instead of the app. dashboard.<zone> is a
 # different page from app.html: one card per server, and picking one routes you
@@ -89,6 +109,15 @@ def serve_app(handler, path, params):
     # arrived at flarevault.dev must never fall through to the app, whatever
     # its path or user-agent.
     host = (handler.headers.get('Host', '') or '').split(':')[0].lower()
+
+    # An alias redirects and serves nothing. See REDIRECT_HOSTS.
+    if host in REDIRECT_HOSTS:
+        handler.send_response(301)
+        handler.send_header('Location', 'https://%s%s' % (CANONICAL_HOST, path))
+        handler.send_header('Cache-Control', 'no-cache')
+        handler.send_header('Content-Length', '0')
+        handler.end_headers()
+        return
     if host in SPLASH_HOSTS and path in ('/', '/mobile', '/desktop'):
         try:
             with open(SPLASH_PATH, 'rb') as f:

@@ -360,7 +360,16 @@ def shadow_report():
 # Hosts that are PUBLIC by design and must serve the splash and nothing else.
 # Kept in step with handlers/identity.py:SPLASH_HOSTS via the same env var.
 SPLASH_HOSTS = [h.strip().lower() for h in os.environ.get(
-    'HUB_SPLASH_HOSTS', 'flarevault.dev,www.flarevault.dev').split(',') if h.strip()]
+    'HUB_SPLASH_HOSTS', 'flarevault.dev').split(',') if h.strip()]
+
+# Aliases are NOT splash hosts. They are handled in handlers/identity.py and
+# answer 301 without serving anything. www.flarevault.dev was on this list,
+# and because SPLASH_BEHIND_LOGIN assumes "Access is scoped to these paths" --
+# true for the apex, false for an alias with no apps of its own --
+# www.flarevault.dev/api/node served the machine id and LAN address publicly.
+REDIRECT_HOSTS = [h.strip().lower() for h in os.environ.get(
+    'HUB_REDIRECT_HOSTS', 'www.flarevault.dev').split(',') if h.strip()]
+CANONICAL_HOST = os.environ.get('HUB_CANONICAL_HOST', 'flarevault.dev')
 
 # The only paths a splash host may reach. Everything else is 404 — not 403,
 # which would confirm the route exists.
@@ -410,8 +419,42 @@ def _splash_only(handler, path):
     return True
 
 
+# 20200326  _alias_redirect — an alias answers 301 and serves nothing
+def _alias_redirect(handler, path):
+    """True if this request was answered with a redirect to the canonical host.
+
+    Checked BEFORE the splash guard, because the guard answers 404 and an
+    alias should answer 301. A 404 would break www as a usable address; a 301
+    makes it work while serving nothing of its own.
+
+    The point is that gating lives in ONE place. An alias that serves needs
+    its own Access apps kept in step with the canonical host's, and the one
+    that drifts is the one nobody is looking at -- which is precisely how
+    www.flarevault.dev/api/node came to serve the machine id and LAN address
+    to the open internet while the apex correctly answered 302.
+    """
+    try:
+        host = (handler.headers.get('Host', '') or '').split(':')[0].lower()
+    except Exception:
+        return False
+    if host not in REDIRECT_HOSTS:
+        return False
+    try:
+        handler.send_response(301)
+        handler.send_header('Location', 'https://%s%s' % (CANONICAL_HOST, path))
+        # Never cached: a cached redirect outlives a decision to change it.
+        handler.send_header('Cache-Control', 'no-cache')
+        handler.send_header('Content-Length', '0')
+        handler.end_headers()
+    except Exception:
+        pass
+    return True
+
+
 def dispatch(handler, method, path, params=None, body=None, db_conn_fn=None):
     """Route one request. Returns True if handled, False to fall through."""
+    if _alias_redirect(handler, path):
+        return True
     if _splash_only(handler, path):
         handler.send_response(404)
         handler.end_headers()
