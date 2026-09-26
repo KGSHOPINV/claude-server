@@ -748,10 +748,37 @@ def _serve_local(handler, rest):
         # answer them from this origin rather than refusing -- refusing was
         # only correct while the local page was served raw.
         if rest.startswith('/api/') or rest.startswith('/ui/')                 or rest == '/manifest.json':
-            handler.path = rest
-            if _router.dispatch(handler, 'GET', rest.split('?')[0], {}, None,
-                                _dbconn):
-                return
+            # RESOLVE AND CALL, not dispatch().
+            #
+            # dispatch() re-runs _splash_only, and the Host on this request is
+            # still the apex -- a splash host. So the inner path was judged
+            # against SPLASH_BEHIND_LOGIN, which lists what may be reached
+            # WITHOUT having passed Access. /api/node and /api/auth/check are
+            # on it and worked; /api/status and /api/containers are not, and
+            # 404'd. The local console was broken through the lobby while the
+            # REMOTE one worked, which is backwards and was the tell.
+            #
+            # This request has already passed the /s/ Access app and had its
+            # role token verified by route_into_server. Judging it a second
+            # time against a list written for unauthenticated apex traffic
+            # asks the wrong question of the right request.
+            sub = rest.split('?')[0]
+            route = _router.resolve('GET', sub)
+            if route is not None:
+                try:
+                    fn = getattr(_router._load(route['module']),
+                                 route['handler'], None)
+                except Exception:
+                    fn = None
+                if fn is not None:
+                    handler.path = rest
+                    params = {}
+                    if '?' in rest:
+                        import urllib.parse   # noqa: PLC0415
+                        params = {k: v[0] for k, v in urllib.parse.parse_qs(
+                            rest.split('?', 1)[1]).items()}
+                    fn(handler, sub, params)
+                    return
         _finding(handler, 404, 'not_served_here',
                  'the lobby serves this box own app shell and API under '
                  'this prefix; %s is neither' % (rest or '/'))
