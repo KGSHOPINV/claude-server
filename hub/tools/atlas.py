@@ -318,8 +318,23 @@ def show_config():
 # So: this section computes. It reports every duplicate and the next genuinely
 # free code in a band, which is the thing that should have existed before any
 # code was ever hand-picked.
-CODE_RE = re.compile(r'^\s*(?:#|//)\s+(\d{8})\s', re.M)
-CODE_EXT = ('.py', '.sh', '.html', '.js')
+# THE COMMENT FORMS THIS MUST MATCH, AND WHY THE LIST IS NOT OPTIONAL.
+#
+# This pattern used to be `(?:#|//)`, which misses `/* ... */`. Every JS file in
+# hub/ui/ opens with one, so six codes were INVISIBLE to the allocator --
+# including 20404701 (ui/registry.js) and 20404801 (ui/views/issues.js), which
+# are exactly the two numbers it then offered as "next free" in those bands.
+#
+# An allocator that is blind to part of the address space does not merely
+# under-report: it actively hands out numbers that are already taken, which is
+# the precise collision it exists to prevent. An agent following its advice
+# would have collided twice; the one that caught this checked by grep and
+# reported the tool instead, which is the only reason it did not happen.
+#
+# So a new comment style anywhere in this repo must be added here on the same
+# day, or this section starts lying again.
+CODE_RE = re.compile(r'^\s*(?:#|//|/\*|\*)\s+(\d{8})\s', re.M)
+CODE_EXT = ('.py', '.sh', '.html', '.js', '.css')
 
 
 def _codes():
