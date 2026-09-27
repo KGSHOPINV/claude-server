@@ -1,0 +1,99 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Exchange mockups</title>
+<!--
+  Not a screen. A door onto the four mockups in this folder, so a review is one
+  click rather than four file:// paths. Nothing here is wired and nothing here
+  would ship.
+
+  Every screen in this folder is ONE responsive file. There is no desktop
+  version and no mobile version: doctrine §10 says mobile resolves in the
+  registry, not in a second file and not at a second URL, and mobile.html is
+  retired when the real thing lands.
+-->
+<style>
+  :root{
+    --bg:#0b0f14; --panel:#111823; --panel2:#0e141d; --border:#1e2936;
+    --text:#dbe5f0; --muted:#7d8da0; --muted2:#55697e; --accent:#4ec9e0;
+    --mono:ui-monospace,SFMono-Regular,"SF Mono",Menlo,monospace;
+  }
+  @media (prefers-color-scheme:light){
+    :root:not([data-theme="dark"]){
+      --bg:#f6f8fa; --panel:#fff; --panel2:#f0f3f6; --border:#d5dde5;
+      --text:#1f2328; --muted:#5b6570; --muted2:#8593a3; --accent:#0d7d94;
+    }
+  }
+  *{box-sizing:border-box}
+  body{margin:0;min-height:100vh;background:var(--bg);color:var(--text);
+       font:14px/1.55 ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif}
+  .wrap{max-width:720px;margin:0 auto;padding:26px 16px 60px}
+  .brand{font-size:15px;font-weight:600;padding-bottom:12px;
+    border-bottom:1px solid var(--border)}
+  .brand .dot{color:var(--accent)}
+  .lede{color:var(--muted);font-size:13px;margin:16px 0 20px}
+  .cards{display:flex;flex-direction:column;gap:1px;background:var(--border);
+    border:1px solid var(--border);border-radius:6px;overflow:hidden}
+  a.card{display:block;padding:14px 16px;background:var(--panel);color:inherit;
+    text-decoration:none}
+  a.card:hover{background:var(--panel2)}
+  a.card:focus-visible{outline:2px solid var(--accent);outline-offset:-2px}
+  .nm{font-size:15px;font-weight:600}
+  .fl{font-family:var(--mono);font-size:10px;color:var(--muted2);margin-left:8px}
+  .ds{font-size:12px;color:var(--muted);margin-top:5px}
+  .st{font-family:var(--mono);font-size:10px;color:var(--accent);margin-top:6px}
+  .foot{margin-top:24px;padding-top:14px;border-top:1px solid var(--border);
+    color:var(--muted2);font-size:11px;line-height:1.7}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="brand"><span class="dot">&#9670;</span> Exchange &mdash; mockups</div>
+  <p class="lede">
+    Static. Nothing wired, no routes, no build step, no CDN. Each file names the
+    routes that would feed it and which of its fields are derived rather than
+    stored. Read the comment block at the top of each one before the page itself.
+  </p>
+
+  <div class="cards">
+    <a class="card" href="board.html">
+      <div><span class="nm">The board</span><span class="fl">board.html</span></div>
+      <div class="ds">Every bulletin, who was told, who has acknowledged, who has not.
+        <code>who_read</code> is the centrepiece: a bulletin nobody has read is a row of
+        hollow chips, one everybody has read is a row of solid ones.</div>
+      <div class="st">populated &middot; as it is today &middot; empty</div>
+    </a>
+    <a class="card" href="outbox.html">
+      <div><span class="nm">The outbox</span><span class="fl">outbox.html</span></div>
+      <div class="ds">Staged versus delivered, and how old each is. Two numbers that are
+        never added together.</div>
+      <div class="st">populated &middot; empty &middot; refused</div>
+    </a>
+    <a class="card" href="registry.html">
+      <div><span class="nm">The registry</span><span class="fl">registry.html</span></div>
+      <div class="ds">Projects across both servers, project-first. What each project claims
+        beside what the server observes, never merged.</div>
+      <div class="st">populated &middot; empty &middot; refused</div>
+    </a>
+    <a class="card" href="detail.html">
+      <div><span class="nm">One bulletin, one ticket</span><span class="fl">detail.html</span></div>
+      <div class="ds">The readout as the server actually renders it, with the confirmation
+        code where it really lives &mdash; inside the text, at the end, per recipient.
+        Plus all three ways an ack is refused.</div>
+      <div class="st">unread &middot; acknowledged &middot; refused &middot; empty</div>
+    </a>
+  </div>
+
+  <div class="foot">
+    Sample values were read from fks-services (127.0.0.1:8765) on 2026-09-27,
+    read-only. ksgcohub could not be reached: Tailscale SSH asked for an
+    additional browser check and no attempt was made to authenticate, so
+    nothing on these pages claims to be from that box. Values with a dotted
+    underline are illustrative &mdash; the registry is empty on fks-services, so
+    no real acknowledgement, claim or outbox row exists anywhere to copy.
+  </div>
+</div>
+</body>
+</html>

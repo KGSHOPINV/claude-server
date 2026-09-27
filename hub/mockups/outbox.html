@@ -1,0 +1,414 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Exchange — Outbox (mockup)</title>
+<!--
+  MOCKUP. STATIC. NOTHING HERE IS WIRED. The only JavaScript toggles states.
+
+  THE OUTBOX — what is STAGED versus what has been DELIVERED, and how old each
+  is. The difference between those two words is the whole module: staging is
+  the operator pressing a button, delivery is a project coming and taking it.
+  A screen that showed one count would re-create the bug the module exists to
+  close.
+
+  ROUTES THAT WOULD FEED THIS
+    GET  /api/outbox                       20317701  the board (gate 2)
+    GET  /api/outbox?project=<p>           20317701  narrowed
+    GET  /api/outbox/<p>?peek=1            20317702  look WITHOUT collecting
+    POST /api/outbox/<p>                   20317703  stage (gate 2)
+    POST /api/outbox-ack/<n>               20317704  the project answers
+    POST /api/outbox-address/<p>           20317705  register a callback
+
+  DERIVED, NOT STORED — this is the load-bearing part of the file
+    state                 kernel/outbox._state(row). NOT A COLUMN. Computed in
+                          this order: acked_at -> 'acked'; collected_at ->
+                          'collected'; push_attempts>0 AND push_error ->
+                          'failed'; otherwise 'staged'.
+    ball ("whose move")   kernel/outbox._ball(row). One sentence per row,
+                          derived from state. Also not a column.
+    never_collected       counted from collected_at IS NULL
+    never_messaged        projects in the registry with no outbox row at all
+    age ("3d 4h")         from staged_at / collected_at, computed in the page.
+                          THE API RETURNS NO AGE FIELD. See the report.
+    callback_note         built in board() from outbox_addresses
+
+  STORED, AND THE REASON EACH EXISTS
+    staged_by      who pressed it. Never 'system', never 'serverhub'.
+    collected_at   FIRST collection only, never overwritten on a re-collect.
+    collect_count  incremented every time, including re-collects.
+    push_error     the last failure, verbatim.
+
+  REAL VALUES: the board shape, counts and worker block were read from
+  fks-services (GET /api/outbox on 127.0.0.1:8765) on 2026-09-27. It returned
+  zero messages and zero projects, which is the Empty state below verbatim.
+  Message rows are tinted .synth — no outbox row exists on either box yet.
+-->
+<style>
+  :root{
+    --bg:#0b0f14; --panel:#111823; --panel2:#0e141d; --border:#1e2936;
+    --text:#dbe5f0; --muted:#7d8da0; --muted2:#55697e;
+    --accent:#4ec9e0; --green:#3fb950; --amber:#d29922; --red:#f85149;
+    --mono:ui-monospace,SFMono-Regular,"SF Mono",Menlo,monospace;
+  }
+  @media (prefers-color-scheme:light){
+    :root:not([data-theme="dark"]){
+      --bg:#f6f8fa; --panel:#fff; --panel2:#f0f3f6; --border:#d5dde5;
+      --text:#1f2328; --muted:#5b6570; --muted2:#8593a3; --accent:#0d7d94;
+    }
+  }
+  *{box-sizing:border-box}
+  body{margin:0;min-height:100vh;background:var(--bg);color:var(--text);
+       font:14px/1.55 ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif}
+  .wrap{max-width:940px;margin:0 auto;padding:22px 16px 60px}
+  @media(min-width:700px){.wrap{padding:26px 24px 60px}}
+
+  .top{display:flex;align-items:baseline;gap:10px;flex-wrap:wrap;
+       padding-bottom:12px;border-bottom:1px solid var(--border)}
+  .brand{font-size:15px;font-weight:600;letter-spacing:.3px}
+  .brand .dot{color:var(--accent)}
+  .who{margin-left:auto;font-size:11px;color:var(--muted);font-family:var(--mono)}
+  .who b{color:var(--text);font-weight:500}
+
+  .states{display:flex;gap:6px;flex-wrap:wrap;margin:14px 0 4px}
+  .states button{font:10px/1 var(--mono);text-transform:uppercase;
+    letter-spacing:.6px;padding:6px 10px;border-radius:3px;cursor:pointer;
+    border:1px solid var(--border);background:var(--panel2);color:var(--muted)}
+  .states button[aria-pressed="true"]{color:var(--accent);
+    border-color:color-mix(in srgb,var(--accent) 45%,transparent)}
+  .mocknote{font-size:10px;color:var(--muted2);font-family:var(--mono);margin:8px 0 18px}
+
+  h2{font-size:12px;font-weight:600;letter-spacing:.5px;text-transform:uppercase;
+     color:var(--muted);margin:26px 0 9px}
+
+  /* THE HEADLINE. staged and delivered are two numbers, side by side, never
+     one total. "never collected" gets its own tile because it is the number
+     that must never hide inside a sum. */
+  .tiles{display:grid;grid-template-columns:repeat(2,1fr);gap:1px;
+    background:var(--border);border:1px solid var(--border);border-radius:6px;
+    overflow:hidden}
+  @media(min-width:640px){.tiles{grid-template-columns:repeat(4,1fr)}}
+  .tile{background:var(--panel);padding:13px 14px}
+  .tile .k{font:9px/1 var(--mono);text-transform:uppercase;letter-spacing:.7px;
+    color:var(--muted2)}
+  .tile .v{font-family:var(--mono);font-size:22px;margin-top:7px;color:var(--text)}
+  .tile .s{font-size:10px;color:var(--muted);margin-top:4px;line-height:1.45}
+  .tile.bad .v{color:var(--red)}
+  .tile.warn .v{color:var(--amber)}
+  .tile.ok .v{color:var(--green)}
+
+  .split{font-family:var(--mono);font-size:11px;color:var(--muted);margin:14px 0 4px}
+  .split b{color:var(--text);font-weight:500}
+
+  .rows{display:flex;flex-direction:column;gap:1px;background:var(--border);
+    border:1px solid var(--border);border-radius:6px;overflow:hidden}
+  .row{padding:13px 14px;background:var(--panel);border-left:3px solid var(--border)}
+  .row.staged{border-left-color:var(--red)}
+  .row.failed{border-left-color:var(--amber)}
+  .row.collected{border-left-color:var(--accent)}
+  .row.acked{border-left-color:var(--green)}
+
+  .rtop{display:flex;align-items:center;gap:9px;flex-wrap:wrap}
+  .id{font-family:var(--mono);font-size:11px;color:var(--muted2)}
+  .to{font-size:14px;font-weight:600}
+  .kind{font:9px/1 var(--mono);text-transform:uppercase;letter-spacing:.6px;
+    padding:3px 7px;border-radius:20px;border:1px solid var(--border);color:var(--muted)}
+  .pill{font:9px/1 var(--mono);text-transform:uppercase;letter-spacing:.7px;
+    padding:3px 8px;border-radius:20px;border:1px solid var(--border);
+    color:var(--muted);margin-left:auto}
+  .pill.staged{color:var(--red);border-color:color-mix(in srgb,var(--red) 45%,transparent)}
+  .pill.failed{color:var(--amber);border-color:color-mix(in srgb,var(--amber) 45%,transparent)}
+  .pill.collected{color:var(--accent);border-color:color-mix(in srgb,var(--accent) 45%,transparent)}
+  .pill.acked{color:var(--green);border-color:color-mix(in srgb,var(--green) 45%,transparent)}
+
+  .subject{margin-top:7px;font-size:13px}
+  .ball{margin-top:8px;font-size:12px;color:var(--muted);
+    border-left:2px solid var(--border);padding-left:9px}
+  .ball b{color:var(--text);font-weight:500}
+  .facts{display:flex;flex-wrap:wrap;gap:0 16px;margin-top:8px;
+    font-family:var(--mono);font-size:10px;color:var(--muted2)}
+  .facts b{color:var(--muted);font-weight:400}
+  .facts .age{color:var(--amber)}
+  .facts .old{color:var(--red)}
+
+  .msg{border:1px solid var(--border);background:var(--panel);border-radius:8px;
+    padding:16px 18px;font-size:13px;color:var(--muted)}
+  .msg h3{font-size:14px;font-weight:600;color:var(--text);margin:0 0 7px}
+  .msg p{margin:0 0 9px}
+  .msg p:last-child{margin:0}
+  .msg code{font-family:var(--mono);font-size:12px;color:var(--accent);overflow-wrap:anywhere}
+  .msg.bad{border-color:color-mix(in srgb,var(--red) 45%,transparent)}
+  .msg.bad h3{color:var(--red)}
+  .msg.warn{border-color:color-mix(in srgb,var(--amber) 45%,transparent)}
+
+  .worker{margin-top:14px;font-family:var(--mono);font-size:10px;color:var(--muted2);
+    border:1px solid var(--border);border-radius:6px;padding:10px 12px;background:var(--panel2)}
+  .worker b{color:var(--muted)}
+
+  .synth{border-bottom:1px dotted color-mix(in srgb,var(--accent) 55%,transparent)}
+  .foot{margin-top:28px;padding-top:14px;border-top:1px solid var(--border);
+    color:var(--muted2);font-size:11px;line-height:1.7}
+
+  body[data-state="populated"] .s-empty,
+  body[data-state="populated"] .s-refused,
+  body[data-state="empty"] .s-populated,
+  body[data-state="empty"] .s-refused,
+  body[data-state="refused"] .s-populated,
+  body[data-state="refused"] .s-empty{display:none}
+</style>
+</head>
+<body data-state="populated">
+<div class="wrap">
+
+  <div class="top">
+    <div class="brand"><span class="dot">&#9670;</span> Exchange &middot; Outbox</div>
+    <div class="who">fks-services &middot; <b>fvn_3b8c1b</b> &middot; gate 2</div>
+  </div>
+
+  <div class="states" role="group" aria-label="Mockup state">
+    <button type="button" data-go="populated" aria-pressed="true">Populated</button>
+    <button type="button" data-go="empty">Empty (as it is today)</button>
+    <button type="button" data-go="refused">Refused</button>
+  </div>
+  <p class="mocknote">
+    MOCKUP &mdash; static, nothing wired. <span class="synth">Dotted</span> values
+    are illustrative; the board shape, counts and worker block are the real
+    2026-09-27 response from fks-services.
+  </p>
+
+  <!-- ============================================================ POPULATED -->
+  <section class="s-populated">
+    <div class="tiles">
+      <div class="tile bad">
+        <div class="k">Staged</div><div class="v synth">3</div>
+        <div class="s">written down, addressed, sitting on this server</div>
+      </div>
+      <div class="tile warn">
+        <div class="k">Never collected</div><div class="v synth">3</div>
+        <div class="s">the server believes it said this. Nobody has read it.</div>
+      </div>
+      <div class="tile">
+        <div class="k">Collected</div><div class="v synth">2</div>
+        <div class="s">the project has it. It has not answered.</div>
+      </div>
+      <div class="tile ok">
+        <div class="k">Acked</div><div class="v synth">1</div>
+        <div class="s">the project said what it would do</div>
+      </div>
+    </div>
+
+    <p class="split">
+      <b class="synth">3</b> staged &mdash; nothing has left this machine.
+      <b class="synth">3</b> delivered &mdash; collected or acked.
+      Staged is not delivered, and these two numbers are never added together.
+    </p>
+
+    <h2>Messages &mdash; newest first</h2>
+    <div class="rows">
+
+      <article class="row staged">
+        <div class="rtop">
+          <span class="id synth">#7</span><span class="to synth">babyhelp</span>
+          <span class="kind">intake</span><span class="pill staged">staged</span>
+        </div>
+        <div class="subject synth">Intake &mdash; tell the server what you are</div>
+        <div class="ball"><b>babyhelp</b> &mdash; staged, never collected. Nobody has read this.</div>
+        <div class="facts">
+          <span>staged_at <b class="synth">2026-09-21T11:04:02</b></span>
+          <span class="old synth">6d 20h waiting</span>
+          <span>staged_by <b class="synth">kyle</b></span>
+          <span>collect_count <b>0</b></span>
+          <span>callback <b class="synth">none &mdash; collect-only</b></span>
+        </div>
+      </article>
+
+      <article class="row failed">
+        <div class="rtop">
+          <span class="id synth">#6</span><span class="to synth">keynox</span>
+          <span class="kind">note</span><span class="pill failed">failed</span>
+        </div>
+        <div class="subject synth">Port lane retired &mdash; check your bindings</div>
+        <div class="ball"><b>you</b> &mdash; the push to keynox failed
+          (<span class="synth">HTTPConnectionPool: Read timed out (5s)</span>); it can still collect.</div>
+        <div class="facts">
+          <span>staged_at <b class="synth">2026-09-26T15:21:40</b></span>
+          <span class="age synth">15h waiting</span>
+          <span>push_attempts <b class="synth">4</b></span>
+          <span>collected_at <b>&mdash;</b></span>
+          <span>callback <b class="synth">https://keynox.ksgco.app/hook</b></span>
+        </div>
+      </article>
+
+      <article class="row collected">
+        <div class="rtop">
+          <span class="id synth">#5</span><span class="to synth">fksinv</span>
+          <span class="kind">reply</span><span class="pill collected">collected</span>
+        </div>
+        <div class="subject synth">Receipt &mdash; your claim was recorded</div>
+        <div class="ball"><b>fksinv</b> &mdash; it has the message, it has not answered.</div>
+        <div class="facts">
+          <span>staged_at <b class="synth">2026-09-25T09:12:00</b></span>
+          <span>collected_at <b class="synth">2026-09-25T09:40:18</b></span>
+          <span class="age synth">answer owed 1d 21h</span>
+          <span>collected_via <b class="synth">pull</b></span>
+          <span>collect_count <b class="synth">3</b></span>
+        </div>
+      </article>
+
+      <article class="row acked">
+        <div class="rtop">
+          <span class="id synth">#4</span><span class="to synth">fksinv</span>
+          <span class="kind">intake</span><span class="pill acked">acked</span>
+        </div>
+        <div class="subject synth">Intake &mdash; tell the server what you are</div>
+        <div class="ball"><b>you</b> &mdash; fksinv answered:
+          <span class="synth">will refile the claim with all four published ports</span></div>
+        <div class="facts">
+          <span>staged_at <b class="synth">2026-09-25T02:30:00</b></span>
+          <span>collected_at <b class="synth">2026-09-25T02:58:41</b></span>
+          <span>acked_at <b class="synth">2026-09-25T03:10:07</b></span>
+          <span>turnaround <b class="synth">40m</b></span>
+        </div>
+      </article>
+
+    </div>
+
+    <h2>Never messaged</h2>
+    <div class="msg warn">
+      <h3><span class="synth">flarevault</span> is in the registry and has no outbox row</h3>
+      <p>
+        An empty board is not the same as a fleet that has been messaged.
+        <code>never_messaged</code> names the projects the server has said
+        nothing to at all &mdash; a zero that is not visible anywhere in the
+        message list, because there is no row to draw.
+      </p>
+    </div>
+
+    <div class="worker">
+      worker <b>running</b> &middot; started <b>true</b> &middot; last_run
+      <b>2026-09-27T06:57:39</b> &middot; attempts <b>0</b> &middot; pushed
+      <b>0</b> &middot; failed <b>0</b> &middot; last_error <b>null</b>
+      <br>A stopped worker means nothing is pushed. It does not mean nothing is
+      owed: every message here can still be collected.
+    </div>
+  </section>
+
+  <!-- ================================================================ EMPTY -->
+  <section class="s-empty">
+    <div class="tiles">
+      <div class="tile"><div class="k">Staged</div><div class="v">0</div>
+        <div class="s">nothing is sitting on this server</div></div>
+      <div class="tile"><div class="k">Never collected</div><div class="v">0</div>
+        <div class="s">nothing is owed to anyone</div></div>
+      <div class="tile"><div class="k">Collected</div><div class="v">0</div><div class="s">&mdash;</div></div>
+      <div class="tile"><div class="k">Acked</div><div class="v">0</div><div class="s">&mdash;</div></div>
+    </div>
+
+    <div class="msg bad" style="margin-top:16px">
+      <h3>Nothing has ever been staged</h3>
+      <p>
+        <code>GET /api/outbox</code> on fks-services, 2026-09-27:
+        <code>"messages": []</code>, <code>"by_project": []</code>,
+        <code>"never_messaged": []</code>.
+      </p>
+      <p>
+        <code>never_messaged</code> is empty for the wrong reason. It lists
+        registered projects with no outbox row, and there are no registered
+        projects &mdash; so a fleet that has been told nothing reads here
+        identically to a fleet with nothing to be told. That is the gap this
+        screen exists to make visible, and it is the first thing anyone will
+        see.
+      </p>
+      <p>
+        Staging is <code>POST /api/outbox/&lt;project&gt;</code>, gate 2. Nothing
+        has left this machine when it returns.
+      </p>
+    </div>
+
+    <div class="worker">
+      worker <b>running</b> &middot; last_run <b>2026-09-27T06:57:39</b> &middot;
+      attempts <b>0</b> &middot; pushed <b>0</b> &middot; failed <b>0</b>
+      <br>The worker is up and has nothing to carry. Read from fks-services.
+    </div>
+  </section>
+
+  <!-- ============================================================== REFUSED -->
+  <section class="s-refused">
+    <h2>Staging refused</h2>
+    <div class="msg bad">
+      <h3>Nothing was staged</h3>
+      <p>
+        <code>POST /api/outbox/babyhelp</code> &rarr; <code>400</code><br>
+        <code>body required &mdash; staging an empty message would show as owed</code>
+      </p>
+      <p>
+        An empty message on the board would read as a project owing a reply to
+        nothing. Send <code>{"body": "..."}</code> explicitly, or use kind
+        <code>intake</code> so the text is read from <code>hub/INTAKE.md</code>.
+      </p>
+    </div>
+
+    <h2 style="margin-top:22px">Callback refused</h2>
+    <div class="msg bad">
+      <h3>The address was not registered</h3>
+      <p>
+        <code>POST /api/outbox-address/fksinv</code> &rarr; <code>400</code><br>
+        <code>refused: 127.0.0.1:8080 is on this machine. The hub does not POST
+        into a host port &mdash; that is reaching into a container, which is the
+        one thing isolation forbids. Register an address the project answers on
+        from outside, or stay collect-only.</code>
+      </p>
+      <p>
+        Collect-only is the normal case and the safe default. A project with no
+        callback is not a broken project.
+      </p>
+    </div>
+
+    <h2 style="margin-top:22px">Ack refused</h2>
+    <div class="msg bad">
+      <h3>Not recorded</h3>
+      <p>
+        <code>POST /api/outbox-ack/7</code> &rarr; <code>400</code><br>
+        <code>message 7 is addressed to babyhelp, not fksinv</code>
+      </p>
+      <p>
+        And the other refusal on the same route:
+        <code>answer required &mdash; "none" is valid, silence is not.</code>
+      </p>
+      <p>
+        An ack on a message that was never collected is <em>recorded</em>, not
+        refused, and the trail says so &mdash; <code>acked without ever being
+        collected</code>. Refusing it would lose the only evidence that
+        something odd happened.
+      </p>
+    </div>
+  </section>
+
+  <div class="foot">
+    Nothing on this page is wired. <code>state</code> and <code>ball</code> are
+    computed from timestamps on every read and are never stored, so neither can
+    be sorted on by the API &mdash; any ordering by state is this page's, not the
+    server's. Reading this board never marks anything collected; that separation
+    is what stops the operator manufacturing evidence that a project read
+    something it has never seen.
+  </div>
+</div>
+
+<script>
+(function(){
+  'use strict';
+  var bs = document.querySelectorAll('.states button');
+  function go(s){
+    document.body.setAttribute('data-state', s);
+    for (var i=0;i<bs.length;i++){
+      bs[i].setAttribute('aria-pressed', bs[i].dataset.go === s ? 'true' : 'false');
+    }
+  }
+  for (var i=0;i<bs.length;i++){
+    bs[i].addEventListener('click', function(){ go(this.dataset.go); });
+  }
+})();
+</script>
+</body>
+</html>
