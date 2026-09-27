@@ -1,189 +1,120 @@
-# AGENTS.md — AI Session Entry Point
+# AGENTS.md — AI session entry point
 
-> Read this first. Every AI session touching this repo should orient here before doing anything.
+> Read this first. Every AI session touching this repo should orient here before
+> doing anything.
 
 ---
 
-## Read these first, in this order
+## The standing warning, and it is the whole file
+
+**Every failure this project has found was a *record* disagreeing with the
+*machine*, not a code bug.** An installer copying the app where its imports
+failed. A unit pointing at a deleted file. Docs describing an already-split
+monolith. A memory declaring a live server dead. Five separate files stating
+five different route counts. A backup step documented for months and never
+written.
+
+So: **do not act on anything written in this repo without checking it against
+the live system first.** Documents here carry doctrine — rules, boundaries,
+decisions and their reasons. They deliberately carry **no counts, no status
+ticks and no hostnames**, because those are the parts that rot.
+
+`docs/flareshub-doctrine.md` §0 is the rule and the full command table.
+
+---
+
+## Orient by running things, not by reading things
+
+| Question | Command |
+|---|---|
+| What is this system, and what is hand-built rather than installed? | `python3 hub/tools/atlas.py` |
+| What are the parts, and their telescope codes? | `python3 hub/tools/atlas.py --parts` |
+| Which step of the build order are we on? | `python3 hub/tools/step.py` |
+| Which track is next, and what gates it? | `python3 hub/tools/tracks.py` |
+| What do the five checklists say today, against the machines? | `python3 hub/tools/matrix.py` |
+| What is serving, what is exposed, what could I not see? | `python3 hub/tools/situation.py` |
+| What external systems do we touch, and what binds each write? | `python3 hub/tools/edges.py` |
+| Is this node at the installer's standard? | `bash bootstrap.sh --check` |
+| What routes exist? | `curl -s <hub>/api/sitemap` — generated from the route table |
+| What is this machine? | `curl -s <hub>/api/receipt` |
+
+Every instrument ends with **what it could not see**. A section skipped by a
+flag registers as a blind spot. A clean report with a hole in it is more
+dangerous than a failure, because nobody investigates a pass.
+
+---
+
+## Then read the doctrine, in this order
 
 | File | What it gives you |
 |------|-------------------|
-| `TASKS.md` | the live roadmap — what's done, what's next, and what needs the user rather than an agent |
-| `docs/session-log-2026-09.md` | what actually happened and why, Sep 10-16. Read before assuming anything is broken |
-| `knowledge/decisions.sql` | 18 architecture decisions with context and consequence |
-| `hub/guides/deployment.md` | the five questions for deploying anything, anywhere |
-| `docs/flareshub-blueprint.md` | FlareSHub — layers, enrollment, auth, notifications, build order |
-| `docs/flareshub-checklists.md` | login / installer / cross-connect sequences, each step marked built or not |
-| `docs/flareshub-frontend-dag.md` | how one app serves any server on any device, and the rules that keep it non-monolithic |
-| `hub/guides/remote-access.md` | the two-door auth model, Tailscale vs Cloudflare, ntfy tokens |
-
-**The standing warning:** every failure in the Sep 10-16 session was a *record*
-disagreeing with the *machine*, not a code bug. Before acting on anything written
-here, check it against the live system. `/api/status`, `/api/ports` and
-`registry.json` are derived from the machine; prose files are not.
+| `hub/CONSTITUTION.md` | the laws: what ServerHub is, what it refuses, how its parts may relate |
+| `docs/flareshub-doctrine.md` | FlareSHub specifically — the entry chain, the two consoles, the stateless UI, what "done" means |
+| `hub/KNOWLEDGE.md` | what was learned the hard way, each with what it cost |
+| `hub/FABRIC.md` | the seven dimensions a machine is described by |
+| `docs/flareshub-blueprint.md` | why FlareSHub is shaped this way |
+| `docs/flareshub-checklists.md` | the five sequences, and why each step earns its place |
+| `hub/SERVER-COMMANDS.md` | the seven-command interface a project gets at admit |
+| `hub/guides/remote-access.md` | the two-door auth model |
+| `knowledge/decisions.sql` | architecture decisions with context and consequence |
 
 ---
 
 ## What this repo is
 
-Two servers, one codebase. A Python stdlib HTTP server (`hub/server.py`) runs on each node.
-It handles status, federation, auth, Docker info, logging, AI chat, and incidents.
-The frontend is a single HTML file (`hub/app.html`) with an embedded workspace/pane UI.
+Two servers, one codebase. A Python **stdlib-only** HTTP server runs on each
+node — no npm, no framework, no build step. Dependencies flow one way:
 
-**No longer a monolith.** `hub/server.py` is a 122-line bootstrap. Routes live in
-`hub/kernel/router.py` (dispatch table), request handling in `hub/handlers/` (one
-file per domain), shared machinery in `hub/kernel/`. Dependencies flow one way:
-server -> router -> handlers -> kernel. No handler imports server.py.
+```
+server.py  →  kernel/router.py  →  handlers/  →  kernel/
+```
 
-The frontend is still a single 6,518-line file. That is Phase 3.
-See `docs/refactor-plan.md`.
+`server.py` is a bootstrap: HTTP shell, dispatch, threads. No route logic in it.
+Routes are one dispatch table in `hub/kernel/router.py`. Handlers are one file
+per domain and import `kernel/` only — **no handler imports `server.py`**, and
+when they did, the split was cosmetic and nothing could be moved or deleted
+independently.
+
+Line counts and file inventories are not recorded here. `wc -l` them, or run
+`atlas.py`. Two previous copies of those numbers in this file were wrong.
 
 ---
 
 ## Servers
 
-| Name | Role | Notes |
-|------|------|-------|
-| fks-services | Work server, primary | 216GB RAM, 34 containers, FlareVault node |
-| ksgcohub | Home server | 12 containers, CF tunnel active |
+Connection details — IPs, Tailscale addresses, SSH users, UUIDs — are in
+`notes/secrets.env`, `knowledge/servers.json` and `CLAUDE.md`. **All three are
+gitignored and none of them ships to a node.** They are not repeated here.
 
-**Real IPs, Tailscale IPs, SSH users, and UUIDs are in `notes/secrets.env` and `knowledge/servers.json` — gitignored, never committed.**
-Connection details for this work PC session are in `CLAUDE.md` (also gitignored).
-
----
-
-## Repo layout
-
-```
-claude-server/
-  hub/
-    server.py          — 122 lines. Bootstrap only: HTTP shell, dispatch, threads.
-    kernel/
-      router.py        — route table (66 routes) + dispatch
-      collect.py       — system-state collectors (Docker, ports, storage, proxy)
-      db.py auth.py ssh.py log.py
-    handlers/          — one file per domain. Imports kernel/ only.
-      identity status federation config users events ai tunnel proxy ops
-    app.html           — 6,518 lines. Single-file SPA frontend.
-    mobile.html        — Mobile shell (lower priority)
-    db/server.db       — SQLite. gitignored. Tables: hub_config, activity_log, incidents
-  server-kit/
-    server.manifest.yml  — BOM for kit-status checks
-    install.sh           — Master install script for new servers
-    tools/
-      kit-status.sh           — Checks all services, posts to ntfy
-      boot-health-check.sh    — Oneshot systemd check on every boot
-      boot-health-check.service
-      fix-netplan.sh          — Removes cloud-init netplan conflict
-  knowledge/
-    registry.json      — Machine-readable manifest (servers, files, services)
-    decisions.sql      — Architecture decisions seed data
-    servers.json       — Device UUIDs + connection info
-  docs/
-    refactor-plan.md   — Phased migration blueprint
-  memory/              — Claude persistent memory (not for AI sessions, for Claude Code)
-  notes/
-    secrets.env        — gitignored. Passwords, tokens, IPs.
-  CLAUDE.md            — gitignored. SSH/IP details for this work PC session.
-  MASTER.md            — Human-readable system reference
-  AGENTS.md            — This file
-```
+Which nodes exist and where each is reachable is answered by
+`python3 hub/tools/situation.py` and `python3 hub/tools/atlas.py`, which read
+the zone and the machines rather than a list.
 
 ---
 
-## Key endpoints (hub API)
+## Security rules — always enforce
 
-| Method | Path | What it does |
-|--------|------|-------------|
-| GET | /api/status | Aggregated server info, uptime, load |
-| GET | /api/containers | Docker container list + state |
-| GET | /api/ports | Active port map |
-| GET | /api/sitemap | Full route registry (self-documenting) |
-| GET | /api/identity | Node identity: hostname, role, UUID |
-| GET | /api/incidents | Last 50 incidents |
-| POST | /api/incidents | Create incident |
-| POST | /api/peer/register | Join mesh (bidirectional) |
-| GET | /api/federation | List known peers |
-| GET | /api/hub-context | (NOT BUILT YET) Full AI session context |
-
-Auth: session token in `Authorization: Bearer <token>` header or `token` cookie.
-Gate levels: 0=public, 1=user, 2=admin, 3=TOTP.
-
----
-
-## Kernel primitives (extracted — Phase 1 complete)
-
-| Function | Line (approx) | Target |
-|----------|--------------|--------|
-| `db_conn()` | ~50 | kernel/db.py |
-| `check_auth()` | ~120 | kernel/auth.py |
-| `gate_check()` | ~140 | kernel/auth.py |
-| `ssh_run()` | ~200 | kernel/ssh.py |
-| `log_activity()` | ~250 | kernel/log.py |
-
-Route dispatch is a table in `kernel/router.py`. The if/elif chain is gone.
-Gate enforcement is evaluated at dispatch but NOT applied: the table gates 52 of 66
-routes while app.html sends a token on 16 calls. `HUB_ENFORCE_GATES=1` arms it;
-`router.shadow_report()` shows what would break first.
-
----
-
-## Services running (key ones)
-
-Not listed here. Two hand-typed port lists stood at this spot and were one of
-four service inventories in the repo that disagreed with each other. Ask the node:
-
-```bash
-curl -s <hub>/api/receipt  | jq '.containers'   # running, with ports
-curl -s <hub>/api/services | jq                 # catalogue + live docker state
-curl -s <hub>/api/ports    | jq                 # what is actually listening
-```
-
-The catalogue those endpoints enrich is `SERVICES` in `hub/kernel/collect.py`.
-`hub/CONSTITUTION.md` §4: a BOM is derived, never written by hand. Port *lanes*
-for new services are the one prose part — `PORTS.md` and `MASTER.md` §2.
-
-Caveat worth keeping: **Nextcloud on ksgcohub is a snap on `8181`**, so it is
-absent from `docker ps` and from the receipt's container list; only `/api/ports`
-sees it. Cloudflare Tunnel on ksgcohub maps `hub.ksgco.app` → `:8765` and
-`ntfy.ksgco.app` → `:8085`; fks-services has no tunnel.
-
----
-
-## Things NOT YET BUILT (don't assume these exist)
-
-- `hub/ui/` directory (Phase 3)
-- `/api/hub-context` endpoint
-- FV MCP server
-- Ubuntu autoinstall ISO generator
-- Backup systemd timer (script exists, timer not set)
-- Auth gate on Receipt and AI Chat views
-- TOTP gate on hub
-
----
-
-## Security rules (always enforce)
-
-- Never commit passwords, IPs, or tokens to GitHub
-- `notes/secrets.env` is gitignored — real credentials live there
-- `CLAUDE.md` is gitignored — SSH details live there
-- `hub/db/server.db` is gitignored
-- Every code change: commit + push immediately, no batching
-- AI stack stays OFF unless user explicitly asks
+- Never commit passwords, IPs, or tokens
+- `notes/secrets.env`, `knowledge/servers.json` and `CLAUDE.md` are gitignored —
+  read them, never commit them
+- `db/` is gitignored
+- Every code change: commit and push immediately, no batching
+- The AI stack stays **off** unless the operator explicitly asks
 - Never assign port 8765 to a container
-- Confirm before restarting or stopping services
+- **Confirm before restarting or stopping anything**
+- **Never touch another project.** fksinv, babyhelp, keynox/metaforge,
+  FlareVault: read to describe, never change. *"We stopped using it" is not "it
+  is dead."* Check whose a thing is before removing it
 
 ---
 
-## Quick orientation for a new AI session
+## Three rules about writing in this repo
 
-1. Read this file
-2. Read `docs/refactor-plan.md` for where the code is going
-3. Read `knowledge/registry.json` for the current state barcode
-4. Check `knowledge/decisions.sql` for why things are the way they are
-5. Check `hub/db/server.db` incidents table for recent problems
-6. Never touch `notes/secrets.env` — read it, don't commit it
-
----
-
-*Last updated: 2026-09-09*
+1. **Report, never repair.** Every instrument reports. None of them fixes
+   anything. The operator decides. An instrument that repairs becomes a writer,
+   and writers need owners.
+2. **Derive, don't maintain.** A number that is typed is a number that will be
+   wrong. If you want to add a fact to a document, add a check to a tool.
+3. **One writer per fact.** A node is the only writer of its own state. Two
+   writers for one fact is a split brain, and it is the failure this whole
+   architecture is shaped to prevent.

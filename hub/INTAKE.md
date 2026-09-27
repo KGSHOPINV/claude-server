@@ -165,16 +165,16 @@ WHAT I NEED BACK
 ## One project, one home server
 
 A project belongs to exactly one server and is managed only against that one.
+**Which project lives where is not written here** — ask:
 
-```
-ksgcohub      fksinv · babyhelp
-fks-services  metaforge · flarevault
+```bash
+curl -s <hub>/api/registry     every project on THIS server
 ```
 
-This is not bookkeeping. The rules are DERIVED from the host: ksgcohub resolves
-its data root to /srv/data, fks-services to /srv/docker with backups on
-/backup. Two servers giving the same answer would mean the derivation is
-broken.
+This is not bookkeeping. The rules are DERIVED from the host: each machine
+resolves its own data root, its own backup target and its own free bands from
+its own disks and its own bound ports. **Two servers giving the same answer
+would mean the derivation is broken**, not that they agree.
 
 So there is no global registry — there are two, one per server, and congruence
 between them is about the CODE REF, never the values. A project's receipt is

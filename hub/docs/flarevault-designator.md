@@ -1,5 +1,18 @@
-# FlareVault — Designator Document
-> Current state + ecosystem placement as of Aug 2026
+# FlareVault — the boundary, from ServerHub's side
+
+> **What this is:** the ownership boundary between ServerHub and FlareVault,
+> written down so neither side has to guess. **Relayed from FlareVault in
+> August 2026** and kept as a record of that hand-off.
+>
+> **It is not a status report on FlareVault, and must never become one.**
+> FlareVault owns its own state; a copy of it kept here would be a second
+> source of truth for a fact this repo does not own — Law IV. Anything below
+> phrased in the present tense describes the August 2026 hand-off.
+>
+> What ServerHub can honestly say about FlareVault at any moment is limited to
+> what it can observe: `python3 hub/tools/edges.py` names the joint and what
+> binds each write; `curl -s <hub>/api/receipt` shows the container, up or
+> down.
 
 ---
 
@@ -70,11 +83,14 @@ The current Vault in Server Hub (client-side AES password vault) is a **placehol
 
 ---
 
-## Current Hub Vault Status
+## The hub's own vault — a placeholder, by decision
 
-- Existing hub vault = client-side AES encrypted, master password never leaves browser
-- Status: **placeholder — to be replaced by FlareVault integration**
-- When FlareVault is ready: hub vault UI becomes a window into FlareVault, not its own storage
+The hub's vault holds **pointers, never values**, and the constitution says so:
+*credentials are never here.* The node holds no key and creates no hostname.
+
+It is explicitly a placeholder. When FlareVault integration lands, the hub's
+vault UI becomes a **window into FlareVault**, not its own storage. That is the
+decision; it does not expire.
 
 ---
 
@@ -94,4 +110,6 @@ The current Vault in Server Hub (client-side AES password vault) is a **placehol
 
 ---
 
-*This document describes Server Hub's relationship to FlareVault only. Full FlareVault architecture lives in the FlareVault project.*
+*This document describes ServerHub's relationship to FlareVault only. Full
+FlareVault architecture lives in the FlareVault project, and carrying their
+paperwork here is how a second source of truth starts.*

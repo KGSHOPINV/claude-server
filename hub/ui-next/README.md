@@ -1,7 +1,18 @@
-# ui-next — a cloned shell, not yet a decision
+# ui-next — a cloned shell, and the decision it is waiting on
 
-**Status: nothing uses this.** The hub still serves `hub/app.html`. Deleting this
-directory changes nothing else in the repo.
+**`ui-next` is adopted as the direction.** Looking like fksinv is fine. What is
+not settled is *when*; until it ships, the hub serves the existing frontend.
+
+Whether anything imports it yet is a question for the tree, not for a status
+line that has already been wrong:
+
+```bash
+grep -rn "ui-next" --include=*.py --include=*.html --include=*.js hub/ | grep -v ui-next/
+python3 hub/tools/tracks.py     the order: unison, then mockups, then UI
+```
+
+**Order is enforced, not preferred:** unison then mockups then UI. Mockups
+before any build. `tracks.py` refuses to let the UI track start early.
 
 ---
 
@@ -14,20 +25,13 @@ Not an homage, not a reimplementation — the actual source files, copied byte f
 byte. Saying so precisely matters, because the two projects will now drift and
 whoever reads this next needs to know which direction the original lies in.
 
-```
-~3,040 lines   VERBATIM      shell components, 7 shadcn primitives, store, theme
-~  145 lines   written here  emptied registry, 5 widget stubs, entry point
-~  108 lines   verbatim      package.json, vite config, index.html
-```
+## What was taken
 
-## What was taken, exactly
+The shell layer, its UI primitives, its layout components, and only the stores
+those actually reference — stores with zero shell references were left behind.
 
-| | taken | of | note |
-|---|---|---|---|
-| `shell/` | 15 | 15 | complete |
-| `components/ui/` | 20 | 20 | complete |
-| `components/layout/` | 2 | 2 | complete |
-| `lib/store.js` stores | 4 | 6 | `useDraftStore` and `useTruckStore` removed: zero shell references |
+Line counts are not recorded here. `wc -l` the directory if you need them; two
+previous copies of those numbers in this repo disagreed with each other.
 
 **The extraction is CLOSED.** Everything the shell layer needs is here: zero
 dangling internal imports, every external package declared. There is no reason
@@ -35,22 +39,19 @@ to read `/srv/docker/fksinv` again, and not doing so is the point — one clean
 copy, then independence. From here this shell is ours to change freely, and
 changing it cannot affect that app.
 
-**Still carries fksinv's shape in two places.** `useUserStore` (5 references —
-Header, Footer, MobileHeader) is fksinv's auth model, not ServerHub's sessions.
-`useScannerStore` (1 reference — MobileHeader's input-mode toggle) is a barcode
-scanner ServerHub has no use for. Both stay because removing them breaks the
-build; both need replacing before this ships.
+**It still carries fksinv's shape in two places.** `useUserStore` is fksinv's
+auth model, not ServerHub's sessions. `useScannerStore` is a barcode scanner
+ServerHub has no use for. Both stay because removing them breaks the build, and
+**a template that does not build is not a template** — but both must be replaced
+before this ships.
 
 ## What was emptied
 
-- `lib/registry.js` — was 186 lines of fksinv's nav tree (Catalog, Business,
-  Truck, Client Portal…). Now a shape with three example items.
-- `components/widgets/*` — five real widgets became five stubs. `WidgetBar`
-  imports them by name, so deleting the files breaks the build, and a template
-  that does not build is not a template.
-- 12 dependencies dropped that the shell never imports: dnd-kit, react-table,
-  react-virtual, react-hook-form, cmdk, date-fns, sonner, sql.js, zod, and the
-  shadcn CLI.
+- `lib/registry.js` — was fksinv's nav tree. Now a shape with example items.
+- `components/widgets/*` — real widgets became stubs. `WidgetBar` imports them
+  by name, so deleting the files breaks the build.
+- Every dependency the shell never imports was dropped. `package.json` is the
+  list of what remains; a paragraph here would be a second one.
 
 ## Why this shell and not a new one
 
@@ -96,8 +97,8 @@ React shell
         after:             a real React view
 ```
 
-So the shell can go live with all 24 views working unchanged, and each converts
-when convenient. No blank template, no half-dead app.
+So the shell can go live with **every existing view working unchanged**, and
+each converts when convenient. No blank template, no half-dead app.
 
 **The one real cost is a build step.** ServerHub is stdlib-only and Python serves
 files directly. Solvable without putting node on a server: commit the built
@@ -113,10 +114,14 @@ cd hub/ui-next && npm install && npm run dev
 Shell mounts around an empty router with three placeholder routes. Nothing is
 wired to the hub's API yet.
 
-## Provenance
+## Provenance — 2026-09-23
 
-Cloned 2026-09-23 from ksgcohub `/srv/docker/fksinv/ui`. The source app was
-**not modified**: `build: ./ui` with no bind mounts, so the container serves an
-image-baked bundle. Verified after the copy — `fks-ui` and `fks-api` both
-running, `restarts=0`, `:10101` serving 200, zero files changed under
-`/srv/docker/fksinv`, newest source mtime still 2026-09-15.
+Cloned from another project's UI source on its own server.
+
+**The source app was not modified, and that was verified rather than assumed:**
+its containers still running with zero restarts, its port still serving, zero
+files changed under its directory, and its newest source mtime unchanged.
+
+**Law XII: never touch another project.** Read to describe; never change. The
+check above is what "never changed it" looks like when you have to prove it
+instead of claiming it.

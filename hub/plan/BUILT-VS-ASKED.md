@@ -1,6 +1,34 @@
-# AUDIT — `C:/Dropbox/Files PC Warehouse/claude-server`, branch `fix/project-port-band`
+# AUDIT — built vs asked, 2026-09-24
 
-Read: `hub/INTAKE.md`, `hub/intake/*`, `hub/kernel/control.py`, `hub/handlers/registry.py`, `hub/handlers/mesh.py`, `hub/kernel/router.py`, `hub/server.py`, `hub/FABRIC.md`, `hub/CONSTITUTION.md`, `hub/BOM.md`, `hub/CAPABILITIES.md`, `hub/ui-next/`, `hub/tools/`, `bootstrap.sh`, `enroll.sh`, `docs/flareshub-blueprint.md`, `git log -40`, plus the 1,965-line uncommitted diff.
+**This is HISTORY: a one-day audit of the tree as it stood on 2026-09-24, on
+branch `fix/project-port-band`. Every status claim in it is dated to that day
+and several have since been closed** — sessions now survive a restart, logins
+are recorded and pushed, enrolment has been run against the live Cloudflare API,
+and the fleet page exists. Read no line of this as a present-tense fact.
+
+What does not expire is the **shape** of each finding: what was asked for, what
+was built instead, and what was built that nobody asked for. That is why it is
+kept.
+
+For anything current:
+
+```bash
+python3 hub/tools/step.py      the current step of the build order
+python3 hub/tools/atlas.py     what exists, and what was typed rather than installed
+python3 hub/tools/matrix.py    every checklist row, asserted against the machines
+python3 hub/tools/tracks.py    which track is next, and what gates it
+```
+
+Sources read for the audit: `hub/INTAKE.md`, `hub/intake/*`,
+`hub/kernel/control.py`, `hub/handlers/registry.py`, `hub/handlers/mesh.py`,
+`hub/kernel/router.py`, `hub/server.py`, `hub/FABRIC.md`, `hub/CONSTITUTION.md`,
+`hub/BOM.md`, `hub/CAPABILITIES.md`, `hub/ui-next/`, `hub/tools/`,
+`bootstrap.sh`, `enroll.sh`, `docs/flareshub-blueprint.md`, `git log -40`, plus
+the uncommitted diff of that day.
+
+> Two of the documents this audit read have since been drained to doctrine
+> (`hub/BOM.md`) or deleted (`hub/CAPABILITIES.md`) — acting on the VERDICT at
+> the foot of this page.
 
 ---
 

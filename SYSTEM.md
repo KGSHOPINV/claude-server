@@ -8,7 +8,13 @@
 
 ServerHub is a control plane for a Linux server running Docker.
 
-One Python file (`hub/server.py`) runs as a systemd service. It gives you a browser UI and JSON API over everything happening on the server -- containers, disk, RAM, ports, logs, credentials, and AI.
+A Python **stdlib-only** HTTP server runs as a systemd **user** service. It gives you a browser UI and JSON API over everything happening on the server -- containers, disk, RAM, ports, logs, credential *pointers*, and AI.
+
+It is no longer one file, and describing it as one was wrong on this page for
+weeks after the split. `hub/server.py` is a bootstrap; routes are a dispatch
+table in `hub/kernel/router.py`; request handling is one file per domain in
+`hub/handlers/`; shared machinery is `hub/kernel/`. Dependencies flow one way
+and **no handler imports `server.py`** — when they did, the split was cosmetic.
 
 **Hard requirements:** Docker + Python 3. That is all.
 
@@ -34,11 +40,18 @@ bash install.sh
 - Sets up Docker and system dependencies
 - Deploys the services you selected under `/srv/docker/`
 - Clones `claude-server` into `~/hub`
-- Writes `hub.service` and starts ServerHub on port 7000
+- Writes the hub's systemd **user** unit and starts ServerHub on **port 8765**
 
-After that: `http://SERVER_IP:7000` -- you are live.
+After that: `http://SERVER_IP:8765` -- you are live.
 
-**That is the only install path. server-kit owns it.**
+> This page said `7000` in three places, and `8765` in a fourth, for months.
+> **8765 is the hub. Always. Never a container.** Corrected 2026-09-27.
+
+**The installer must finish the job** — running it should end with the node at
+standard and holding a live hostname, not with "installed, now go configure
+Cloudflare". Whether it does today is `bash bootstrap.sh --check`, which asserts
+against the machine and derives what to expect from the installer's own
+heredocs.
 
 ---
 
@@ -97,113 +110,39 @@ Hub does not care which services are installed. It reads what Docker has running
 
 ---
 
-## Full API Surface
+## API surface, port map, file tree, CLI tools and units — all derived
 
-Base URL: `http://YOUR_SERVER_IP:8765`
+Five hand-maintained tables stood here. Every one of them drifted, and three of
+them were **actively wrong in a way that would cost you an hour**:
 
-| Route | Method | What it returns |
-|-------|--------|----------------|
-| `/api/status` | GET | uptime, RAM, disk, load, containers, power_watts, all volumes |
-| `/api/ports` | GET | all bound ports with service, lane, protocol, state, assigned_by |
-| `/api/context` | GET | structured server snapshot for Metaforge handoff |
-| `/api/receipt` | GET | full point-in-time server snapshot |
-| `/api/containers` | GET | all running containers with name, ports, status, health |
-| `/api/activity` | GET | event log, filterable |
-| `/api/activity` | POST | write an event (any system -- FV, MF, n8n, etc.) |
-| `/api/manifest` | GET | full system snapshot download |
-| `/api/run` | POST | TOTP-gated command execution |
-| `/api/docs` | GET | markdown guides from `guides/` |
-| `/api/issues` | GET | issue files from `issues/` |
-| `/api/config` | GET/POST | hub config key-value store (SQLite) |
-| `/api/vault` | GET/POST | encrypted credential blob |
-| `/api/ai` | POST | AI chat (requires API key in hub_config) |
+- the hub's port was given as `7000` in three places and as `8765` in a fourth,
+  on the same page
+- ntfy was given as `:7001` in one place and `8085` in another
+- the file tree described `server.py` as *"entire backend, all routes"*, which
+  stopped being true when the monolith was split into `kernel/` and `handlers/`
 
----
+That is what a typed table does. Ask instead:
 
-## Port Map
+| What you wanted | What answers it |
+|---|---|
+| Every route, from the route table itself | `curl -s <hub>/api/sitemap` |
+| What is actually listening, with lane and owner | `curl -s <hub>/api/ports` |
+| This machine, completely | `curl -s <hub>/api/receipt` |
+| Mounts, volumes, Docker usage, log size | `curl -s <hub>/api/storage` |
+| The code's own parts, with telescope codes | `python3 hub/tools/atlas.py --parts` |
+| Which units exist on a node, and which fire | `systemctl --user list-timers` **and** `systemctl list-timers` |
+| Which CLI tools a node has | `ls /usr/local/bin/` on that node |
+| Every external system this touches, and what binds each write | `python3 hub/tools/edges.py` |
 
-| Port | Service | Owner |
-|------|---------|-------|
-| 8765 | ServerHub | SH |
-| 8085 | ntfy (self-hosted) | SH |
-| 7777 | flarevault-node | FV |
-| 7779 | companion-app | FV |
-| 7780 | flarevault-mcp | FV |
-| 7781 | node-console | FV |
-| 7782-7799 | FV system management | FV |
+**Check both unit paths, always.** A script this repo once recorded as "invoked
+by nothing" was `ExecStartPost=` in a **user** unit and had been firing the
+fleet's wrongest alert on every restart. The audit that declared it dead had
+read only `/etc/systemd/system`.
 
-> Note: hub port 8765 and ntfy 8085 are the actual deployed ports.
-> The 7xxx block is reserved for federation services only.
-
----
-
-## File Structure
-
-```
-claude-server/              <- hub app repo, cloned to ~/hub on server
-  hub/
-    server.py               <- entire backend, all routes, stdlib only
-    app.html                <- desktop UI
-    mobile.html             <- mobile UI
-    maintenance.py          <- nightly maintenance agent
-
-  db/server.db              <- SQLite, gitignored
-  notes/secrets.env         <- credentials, gitignored, never committed
-
-  guides/                   <- markdown docs served at /api/docs
-  issues/                   <- per-service issues served at /api/issues
-
-  SYSTEM.md                 <- this file
-  REPOS.md                  <- two-repo split explained
-  TASKS.md                  <- roadmap / task docket
-  CLAUDE.md                 <- gitignored -- local IPs, SSH, Claude session rules
-```
-
-```
-server-kit/                 <- bootstrap repo, cloned to ~/server-kit on server
-  install.sh                <- one-command full server setup
-  01-system-setup.sh ...    <- numbered setup scripts run by install.sh
-  docker-compose/           <- compose files for every optional service
-  tools/                    <- CLI tools installed to /usr/local/bin/
-  integrations/
-    flarevault/             <- SPEC, STATUS, INTERFACE (SH->FV build state)
-    metaforge/              <- SPEC, STATUS, INTERFACE (SH->MF build state)
-```
-
----
-
-## CLI Tools (`/usr/local/bin/` -- installed by server-kit)
-
-| Command | What it does |
-|---------|-------------|
-| `server-menu` | Interactive menu for everything |
-| `health-check` | Full service + port status report |
-| `server-backup` | Run backup now |
-| `server-update` | Update all containers + system |
-| `dkps` | Docker ps -- running containers |
-| `dklogs [name]` | Docker logs for a container |
-| `dkrestart [name]` | Restart a container |
-| `dkstop / dkstart [name]` | Stop / start a container |
-
----
-
-## Systemd Units
-
-| Unit | What it does |
-|------|-------------|
-| `hub.service` | Runs server.py on port 7000, auto-restarts |
-| `hub-alert.timer` | Every 15 min -- state-change ntfy alerts |
-| `hub-daily.timer` | 7am -- morning brief via ntfy |
-
-```bash
-systemctl --user status hub
-systemctl --user restart hub
-journalctl --user -u hub -f
-```
-
-Docker services live under `/srv/docker/SERVICE/` -- `docker compose up -d` to start any of them.
-
----
+The one constant worth stating, because it is a rule and not a reading:
+**the hub is `:8765`, it is never a container, and 8765 is never assigned to
+one.** The hub must survive Docker being down — a monitor inside the thing it
+monitors dies exactly when it is needed.
 
 ## Federation DAG
 
@@ -299,23 +238,20 @@ When built, the MCP server lives in `server-kit/mcp/`. Combined with Cloudflare 
 
 ---
 
-## Federation Build State (SH side -- what is live vs what is next)
+## Federation build state — not a table here
 
-| Feature | Status | Blocked on |
-|---------|--------|-----------|
-| `GET /api/context` | LIVE | -- |
-| `GET /api/status` | LIVE | -- |
-| `GET /api/receipt` | LIVE | -- |
-| `GET /api/containers` | LIVE | -- |
-| `GET /api/activity` (read + write) | LIVE | -- |
-| `GET /api/ports` | LIVE | -- |
-| Push container events to FV | NOT BUILT | FV callback URL |
-| Push container events to MF | NOT BUILT | MF callback URL |
-| Server registration handshake | NOT BUILT | MF |
-| Drift detection | NOT BUILT | MF expected manifest |
+A status table of LIVE / NOT BUILT rows stood here, blocked-on column and all.
+Rows went stale in both directions and nothing could tell you which.
 
----
+```bash
+python3 hub/tools/edges.py       every external joint, what binds each write, and what breaks without it
+python3 hub/tools/atlas.py       which planes the installer produces, and which were typed
+curl -s <hub>/api/sitemap        what actually answers
+```
 
+`edges.py` is the right instrument for this question specifically: it names, per
+joint, **what breaks without it** and **where the credential comes from (never
+the value)** — which is what a "blocked on" column was trying and failing to say.
 ## New Session Quickstart
 
 1. Read this file
@@ -344,6 +280,15 @@ health-check
 docker ps --format "table {{.Names}}\t{{.Status}}" | grep -v " Up "
 ```
 
-**ntfy note:** self-hosted ntfy at `:7001`. Phone only receives alerts if on Tailscale or exposed via Cloudflare Tunnel. Fix is pending.
+**ntfy note:** ntfy is **8085**, always — the notifications lane. (`:7001`
+stood here and was never right.) A phone receives alerts only if it can reach
+that endpoint, which means Tailscale or a tunnel. **ntfy deliberately stays off
+Cloudflare Access** — it is an app endpoint with its own token auth, and Access
+would silently kill push.
+
+Whether ntfy is delivering anything is a separate claim from whether it is
+running: it sat correctly configured and locked deny-all, having published
+nothing, while a panel claimed alerts were going to it. Built and delivering
+nothing is not the same as built. `curl -s <hub>/api/events/self`.
 
 **AI stack:** keep OFF unless actively using. No GPU -- full CPU load if models run.

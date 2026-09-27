@@ -33,9 +33,23 @@ ssh <SSH_USER>@<SERVER_LOCAL_IP> "command1 && command2"
 
 ---
 
-## Server Stack — What's Installed
+## Server Stack — ask the node, do not list it here
 
-### TIER 1 — Foundation (everything depends on these)
+> The tier tables below are an **example shape**, not an inventory. Do not
+> maintain them. Several hand-typed service tables in this repo disagreed with
+> each other and with the machines, and `hub/CONSTITUTION.md` §4 forbids a bill
+> of materials in prose.
+>
+> ```bash
+> curl -s <hub>/api/receipt   | jq '.containers'   # running, with ports
+> curl -s <hub>/api/services  | jq                 # catalogue + live docker state
+> curl -s <hub>/api/ports     | jq                 # what is actually listening
+> python3 hub/tools/situation.py                   # plus what is exposed
+> ```
+
+### Example tier shape (illustrative only)
+
+#### TIER 1 — Foundation (everything depends on these)
 | Service | Port | What it does |
 |---------|------|-------------|
 | Docker | — | Runs all services as containers |
@@ -43,7 +57,7 @@ ssh <SSH_USER>@<SERVER_LOCAL_IP> "command1 && command2"
 | Portainer | 9443 (https) | Visual container manager |
 | Watchtower | — | Auto-updates containers |
 
-### TIER 2 — Monitoring (eyes and ears)
+#### TIER 2 — Monitoring (eyes and ears)
 | Service | Port | What it does |
 |---------|------|-------------|
 | Homepage | 3000 | Dashboard — shows all services + status |
@@ -52,7 +66,7 @@ ssh <SSH_USER>@<SERVER_LOCAL_IP> "command1 && command2"
 | Dozzle | 8090 | Live container log viewer |
 | Cockpit | 9090 (https) | Linux admin panel in browser |
 
-### TIER 3 — Tools (what you build with)
+#### TIER 3 — Tools (what you build with)
 | Service | Port | What it does |
 |---------|------|-------------|
 | Supabase | 8000 | Database platform (Postgres under hood) |
@@ -66,7 +80,7 @@ ssh <SSH_USER>@<SERVER_LOCAL_IP> "command1 && command2"
 | Wiki.js | 3002 | Knowledge base |
 | LanguageTool | 8081 | Grammar checker API |
 
-### TIER 4 — AI (optional, CPU-heavy without GPU)
+#### TIER 4 — AI (optional, CPU-heavy without GPU)
 | Service | Port | What it does |
 |---------|------|-------------|
 | Ollama | 11434 | AI model engine |

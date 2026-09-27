@@ -1,8 +1,19 @@
-# Where we are — 2026-09-24
+# The exchange — the model, and what was got wrong reaching it
 
-Written because this session went long and most of it was me getting the plan
-wrong. This is the corrected version. If it disagrees with anything else in the
-repo, this wins.
+**Written 2026-09-24**, because that session went long and most of it was the
+plan being got wrong. What is kept here is the *model* and the *errors*, both of
+which are true forever. **Every "where we are" reading has been removed** — this
+page asserted a live state, and a page that asserts a live state is wrong within
+days and looks exactly as authoritative as it did on day one.
+
+For where anything actually stands:
+
+```bash
+python3 hub/tools/step.py      the current step of the build order
+python3 hub/tools/tracks.py    which track is next, and what gates it
+python3 hub/tools/atlas.py     what exists, and what was typed rather than installed
+python3 hub/tools/matrix.py    the checklists, asserted against the machines
+```
 
 ---
 
@@ -26,20 +37,16 @@ this once by messaging a session and it was the wrong instinct, not a shortcut.
 
 ## TWO servers. Everything applies to both.
 
-```
-ksgcohub        98GB OS + 458GB /srv/data    7GB RAM
-                fksinv · babyhelp
-fks-services    1TB OS  + 4.4TB /backup      216GB RAM
-                metaforge (keynox, 18 containers) · FlareVault (port 7777)
-```
-
-**fks-services holds the authority layer** — FlareVault has been running there
-since 2026-07-27. That makes it the candidate for central, and it is the box I
-neglected all day.
+Their disks, RAM, projects and containers are **not written here** — ask
+`python3 hub/tools/situation.py` or `curl -s <hub>/api/receipt`. The rule is:
 
 Same code everywhere. Different derived values — different disks means
-different data roots, and that difference is the system working, not drift.
-**Congruence is the code ref matching, never the values.**
+different data roots, and that difference is **the system working, not drift.**
+**Congruence is the code ref matching, never the values.** A check on values
+cries wolf and is ignored within a week.
+
+One server holds the authority layer, which makes it the candidate for central
+— and it was the box neglected all day, which is error 3 below.
 
 ---
 
@@ -110,7 +117,7 @@ those, and a guess there is worse than a gap.
 
 ---
 
-## Ports — decided today
+## Ports — the allocation rule (decided 2026-09-24)
 
 ```
 LANE      12000-18999      moved off 7100-7899 (only 16 projects)
@@ -128,12 +135,15 @@ x40-x59  data — db, cache, search
 ```
 
 **Migration, not cutover.** New projects are held to it. Existing ones move when
-it suits them. Outgrowing 100 is a ticket, not a violation.
+it suits them. Outgrowing 100 is a ticket, not a violation. Neither is a
+violation, and saying so is what makes `accept` a real disposition rather than a
+concession.
 
-Proposed: `fksinv 12000-12099` · `babyhelp 12100-12199`
+Which band any project holds is derived, not proposed in a document:
+`curl -s "<hub>/api/admit?project=X"`.
 
-The full 12-lane port library goes in the first readout — the map before their
-position on it.
+The full lane library goes in the first readout — the map before their position
+on it.
 
 ## Storage template — proposed, does not exist yet
 
@@ -163,22 +173,22 @@ list, acceptance test, and the seven commands. After that the operator says
 
 ---
 
-## Live state
+## Live state — deliberately absent
 
+A five-line box stood here giving each server's commits-behind, preflight score,
+backup state, and a count of projects registered. It was a status board inside a
+design document. Every line rotted at a different speed and the page went on
+looking correct.
+
+```bash
+python3 hub/tools/step.py         where the build actually is
+python3 hub/tools/situation.py    what is serving, exposed, and unseen
+python3 hub/tools/matrix.py       every checklist row against both machines
 ```
-ksgcohub      running the branch. registry endpoints live. band 7100-7899
-              deployed BEFORE any project was told — my error, unresolved.
-              backups daily, proven unattended. 8 of 10 preflight.
-fks-services  8 commits behind. no identity file. partial backups only
-              (21 volumes exposed, needs passwordless sudo for tar).
-              FlareVault and Metaforge both here, neither backed up.
-4 projects    0 registered · 0 acknowledged · 0 aware
-branch        ~30 commits, unmerged
-```
 
-## Built and not asked for
+Each ends with **what it could not see**. A blind spot is not a pass.
 
-`hub/ui-next/` — a clone of the fksinv shell. Nothing imports it. Undecided.
+---
 
 ## Open, yours to answer
 
@@ -188,7 +198,7 @@ branch        ~30 commits, unmerged
 - does admission **reject** a claim outside its band, or record a violation
 - which server a new project lands on — nothing answers this yet
 
-## What I got wrong, so it is not repeated
+## What was got wrong on 2026-09-24, so it is not repeated
 
 1. Deployed the port band before any project was told. You had said sideline it
    until projects were aware. That inversion caused most of this.

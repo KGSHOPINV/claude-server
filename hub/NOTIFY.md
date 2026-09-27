@@ -78,10 +78,17 @@ false.
 
 ## Why not ntfy
 
-ntfy is installed on `:8085`, routed at `ntfy.ksgco.app`, correctly locked to
-deny-all, and has published **zero** messages — the hub has never held a token
-for it. It sat there working perfectly and delivering nothing, while the panel
-in `app.html` told you push alerts were going to it.
+ntfy runs on `:8085`, correctly locked to deny-all — and for a long stretch it
+published nothing at all, because the hub never held a token for it. **It sat
+there working perfectly and delivering nothing**, while a panel in the UI said
+push alerts were going to it.
+
+**Built and delivering nothing is not the same as built**, and the two are
+indistinguishable from a document. Ask:
+
+```bash
+curl -s http://localhost:8765/api/events/self
+```
 
 It keeps one real advantage: native apps holding a background connection, which
 reaches a phone with everything closed. This unit does not replace that and is

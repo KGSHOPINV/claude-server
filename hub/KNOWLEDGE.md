@@ -1,7 +1,14 @@
 # Knowledge base — things learned the hard way
 
-Only entries that changed a decision. Each one states what was believed, what
-was true, and what it cost — because a lesson without its cost gets re-learned.
+Only entries that changed a decision. Each one states **what was believed, what
+was true, and what it cost** — because a lesson without its cost gets
+re-learned.
+
+`hub/CONSTITUTION.md` §4 permits this file to be prose: knowledge carries
+reasoning, and reasoning does not execute. **The figures inside an entry are
+evidence for that entry, not a current reading** — they are what was measured
+at the moment the lesson was paid for, and they are never updated. For anything
+current, run a tool.
 
 ---
 
