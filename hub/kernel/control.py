@@ -26,6 +26,7 @@ roll back to cannot live inside the wreck.
 import json
 import os
 import re
+import secrets as _secrets
 import sqlite3
 import time
 from datetime import datetime
@@ -558,11 +559,89 @@ def registry(current_ref=''):
 # way to avoid a surprise.
 # -----------------------------------------------------------------------------
 
-def _pin(seed):
-    """Four digits derived from the content, so it cannot be guessed from the
-    bulletin number and cannot drift from the text it proves was read."""
+# Removed: _pin(seed), four digits from sha256(title + body + action). It made
+# ONE pin for every recipient of a bulletin, out of the very text that is
+# printed to every recipient — so any recipient could recompute any other's, and
+# a pin every holder can derive proves only that the bulletin exists. Its one
+# caller was publish(). _recipient_pin replaces it.
+
+# 20200317  _recipient_pin — one pin per (bulletin, project), unguessable by peers
+def _recipient_pin(secret, project):
+    """The per-recipient confirmation code.
+
+    THE PIN IS THE ONLY PER-PROJECT CREDENTIAL THIS SERVER HAS. There is no
+    per-project token — edges.py says so of /api/outbox-address in as many
+    words — so the pin has to carry the whole weight of "the caller acking as
+    fksinv is fksinv". A pin shared across recipients could not: every
+    recipient held the proof every other recipient needed, which is why one
+    project could ack a bulletin AS another and land a false row in who_read.
+
+    Keyed on a per-bulletin SECRET that is never published, so a recipient
+    cannot derive a peer's code the way it could when the seed was the bulletin
+    text it had just been shown. HMAC rather than a plain hash of secret+project
+    because the secret is the key here, and hmac is the stdlib function for
+    exactly that.
+    """
     import hashlib
-    return "%04d" % (int(hashlib.sha256(seed.encode()).hexdigest()[:8], 16) % 10000)
+    import hmac
+    mac = hmac.new(str(secret).encode(), str(project).strip().lower().encode(),
+                   hashlib.sha256).hexdigest()
+    return "%04d" % (int(mac[:8], 16) % 10000)
+
+
+# 20200318  bulletin_pin — this project's code for this bulletin, or ''
+def bulletin_pin(n, project):
+    """Public because the READOUT has to render it, and the readout is built in
+    handlers/exchange.py. Nothing else should need it: it is not a field in any
+    response, by design.
+
+    '' when there is no such bulletin, when the project is not one the registry
+    knows, or when the bulletin is not addressed to it. A non-recipient getting a
+    valid-looking code back would be the same cross-project leak one layer up —
+    and the SAME three conditions read_bulletin refuses on, so a code can never
+    be handed out that the ack would then reject.
+    """
+    b = bulletin(n)
+    if not b:
+        return ''
+    project = (project or '').strip().lower()
+    if not project:
+        return ''
+    # `projects` belongs to ensure_tables, and this is the first bulletin call
+    # that reads it. Asked of its owner rather than created here, so the table
+    # keeps one schema owner even when a bulletin is the first thing touched on
+    # a fresh install.
+    ensure_tables()
+    c = _conn()
+    known = _is_registered(c, project)
+    c.close()
+    if not known:
+        return ''
+    scope = (b.get('scope') or 'all').strip().lower()
+    if scope != 'all' and scope != project:
+        return ''
+    secret = (b.get('secret') or '').strip()
+    if not secret:
+        # Should not happen: ensure_exchange backfills every row. If it does,
+        # answer '' rather than falling back to the shared pin — a silent
+        # fallback would quietly restore the hole this replaced.
+        return ''
+    return _recipient_pin(secret, project)
+
+
+# 20200319  _is_registered — is this project one the registry knows
+def _is_registered(c, project):
+    """control.read_bulletin used to INSERT whatever project string it was
+    handed without even asking whether such a project exists. So the matrix
+    could name a reader that was never a project at all.
+
+    Takes an open connection because its one caller already holds one, and
+    opening a second here would have two connections writing one database for
+    a single request.
+    """
+    row = c.execute('SELECT name FROM projects WHERE name=?',
+                    ((project or '').strip().lower(),)).fetchone()
+    return row is not None
 
 
 # 20200383  ensure_exchange
@@ -576,6 +655,23 @@ def ensure_exchange():
         action TEXT,
         pin TEXT, published TEXT
     )""")
+    # The per-bulletin secret the per-recipient pins are derived from. Added
+    # rather than replacing `pin`, because an ALTER that drops a column is a
+    # rewrite of a live table and the old column is harmless once nothing reads
+    # it. Nothing does: read_bulletin compares against _recipient_pin now.
+    cols = [r[1] for r in c.execute('PRAGMA table_info(bulletins)')]
+    if 'secret' not in cols:
+        c.execute('ALTER TABLE bulletins ADD COLUMN secret TEXT')
+    # BACKFILLED, which INVALIDATES EVERY PIN ALREADY HANDED OUT for a bulletin
+    # published before this change. That is the intended cost and it is small:
+    # the pin is rendered into the readout, so re-reading produces the new one,
+    # and re-reading is the response this whole mechanism wants anyway. Leaving
+    # the old shared pins working would have meant leaving the hole open for
+    # every bulletin that already exists — which is all of them.
+    for r in c.execute("SELECT n FROM bulletins WHERE secret IS NULL OR secret=''"
+                       ).fetchall():
+        c.execute('UPDATE bulletins SET secret=? WHERE n=?',
+                  (_secrets.token_hex(16), r[0]))
     # A read is recorded against a BULLETIN, not just a code ref: a project can
     # be current on code and still never have been told what is changing.
     c.execute("""CREATE TABLE IF NOT EXISTS reads (
@@ -612,16 +708,29 @@ def ensure_exchange():
 
 # 20200375  publish
 def publish(title, body, action='none', scope='all', rung=1):
+    """Returns (n, recipients) — the bulletin number, and how its codes work.
+
+    IT NO LONGER RETURNS A PIN, because there is no longer ONE pin. Each
+    recipient gets its own, derived from a per-bulletin secret that is stored
+    here and published nowhere; GET /api/bulletin/<n>?project=<p> renders that
+    project's code into its readout. The operator therefore cannot paste "the"
+    pin into the body, and does not need to: the readout has always carried it.
+    """
     ensure_exchange()
     c = _conn()
-    pin = _pin(title + body + action)
-    cur = c.execute('INSERT INTO bulletins (scope,rung,title,body,action,pin,published)'
-                    ' VALUES (?,?,?,?,?,?,?)',
-                    (scope, rung, title, body, action, pin, _now()))
+    cur = c.execute('INSERT INTO bulletins '
+                    '(scope,rung,title,body,action,pin,secret,published)'
+                    ' VALUES (?,?,?,?,?,?,?,?)',
+                    # pin '' rather than NULL: the column is kept for schema
+                    # compatibility with an older hub reading this file, and an
+                    # empty string is an honest "there is no shared pin" where a
+                    # leftover value would be a wrong answer.
+                    (scope, rung, title, body, action, '',
+                     _secrets.token_hex(16), _now()))
     n = cur.lastrowid
     c.commit()
     c.close()
-    return n, pin
+    return n, 'one code per recipient, rendered into that project\'s readout'
 
 
 # 20200376  bulletins_for
@@ -657,13 +766,51 @@ def bulletin(n):
 def read_bulletin(project, n, pin, answer=''):
     """The PIN is proof of reading, so a wrong one is REFUSED rather than
     recorded. Refused, not locked: re-reading is the correct response to getting
-    it wrong, and locking would punish the only useful reaction."""
+    it wrong, and locking would punish the only useful reaction.
+
+    IT IS ALSO PROOF OF WHO IS READING, which it was not. This function INSERTed
+    whatever `project` string it was handed — unchecked, and without even asking
+    whether such a project exists — while the pin was shared by every recipient.
+    So any project holding a bulletin could acknowledge it AS ANOTHER PROJECT,
+    and the forged row landed in who_read: "the matrix, the most useful thing the
+    server knows". Not a missing auth check. A FALSE ENTRY IN THE RECORD THE
+    OPERATOR READS AS EVIDENCE, which is worse in kind than an absent one.
+
+    Three checks now, in the order that gives the most useful refusal first:
+
+      1. the project is one the registry knows. A reader that was never a
+         project cannot be a true row in any matrix.
+      2. the bulletin was addressed to it — scope 'all', or scope == project.
+      3. the pin matches THIS project's code, which no other recipient holds.
+
+    The refusal is shaped like outbox.acknowledge's: name the record, name what
+    it says, name what was presented.
+    """
     ensure_exchange()
+    ensure_tables()                 # `projects`, whose owner is ensure_tables
+    project = (project or '').strip().lower()
+    if not project:
+        return None, 'name yourself: project required'
     b = bulletin(n)
     if not b:
         return None, 'no such bulletin'
-    if str(pin).strip() != b['pin']:
-        return None, 'pin does not match bulletin %s - read it again' % n
+    c = _conn()
+    if not _is_registered(c, project):
+        c.close()
+        return None, ('%s is not a project this server knows, so it cannot be '
+                      'recorded as having read bulletin %s' % (project, n))
+    c.close()
+    scope = (b.get('scope') or 'all').strip().lower()
+    if scope != 'all' and scope != project:
+        return None, ('bulletin %s is addressed to %s, not %s' % (n, scope, project))
+    expected = bulletin_pin(n, project)
+    if not expected or str(pin).strip() != expected:
+        # Deliberately does NOT say what the right pin was, and deliberately
+        # does not distinguish "wrong code" from "someone else's code": both are
+        # answered by reading your own copy, and telling the caller which of the
+        # two it got would help it hunt for another project's code.
+        return None, ('pin does not match bulletin %s for %s - read your copy '
+                      'again' % (n, project))
     if not (answer or '').strip():
         return None, 'answer required - "none" is valid, silence is not'
     c = _conn()

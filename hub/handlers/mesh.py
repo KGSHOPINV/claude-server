@@ -20,6 +20,7 @@ import json
 import threading
 from datetime import datetime, timezone
 
+from kernel import auth as _auth
 from kernel import control as _ctl
 from kernel import fleet as _fleet
 from kernel import identity as _id
@@ -221,6 +222,27 @@ def _self_entry(ref, console=''):
     return entry
 
 
+# 20312711  _edge_identity — who Cloudflare says is calling, if anyone
+def _edge_identity(handler):
+    """The service token's common_name, or ''.
+
+    Read through kernel.auth.service_identity and nowhere else, so the one rule
+    that makes the header safe is not restated here where it could rot: the
+    header is believed ONLY on a request that arrived from the tunnel's own
+    address, because cloudflared forwards only what Access already validated.
+
+    '' on the tailnet and the LAN, where there is no edge in the path to assert
+    anything. That is why this can never be REQUIRED — see kernel.fleet._bound.
+    """
+    try:
+        return _auth.service_identity(handler) or ''
+    except Exception:
+        # An unreadable assertion is the same fact as no assertion: nothing was
+        # proved. It must not be an error, or a malformed header from the edge
+        # would take the receiver down instead of the beat.
+        return ''
+
+
 # 20312701  POST /api/heartbeat — a node reports in
 def post_heartbeat(handler, path, params, body):
     """# 20312701  POST /api/heartbeat
@@ -234,6 +256,13 @@ def post_heartbeat(handler, path, params, body):
     A node whose build predates it still beats normally and is reported as not
     reporting a registry, which is different from having no projects and must
     stay different.
+
+    WHAT THIS ENDPOINT TRUSTS, per path. The sid in the body is a CLAIM, and
+    kernel.fleet._bound decides whether the beat may have the record it names.
+    Over the edge, the service token's common_name is checked too when the
+    record has one recorded. Over tailscale or LAN there is no edge identity to
+    check and machine_id is the whole binding. Either way the record must
+    already exist: a beat cannot create one.
     """
     if not _id.is_central():
         # Not an error — a node simply is not an aggregator. Say so plainly
@@ -243,24 +272,56 @@ def post_heartbeat(handler, path, params, body):
         return
 
     src = params.get('path') or 'unknown'
-    # Authentication is FlareVault's to provide (join tokens). Until then the
-    # receiver records whether a beat was authenticated rather than pretending
-    # it was. An unauthenticated mesh accepts rogue nodes; this at least makes
-    # that visible instead of invisible.
+    # THE SEAM, still open: Authentication is FlareVault's to provide (join
+    # tokens), and this is not it. _id.verify checks a signature made with THIS
+    # box's jwt_secret, so a beat signed by another box can never verify here —
+    # which is why the live record reads authenticated: false, and why this
+    # field was never the binding it looked like.
+    #
+    # WHAT CHANGED is that the beat is now bound by something that does exist:
+    # kernel.fleet._bound holds it to the machine_id the record was registered
+    # with, and to the edge identity where one is recorded. So `authenticated`
+    # keeps recording exactly what it always recorded — did a verifiable join
+    # token arrive — and `bound_by` records what actually let the beat through.
+    # Two facts, two fields: when FlareVault arrives, the token becomes required
+    # and nothing here has to be un-taught.
     authed = False
     tok = handler.headers.get('X-Flare-Token', '')
     if tok:
         authed = _id.verify(tok) is not None
+    edge = _edge_identity(handler)
 
-    rec, event = _fleet.heartbeat(body or {}, path=src, authenticated=authed)
+    rec, event = _fleet.heartbeat(body or {}, path=src, authenticated=authed,
+                                  edge_identity=edge)
     if rec is None:
-        handler.send_json({'ok': False, 'error': event}, 400)
+        # A refused beat is logged. A rejection nobody can see is how an
+        # attempt to overwrite a node's row, or to invent one, passes as
+        # silence — and silence is what this whole file exists to convert into
+        # a fact. Logged as warn, not error: a node that was reprovisioned
+        # without re-registering produces exactly this and is not an attack.
+        detail = event if isinstance(event, dict) else {'error': str(event)}
+        log_activity(db_conn,
+                     'mesh: beat REFUSED for %s — %s'
+                     % ((body or {}).get('server_id') or '(no server_id)',
+                        detail.get('detail') or detail.get('error')),
+                     'mesh', 'fleet', (body or {}).get('server_id', ''), 'warn')
+        # 403 for a beat that claimed a record it could not prove, 400 for one
+        # that never named a record at all. Two different things went wrong and
+        # a node retrying on a loop should be able to tell which.
+        code = 400 if detail.get('error') == 'no_identity' else 403
+        out = {'ok': False}
+        out.update(detail)
+        handler.send_json(out, code)
         return
     if event:
         log_activity(db_conn, event, 'mesh', 'fleet', rec.get('server_id', ''), 'info')
 
-    # Recorded only for a beat the fleet already accepted, so an unknown
-    # server_id cannot grow this table behind the fleet's back.
+    # Recorded only for a beat the fleet already accepted — and as of the
+    # binding above that sentence is finally true. It used to guard nothing:
+    # fleet.heartbeat accepted every beat carrying any id, so an unknown
+    # server_id grew this table exactly as easily as it grew the fleet. Now an
+    # unknown sid never reaches this line, so the bound on this dict really is
+    # the set of registered nodes.
     reg, prev_ref = _record_registry(rec['server_id'], (body or {}).get('registry'))
     central = _central_ref()
     central_console = _console_sha()
@@ -278,6 +339,12 @@ def post_heartbeat(handler, path, params, body):
 
     handler.send_json({'ok': True, 'server_id': rec['server_id'],
                        'status': rec['status'], 'authenticated': authed,
+                       # Reported back beside `authenticated` because they are
+                       # two different facts and the node should be able to see
+                       # which one carried its beat: `authenticated` is a join
+                       # token that does not exist yet, `bound_by` is what this
+                       # beat was actually held to.
+                       'bound_by': rec.get('bound_by', ''),
                        'next_beat_seconds': _fleet.HEARTBEAT_INTERVAL,
                        # Told back to the node, because the node is the one
                        # that can act on it: it learns central's ref without a
@@ -290,7 +357,18 @@ def post_heartbeat(handler, path, params, body):
 
 # 20312702  POST /api/mesh/register — a node joins
 def post_mesh_register(handler, path, params, body):
-    """# 20312702  POST /api/mesh/register"""
+    """# 20312702  POST /api/mesh/register
+
+    THE ONLY ENDPOINT THAT CREATES A FLEET RECORD, as of this change. Beats
+    report on records; this one brings them into existence, so this is where the
+    binding every later beat is checked against is written: the machine_id, and
+    the edge identity if the registration came over the edge.
+
+    Still gate 0 and still idempotent, because a node retries it on every start.
+    What it will NOT do is rekey an existing record from the body — a known
+    server_id arriving with a different machine_id is refused, not absorbed. See
+    kernel.fleet.register.
+    """
     if not _id.is_central():
         handler.send_json({'ok': False, 'error': 'not_central',
                            'mode': _id.mode()}, 409)
@@ -298,8 +376,15 @@ def post_mesh_register(handler, path, params, body):
     b = body or {}
     rec, note = _fleet.register(
         b.get('server_id', ''), b.get('name', ''),
-        b.get('machine_id', ''), b.get('reachability'))
+        b.get('machine_id', ''), b.get('reachability'),
+        edge_identity=_edge_identity(handler))
     if rec is None:
+        # A refused registration is logged for the same reason a refused beat
+        # is: an attempt to rekey another box's record must not be invisible.
+        log_activity(db_conn,
+                     'mesh: register REFUSED for %s — %s'
+                     % (b.get('server_id') or '(no server_id)', note),
+                     'mesh', 'fleet', b.get('server_id', ''), 'warn')
         handler.send_json({'ok': False, 'error': note}, 400)
         return
     msg = f'mesh register: {rec["name"] or rec["server_id"]}'

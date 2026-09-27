@@ -1563,8 +1563,14 @@ def decisions(ctx):
     reached, _st, reg = _api(ctx['hub'], '/api/registry', ctx['timeout'])
     mode = ((reg or {}).get('who') or {}).get('mode') if reg else None
     pin_src = _read(ctx['root'], 'hub/kernel/control.py')
-    pin_shape = ('4 digits from a sha256 of the bulletin text, per bulletin '
-                 '(control._pin)' if 'def _pin(' in pin_src else 'not found in control.py')
+    # Was 'def _pin(' -- 4 digits of sha256 over the bulletin TEXT, one code for
+    # every recipient, which is why a project could ack as another: the text is
+    # printed to everybody, so everybody could recompute everybody's code. That
+    # function is gone. The shape to report is the per-recipient one.
+    pin_shape = ('4 digits from an HMAC of a per-bulletin secret keyed by the '
+                 'project, so one code per (bulletin, recipient) '
+                 '(control._recipient_pin)' if 'def _recipient_pin(' in pin_src
+                 else 'not found in control.py')
     notify = _read(ctx['root'], 'hub/ui/notify.js')
     sw = _read(ctx['root'], 'hub/ui/sw.js')
     vapid = 'VAPID' in (notify + sw) or 'vapid' in (notify + sw)

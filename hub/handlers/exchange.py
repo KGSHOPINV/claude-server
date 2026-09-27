@@ -55,7 +55,9 @@ def get_bulletins(handler, path, params):
     handler.send_json({
         'ok': True, 'project': project, 'who': _who(),
         'unread': len(items), 'bulletins': items,
-        'next': ('GET /api/bulletin/<n> to read one' if items
+        # Names the project in the hint, because the readout is per recipient
+        # now and a bare /api/bulletin/<n> is refused for want of one.
+        'next': ('GET /api/bulletin/<n>?project=%s to read one' % project if items
                  else 'nothing waiting'),
     })
 
@@ -67,6 +69,11 @@ def get_bulletin(handler, path, params):
     The PIN IS IN THE BODY TEXT, not returned as a field. That is the entire
     mechanism: quoting it back is what proves the thing was actually read
     rather than acknowledged blind.
+
+    ?project=<you> IS NOW REQUIRED, because the code is per recipient. It used
+    to be one code printed to everybody, which meant every recipient held the
+    proof every other recipient needed — so a project could ack as another. Ask
+    for your own copy and you get your own code; the bulletin text is identical.
     """
     raw = _target(path, '/api/bulletin/')
     try:
@@ -78,12 +85,33 @@ def get_bulletin(handler, path, params):
     if not b:
         handler.send_json({'ok': False, 'error': 'no bulletin %d' % n}, 404)
         return
+    project = (params.get('project') or '').strip().lower()
+    if not project:
+        handler.send_json({
+            'ok': False, 'error': 'name yourself: ?project=<you>',
+            'why': 'the confirmation code is per recipient, so there is no copy '
+                   'of this bulletin that is not addressed to somebody',
+            'how': 'GET /api/bulletin/%d?project=<you>' % n}, 400)
+        return
+    pin = _ctl.bulletin_pin(n, project)
+    if not pin:
+        # Either the bulletin is not addressed to this project, or the project is
+        # not one this server knows. Answered as one refusal on purpose: the two
+        # are the same outcome and separating them would let a caller enumerate
+        # which projects a scoped bulletin was sent to.
+        handler.send_json({
+            'ok': False, 'error': 'bulletin %d has no copy addressed to %s'
+                                  % (n, project),
+            'hint': 'GET /api/bulletins/%s lists what is addressed to you'
+                    % project}, 404)
+        return
     # THE PIN IS RENDERED INTO THE READOUT, not returned as a field.
     #
-    # It cannot be written into the stored body: control.publish derives it
-    # FROM that body, so a body containing it could not exist. And returning it
-    # as its own JSON key would let a project ack by reading one field, which
-    # is the exact skim the PIN exists to prevent.
+    # It is not in the stored body either: the body is one text shared by every
+    # recipient and the code is not shared, so a code written into the body would
+    # be the same code for everybody -- which is exactly what was wrong before.
+    # And returning it as its own JSON key would let a project ack by reading one
+    # field, which is the skim the PIN exists to prevent.
     #
     # So it is woven into the text at the end, where you reach it by reading to
     # the end. Self-contained, no links out -- what makes the PIN mean
@@ -96,18 +124,24 @@ def get_bulletin(handler, path, params):
         '',
         '--- confirm you read this ---',
         'The one thing you do: %s' % (b['action'] or 'nothing right now'),
-        'Confirmation code: %s' % b['pin'],
+        # Says whose code it is, because it is no longer the bulletin's code. A
+        # project pasting a number it was handed by someone else should be able
+        # to see, in the text it pasted from, that the number was never its own.
+        'Confirmation code for %s: %s' % (project, pin),
         '',
     ])
 
     handler.send_json({
         'ok': True, 'n': b['n'], 'rung': b['rung'], 'scope': b['scope'],
+        'project': project,
         'title': b['title'], 'readout': readout, 'action': b['action'],
         'published': b['published'], 'who': _who(),
         'how_to_acknowledge':
-            'POST /api/bulletin/%d/read with {"project":"<you>",'
+            'POST /api/bulletin/%d/read with {"project":"%s",'
             ' "pin":"<the confirmation code at the end of the readout>",'
-            ' "answer":"<what you will do, or none>"}' % n,
+            ' "answer":"<what you will do, or none>"}' % (n, project),
+        'note': 'the code is yours, not the bulletin\'s -- another project\'s '
+                'code will be refused',
     })
 
 
@@ -121,6 +155,13 @@ def post_bulletin_read(handler, path, params, body):
     reaction.
 
     An empty answer is refused too. "none" is a valid answer; silence is not.
+
+    WHAT THIS ENDPOINT TRUSTS. `project` is a claim in the body, exactly as
+    before -- there is no per-project credential on this server. What changed is
+    that the pin is now per (bulletin, project) and derived from a secret the
+    server never publishes, so presenting it is proof the caller holds THAT
+    project's copy. A project cannot ack as another because it does not hold the
+    other's code. See kernel/control.read_bulletin for the three checks.
     """
     raw = _target(path, '/api/bulletin/').replace('/read', '')
     try:
@@ -135,8 +176,14 @@ def post_bulletin_read(handler, path, params, body):
     got, note = _ctl.read_bulletin(project, n, body.get('pin', ''),
                                    body.get('answer', ''))
     if got is None:
+        # 403 when the caller was refused the identity it claimed, 400 when the
+        # request was simply incomplete. A project retrying in a loop should be
+        # able to tell "I sent the wrong thing" from "this is not mine to ack".
+        code = 404 if note == 'no such bulletin' else (
+            400 if 'answer required' in note else 403)
         handler.send_json({'ok': False, 'error': note, 'project': project,
-                           'reread': 'GET /api/bulletin/%d' % n}, 400)
+                           'reread': 'GET /api/bulletin/%d?project=%s'
+                                     % (n, project)}, code)
         return
     handler.send_json({'ok': True, 'bulletin': n, 'project': project,
                        'note': note, 'who': _who(),
@@ -145,19 +192,27 @@ def post_bulletin_read(handler, path, params, body):
 
 # 20315704  POST /api/bulletins  — the operator publishes
 def post_bulletins(handler, path, params, body):
-    """# 20315704  Publish a bulletin. Gate 2: this speaks FOR the server."""
+    """# 20315704  Publish a bulletin. Gate 2: this speaks FOR the server.
+
+    NO LONGER RETURNS A PIN, and the old reminder to paste it into the body is
+    gone with it: there is no single code any more. Each recipient's readout
+    carries that recipient's own, which is what makes presenting one proof of
+    whose copy was read.
+    """
     title = (body.get('title') or '').strip()
     text = (body.get('body') or '').strip()
     if not title or not text:
         handler.send_json({'ok': False, 'error': 'title and body required'}, 400)
         return
-    n, pin = _ctl.publish(title, text, action=body.get('action', 'none'),
-                          scope=body.get('scope', 'all'),
-                          rung=int(body.get('rung', 1) or 1))
+    n, codes = _ctl.publish(title, text, action=body.get('action', 'none'),
+                            scope=body.get('scope', 'all'),
+                            rung=int(body.get('rung', 1) or 1))
     handler.send_json({
-        'ok': True, 'bulletin': n, 'pin': pin, 'who': _who(),
-        'reminder': 'Put the PIN in the BODY text. A PIN nobody can find in '
-                    'what they read proves nothing.',
+        'ok': True, 'bulletin': n, 'codes': codes, 'who': _who(),
+        'reminder': 'Do NOT put a code in the body text. There is one per '
+                    'recipient and the readout adds it; a code in the body '
+                    'would be the same code for everybody, which proves '
+                    'nothing about who read it.',
     })
 
 

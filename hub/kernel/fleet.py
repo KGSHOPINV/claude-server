@@ -32,6 +32,28 @@ heard from it. It is never `healthy` — DISCOVERING THAT A NODE EXISTS IS NOT A
 CLAIM ABOUT ITS HEALTH, and collapsing those two would turn the register into
 the same kind of lie a stuck sweeper produces.
 
+A BEAT IS BOUND TO THE RECORD IT CLAIMS. Corrected 2026-09-27.
+
+"There is still only ever one writer of a node's state: that node" was the rule
+and it was not enforced. The sid came entirely from the request body and
+`heartbeat()` did `_fleet.get(sid, {...default...})`, so anything that could
+reach :8765 could overwrite any node's row or invent a node that does not
+exist — and `register()` persisted while `heartbeat()` did not, which made the
+DURABLE half of the fleet the half whose key the caller picked.
+
+Two changes make the rule true with what already exists, and no new credential:
+
+    register()   is now the ONLY thing that creates a record. It requires a
+                 machine_id, because that is what later beats are checked
+                 against, and it refuses to rekey a known server_id from the
+                 body.
+    heartbeat()  refuses an unknown server_id outright, and refuses a beat whose
+                 machine_id is not the one the record was registered with. It
+                 persists, so both halves are now durable and both are bound.
+
+See _bound for what each arrival path ends up trusting, and why the Cloudflare
+edge identity is checked where present but can never be required.
+
 WHAT IS STILL TRUE. Nothing here writes to another box, ever. The lateral call
 this file enables is a READ, and only the read the lobby already made:
 kernel/svctoken.py's headers_for/node_url, over Cloudflare, service token only.
@@ -139,27 +161,140 @@ def _now():
     return datetime.now(timezone.utc).isoformat(timespec='seconds')
 
 
+# 20200316  _bound — is this beat entitled to the record it is claiming
+def _bound(sid, rec, claimed_machine, edge_identity):
+    """Returns (True, via) or (False, refusal). `via` names WHAT was checked.
+
+    THE KEY USED TO COME ENTIRELY FROM THE BODY. A beat said `server_id: X` and
+    this module wrote X's row, so anything that could reach :8765 could rewrite
+    any node's row or invent a node that does not exist. Nothing bound the
+    caller to the key it supplied.
+
+    There is no join token to check — that is FlareVault's and it does not
+    exist yet (see handlers/mesh.py, the seam). So the binding is built from
+    what every record and every beat ALREADY carries:
+
+      machine_id     the key on the thing that does not change. This project
+                     learned that lesson when peers were keyed by URL and every
+                     box that moved became a dead peer. A record's machine_id is
+                     written by an explicit registration; a beat claiming that
+                     record has to carry the same one.
+
+      edge identity  Cloudflare Access forwards a service token's common_name
+                     (kernel/auth.service_identity). A beat arriving over the
+                     edge carries one; over tailscale or LAN there is none to
+                     carry. So it is checked when the record HAS one recorded
+                     and the beat presents one, and it is never required —
+                     requiring it would refuse the tailnet path, which is the
+                     failsafe the whole fallback chain exists for.
+
+    A refusal is a dict rather than a sentence because the two kinds are not the
+    same answer: a malformed beat is the sender's bug, and a beat claiming a
+    record it cannot prove is a refusal. Flattening them into one string would
+    lose the distinction the receiver needs to answer 400 or 403.
+    """
+    if rec is None:
+        # THE "INVENT A NODE" HOLE, CLOSED. Registration is an explicit act with
+        # its own endpoint; a beat is a report about a record that already
+        # exists. Creating from a beat meant a typo and an intrusion produced
+        # the identical result: a new, healthy-looking node.
+        return False, {
+            'error': 'unknown_server_id',
+            'detail': 'no server %s is registered here, and a beat does not '
+                      'create a fleet record' % sid,
+            'fix': 'POST /api/mesh/register {"server_id":"%s","name":"...",'
+                   '"machine_id":"..."} from that box first' % sid}
+    known = (rec.get('machine_id') or '').strip()
+    if not known:
+        # A record with no machine_id cannot vouch for anything, and adopting
+        # the first machine_id that turns up would hand the row to whoever beats
+        # first. Re-registration is the way back, and it says so.
+        return False, {
+            'error': 'record_unbound',
+            'detail': 'server %s was recorded without a machine_id, so no beat '
+                      'can be bound to it' % sid,
+            'fix': 'POST /api/mesh/register from that box to bind the record to '
+                   'its machine_id'}
+    if not claimed_machine:
+        return False, {
+            'error': 'machine_id_required',
+            'detail': 'server %s is registered to machine %s, and this beat '
+                      'carries no machine_id' % (sid, known),
+            'fix': "the beat payload is the node's /api/node response, which "
+                   'already contains machine_id — send it unchanged'}
+    if claimed_machine != known:
+        # Shaped like outbox.acknowledge's refusal on purpose: name the record,
+        # name what it says, name what was presented.
+        return False, {
+            'error': 'machine_id_mismatch',
+            'detail': 'server %s is registered to machine %s, not %s'
+                      % (sid, known, claimed_machine),
+            'fix': 'if that box was reprovisioned, POST /api/mesh/register from '
+                   'it — a beat must not silently rekey a record'}
+    via = 'machine_id'
+    recorded_edge = (rec.get('edge_identity') or '').strip()
+    if recorded_edge and edge_identity:
+        if recorded_edge != edge_identity:
+            return False, {
+                'error': 'edge_identity_mismatch',
+                'detail': 'server %s registered from edge identity %s, and this '
+                          'beat arrived as %s'
+                          % (sid, recorded_edge, edge_identity),
+                'fix': 'a changed service token needs a fresh '
+                       'POST /api/mesh/register from that box'}
+        via = 'edge+machine_id'
+    return True, via
+
+
 # 20200331  register — a node joins the mesh
-def register(server_id, name, machine_id, reachability=None):
+def register(server_id, name, machine_id, reachability=None, edge_identity=None):
     """Returns (record, note). `note` flags anything an operator should see.
 
-    Two checks worth making at join time, both cheap and both catching real
-    situations: a known server_id re-registering (a reimage or a restart), and
-    a known machine_id arriving under a DIFFERENT server_id — the same physical
-    box claiming a new identity, which is either a legitimate reprovision or
-    something worth asking about.
+    THE ONE PLACE A FLEET RECORD IS CREATED. Beats no longer create one; see
+    _bound. So this is where the binding a beat will later be held to gets
+    written, which is why a registration WITHOUT a machine_id is now refused: it
+    would write a record no beat could ever prove it owns.
+
+    A known server_id re-registering (a reimage or a restart) is still fine, but
+    it may NOT rekey the record from the body — that is the same caller-supplied
+    key hole one endpoint over. A box whose machine_id genuinely changed
+    registers under the new one after the old record is removed, and the refusal
+    says so rather than leaving an operator to guess.
+
+    Two situations stay notes rather than refusals, because both are legitimate
+    and both are worth an operator seeing: a re-registration, and a known
+    machine_id arriving under a DIFFERENT server_id — the same physical box
+    claiming a new identity. The second cannot overwrite anybody: it keys a new
+    row.
     """
     _restore()
     if not server_id:
         return None, 'server_id required'
+    machine_id = (machine_id or '').strip()
+    if not machine_id:
+        return None, ("machine_id required — the fleet binds a node's beats to "
+                      'its machine_id, and a record without one can never '
+                      'accept one')
     note = None
     with _lock:
         prior = _fleet.get(server_id)
         if prior:
-            note = 're-registration of a known server_id'
+            known = (prior.get('machine_id') or '').strip()
+            if known and known != machine_id:
+                return None, ('server %s is registered to machine %s, not %s — '
+                              'remove the old record before rekeying it'
+                              % (server_id, known, machine_id))
+            if known:
+                note = 're-registration of a known server_id'
+            else:
+                # A row from before beats were bound. Binding it is the only way
+                # to make it usable again, and it is said out loud because this
+                # is the one moment a binding is CHOSEN rather than checked.
+                note = ('server %s had no machine_id recorded; this registration '
+                        'bound it to %s' % (server_id, machine_id))
         else:
             for sid, rec in _fleet.items():
-                if machine_id and rec.get('machine_id') == machine_id:
+                if rec.get('machine_id') == machine_id:
                     note = (f'machine_id already registered as {sid} — same hardware, '
                             f'new server_id (reimage or reprovision?)')
                     break
@@ -167,7 +302,7 @@ def register(server_id, name, machine_id, reachability=None):
         rec.update({
             'server_id':    server_id,
             'name':         name or rec.get('name', ''),
-            'machine_id':   machine_id or rec.get('machine_id', ''),
+            'machine_id':   machine_id,
             'reachability': reachability or rec.get('reachability', []),
             'registered':   rec.get('registered', _now()),
             'status':       rec.get('status', ENROLLING),
@@ -175,29 +310,48 @@ def register(server_id, name, machine_id, reachability=None):
             'path':         rec.get('path'),
             'misses':       rec.get('misses', 0),
         })
+        # Recorded only when the registration actually arrived over the edge. An
+        # absent value must stay absent rather than be written as '', or a box
+        # that registered over tailscale would look like one whose edge identity
+        # is empty, and _bound would have two states to tell apart where there
+        # is only one fact.
+        if edge_identity:
+            rec['edge_identity'] = edge_identity
         _fleet[server_id] = rec
         _persist()
         return dict(rec), note
 
 
 # 20200332  heartbeat — record a beat, return any transition worth logging
-def heartbeat(payload, path='unknown', authenticated=False):
+def heartbeat(payload, path='unknown', authenticated=False, edge_identity=None):
     """payload is the node's /api/node response, unchanged.
 
-    Returns (record, event) where event is a human-readable transition, or
-    None. Two things are events: a status change, and a PATH change — a node
-    that fell back from cloudflare to tailscale is still up, but the fact it
-    had to is exactly the sort of quiet degradation that otherwise goes unseen.
+    Returns (record, event) when the beat is ACCEPTED, where event is a
+    human-readable transition or None. Returns (None, refusal) when it is not,
+    and refusal is a dict — see _bound for why a refusal is structured.
+
+    A BEAT IS A REPORT ABOUT A RECORD THAT ALREADY EXISTS, never the thing that
+    creates one. It used to be `_fleet.get(sid, {...default...})`, so any id
+    that arrived got a row: the fleet view could be grown, or any node's row
+    overwritten, by anything that could reach this port.
+
+    Two things are events: a status change, and a PATH change — a node that fell
+    back from cloudflare to tailscale is still up, but the fact it had to is
+    exactly the sort of quiet degradation that otherwise goes unseen.
     """
     _restore()
     sid = payload.get('server_id') or payload.get('machine_id')
     if not sid:
-        return None, 'heartbeat without server_id or machine_id — ignored'
+        return None, {'error': 'no_identity',
+                      'detail': 'heartbeat without server_id or machine_id',
+                      'fix': "send the node's /api/node response unchanged"}
 
     with _lock:
-        rec = _fleet.get(sid, {
-            'server_id': sid, 'registered': _now(), 'status': ENROLLING, 'misses': 0,
-        })
+        rec = _fleet.get(sid)
+        ok, verdict = _bound(sid, rec, (payload.get('machine_id') or '').strip(),
+                             edge_identity)
+        if not ok:
+            return None, verdict
         prev_status = rec.get('status', ENROLLING)
         prev_path = rec.get('path')
 
@@ -222,11 +376,21 @@ def heartbeat(payload, path='unknown', authenticated=False):
 
         rec.update({
             'name':          payload.get('node') or payload.get('hostname') or rec.get('name', ''),
-            'machine_id':    payload.get('machine_id', rec.get('machine_id', '')),
+            # machine_id is NOT taken from the payload any more. _bound has
+            # already proved this beat carries the one the record was registered
+            # with, so a write here could only ever be a no-op — and a write is
+            # how a body-supplied value finds its way back in.
             'status':        new_status,
             'last_seen':     _now(),
             'path':          path,
+            # Still means exactly what it always meant: the beat carried a
+            # FlareVault-style join token this box could verify. It is NOT the
+            # binding — `bound_by` is — and the two stay apart so that the day a
+            # real token exists, nothing has to be un-taught.
             'authenticated': authenticated,
+            # What this beat was actually held to. An operator reading a row
+            # should not have to infer it from which fields happen to be there.
+            'bound_by':      verdict,
             'reachability':  reach,
             'containers':    sum(len(p.get('containers', [])) for p in payload.get('projects', [])),
             'projects':      len(payload.get('projects', [])),
@@ -236,6 +400,11 @@ def heartbeat(payload, path='unknown', authenticated=False):
             'misses':        0,
         })
         _fleet[sid] = rec
+        # register() persisted and heartbeat() did not, so the DURABLE half of
+        # the fleet was the half whose key the caller picked. Both halves are
+        # bound now, and both are written: a restart must not come back holding
+        # only the record shape this file used to trust least.
+        _persist()
 
         event = None
         if prev_status != new_status:
