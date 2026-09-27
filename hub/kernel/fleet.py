@@ -83,6 +83,21 @@ ENROLLED = 'enrolled'
 _fleet = {}                      # server_id -> record, written by heartbeats
 _lock = threading.Lock()
 
+# ── Storage findings carried from a beat ──────────────────────────────────────
+# Only these two reach the fleet record. `info` findings are shape advice
+# ("docker keeps images on / while the big disk sits idle") — true, worth
+# acting on, and not a reason to mark a node as wanting a human. A flag that
+# fires on every correctly-built node is one operators learn to scroll past.
+# Ordered worst-first, and the order is load-bearing: see storage_flags.
+STORAGE_SEVERITIES = ('high', 'warn')
+
+# Both bounds exist because a beat is input from a machine central does not
+# control. kernel.storage has four rules today, so four is a bound and not an
+# expectation; a node with a broken rule could otherwise put an unbounded list
+# of unbounded strings into every fleet read.
+STORAGE_FLAG_MAX = 4
+STORAGE_DETAIL_MAX = 160         # chars; a flag is a pointer, not the report
+
 # ── Zone discovery ───────────────────────────────────────────────────────────
 CF_API = 'https://api.cloudflare.com/client/v4'
 DISCOVERY_TTL = 300             # seconds; the register changes at enrolment pace
@@ -180,6 +195,68 @@ def register(server_id, name, machine_id, reachability=None):
         return dict(rec), note
 
 
+# 20200315  storage_flags — a node's storage findings, as fleet attention
+def storage_flags(findings):
+    """`findings` is attention.storage from a node's /api/node payload.
+
+    WHY THIS EXISTS. handlers/node.py puts kernel.storage.landscape()
+    ['findings'] into attention.storage precisely so an authority can see which
+    nodes are quietly filling their disks, and /api/node IS the heartbeat
+    payload — so the answer already travelled to central on every beat. It then
+    died at the door, because heartbeat() copied two of the four attention keys
+    and dropped this one. The question was answerable for the box you were
+    already standing on and for no other, which is the exact thing a heartbeat
+    exists to avoid.
+
+    WHAT IS KEPT, AND WHY IT IS NOT A SECOND COPY. Severity and detail only —
+    never the `fix` command, never the mounts, never the landscape. A flag is a
+    pointer at the node's own /api/node, which owns the report; central storing
+    the report would be the two-sources bug _record_registry in handlers/mesh.py
+    refuses to commit, and between beats central's copy would be wrong besides.
+    Attention flags are the one thing the fleet record already carries on the
+    node's behalf, so this rides an existing channel rather than opening one.
+
+    BOUNDED TWICE, and it says so when a bound bites. A truncated list that
+    looked complete would be worse than no list: the node's own total is
+    reported instead, the same rule _record_registry applies when it prefers a
+    node's count over a recount of a list the node truncated.
+    """
+    if not isinstance(findings, list):
+        # A node that sent a dict, a string or nothing is not a node with no
+        # findings, but there is nothing here to read. Silence beats inventing
+        # a flag, and /api/node still answers for that box directly.
+        return []
+
+    ranked = []
+    for f in findings:
+        if not isinstance(f, dict):
+            continue
+        sev = str(f.get('severity', '')).strip().lower()
+        if sev not in STORAGE_SEVERITIES:
+            continue
+        # Collapse whitespace: a detail with a newline in it would break the
+        # one-line-per-flag shape every other consumer of this list assumes.
+        detail = ' '.join(str(f.get('detail', '')).split())
+        if not detail:
+            # An id is a poor sentence and a fine pointer. Better than a flag
+            # that says a severity and nothing about what triggered it.
+            detail = str(f.get('id', '')).strip() or 'unspecified finding'
+        if len(detail) > STORAGE_DETAIL_MAX:
+            detail = detail[:STORAGE_DETAIL_MAX - 1] + '…'
+        ranked.append((STORAGE_SEVERITIES.index(sev), f'storage {sev}: {detail}'))
+
+    # Worst first, so when the bound bites it is an `info`-adjacent warn that
+    # falls off the end and never the finding that says the disk is full.
+    # Python's sort is stable, so findings of equal severity keep the order the
+    # node listed them in — that order is the node's, not ours to reshuffle.
+    ranked.sort(key=lambda r: r[0])
+    out = [flag for _, flag in ranked[:STORAGE_FLAG_MAX]]
+    dropped = len(ranked) - len(out)
+    if dropped:
+        out.append(f'storage: {dropped} more finding(s) — see /api/node on that node')
+    return out
+
+
 # 20200332  heartbeat — record a beat, return any transition worth logging
 def heartbeat(payload, path='unknown', authenticated=False):
     """payload is the node's /api/node response, unchanged.
@@ -213,6 +290,10 @@ def heartbeat(payload, path='unknown', authenticated=False):
             flags.append(f'unassigned: {c}')
         if attention.get('not_enrolled'):
             flags.append('not enrolled')
+        # Storage last, because the flags above name a container and this one
+        # describes the box. See storage_flags for what is kept and what is
+        # deliberately left with the node.
+        flags.extend(storage_flags(attention.get('storage')))
 
         reach = [k for k, v in (
             ('lan', payload.get('local_ip')),

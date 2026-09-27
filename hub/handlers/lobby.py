@@ -325,10 +325,17 @@ def _self_row():
         att = p.get('attention') or {}
         # Same shape as a remote row's count: how many things want a human,
         # not what they are. Names belong behind the drill-in.
+        #
+        # Storage is counted THROUGH kernel.fleet's rule, not by length here.
+        # A remote row's count is len() of the flags heartbeat() built, and
+        # those carry high and warn only -- so counting every severity on this
+        # row would show central one higher than an identical remote node for
+        # an `info` finding, in the same view, on the same screen. One rule,
+        # named in one place, or the two rows quietly mean different things.
         attention = (len(att.get('unassigned_containers') or [])
                      + len(att.get('projects_without_ksg_label') or [])
                      + (1 if att.get('not_enrolled') else 0)
-                     + len(att.get('storage') or []))
+                     + len(_fleet.storage_flags(att.get('storage'))))
     except Exception:
         # Report, never repair. A card with blank counts is honest; a card with
         # invented ones is not, and this is central describing itself -- if it
