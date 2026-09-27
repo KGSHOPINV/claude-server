@@ -183,14 +183,33 @@ machine the preflight says so plainly instead of pretending.
 | Step | Exists |
 |------|--------|
 | 1 OS detect · 2 packages · 3 Docker · 4 hub · 5 systemd | ✅ all five |
-| 6 designate data root | ❌ |
-| 7 designate backup target, install backup job | ❌ |
-| 8 install reclamation timer | ❌ |
-| 9 `--check` mode — assert, change nothing | ❌ |
+| 6 designate data root | ✅ runs `tools/storage-preflight.py` |
+| 7 designate backup target, install backup job | ✅ installs `hub-backup.sh` + `hub-backup.timer` |
+| 8 install reclamation timer | ✅ installs `hub-reclaim.sh` + `hub-reclaim.timer` |
+| 9 `--check` mode — assert, change nothing | ✅ `bash bootstrap.sh --check` |
 
 Step 9 is the one that stops this recurring. A converging installer means
 running it on an existing node brings it to standard instead of needing a
 rebuild — and "did step 7 happen" becomes a command rather than a memory.
+
+```
+bash bootstrap.sh --check            exit 0 only when nothing is missing
+bash bootstrap.sh --check --strict   warns and unknowns fail too
+```
+
+It asserts every step above, in installer order, against the machine — and it
+derives what to expect from `bootstrap.sh`'s own heredocs rather than restating
+them, so the check cannot drift from the installer. It hands this page's ten
+rows to `tools/install-preflight.py` instead of re-implementing them, and
+prints them in their own section labelled with the step each covers.
+
+**First run against the fleet, 2026-09-26.** It found what months of prose had
+not: `ksgcohub` 39 of 45 (its `hub.service` was hand-edited — no
+`WorkingDirectory`, `Restart=always`; and `~/.local/bin/hub-backup.sh` is an
+older copy of `hub/tools/backup.sh` that does not back up `control.db`).
+`fks-services` 26 of 43 — the whole of steps 7 and 8 absent, and a rival
+`~/db/server.db` beside the one the hub opens. Neither box was produced by this
+installer as it stands, and until this command existed nothing said so.
 
 ---
 

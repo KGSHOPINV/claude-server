@@ -27,6 +27,52 @@ warn() { echo -e "${YELLOW}⚠${RESET}  $*"; }
 die()  { echo -e "${RED}✗${RESET}  $*" >&2; exit 1; }
 step() { echo -e "\n${BOLD}${BLUE}[$1/8]${RESET} ${BOLD}$2${RESET}"; }
 
+# ── --check: assert this node, install nothing ───────────────────────────────
+# 20404718  check verb — "did step 7 happen" as a command, not a memory
+#
+# An installer that can only run on a bare machine is a one-shot script. It
+# cannot answer "is this node finished?" about a box that is already running, so
+# the answer stayed a memory -- and a memory cannot fail. Of the two servers in
+# this fleet, this file produced exactly one of them, and nothing would have
+# said so.
+#
+# This verb asserts every step below, in this order, and changes nothing: no
+# package, no file, no unit, no database write, and no question. It is safe on a
+# live production box at any time, and it never prompts -- which is why it is
+# handled HERE, above the banner and above the interactive guard, before any
+# part of the install path has had a chance to run.
+#
+# It delegates: tools/install-check.py derives the standard from THIS FILE's own
+# heredocs, and hands checklist B2's ten rows to tools/install-preflight.py
+# rather than re-implementing them.
+#
+#   bash bootstrap.sh --check            exit 0 only if nothing is missing
+#   bash bootstrap.sh --check --strict   warns and unknowns fail too
+if [ "${1:-}" = "--check" ]; then
+  HUB_DIR="${HUB_DIR:-$HOME/hub}"
+  export HUB_DIR
+  # The standard is the installer you invoked, not whichever copy is at
+  # $HOME/hub. Under `curl | bash` there is no such file, and install-check says
+  # so rather than asserting against a guess.
+  SELF_DIR=""
+  SELF_DIR=$(cd "$(dirname "$0")" 2>/dev/null && pwd) || SELF_DIR=""
+  [ -n "$SELF_DIR" ] && [ -r "$SELF_DIR/bootstrap.sh" ] \
+    && export HUB_BOOTSTRAP="$SELF_DIR/bootstrap.sh"
+  CHECK=""
+  for c in "$SELF_DIR/hub/tools/install-check.py" \
+           "$HUB_DIR/hub/tools/install-check.py"; do
+    [ -n "$c" ] && [ -r "$c" ] && { CHECK="$c"; break; }
+  done
+  if [ -n "$CHECK" ]; then
+    if [ $# -gt 1 ]; then exec python3 "$CHECK" "$2"; else exec python3 "$CHECK"; fi
+  fi
+  # Older checkout: the step-by-step assertion is not here. Say which half is
+  # missing instead of printing a narrower report as if it were the whole one.
+  echo "install-check.py is not in this checkout — only checklist B2 is asserted," >&2
+  echo "not bootstrap.sh's own steps. Update the checkout for the full check." >&2
+  exec python3 "$HUB_DIR/hub/tools/install-preflight.py" "${2:---strict}"
+fi
+
 # ── banner ────────────────────────────────────────────────────────────────────
 echo -e "
 ${BOLD}${CYAN}  ╔══════════════════════════════════════╗
@@ -34,16 +80,6 @@ ${BOLD}${CYAN}  ╔════════════════════�
   ║   Hub will be live at :8765          ║
   ╚══════════════════════════════════════╝${RESET}
 "
-
-# ── --check: converge, do not install ────────────────────────────────────────
-# An installer that can only run on a bare machine is a one-shot script. This
-# one answers "is this node finished?" on any box, at any time, changing
-# nothing -- so the gap between what was documented and what was done stops
-# being invisible.
-if [ "${1:-}" = "--check" ]; then
-  HUB_DIR="${HUB_DIR:-$HOME/hub}"
-  exec python3 "$HUB_DIR/hub/tools/install-preflight.py" "${2:---strict}"
-fi
 
 # ── --stage / --promote: an upgrade you can look at before you take it ───────
 # 20404712  release verbs — stage a ref beside the live hub, then point at it
