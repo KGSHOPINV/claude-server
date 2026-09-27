@@ -28,7 +28,7 @@ die()  { echo -e "${RED}✗${RESET}  $*" >&2; exit 1; }
 step() { echo -e "\n${BOLD}${BLUE}[$1/8]${RESET} ${BOLD}$2${RESET}"; }
 
 # ── --check: assert this node, install nothing ───────────────────────────────
-# 20404718  check verb — "did step 7 happen" as a command, not a memory
+# 20404831  check verb — "did step 7 happen" as a command, not a memory
 #
 # An installer that can only run on a bare machine is a one-shot script. It
 # cannot answer "is this node finished?" about a box that is already running, so
@@ -82,7 +82,7 @@ ${BOLD}${CYAN}  ╔════════════════════�
 "
 
 # ── --stage / --promote: an upgrade you can look at before you take it ───────
-# 20404712  release verbs — stage a ref beside the live hub, then point at it
+# 20404832  release verbs — stage a ref beside the live hub, then point at it
 #
 # Every real defect found in this repo this fortnight was found the same way: a
 # copy of the code was run somewhere harmless and made to prove itself, instead
@@ -436,7 +436,7 @@ PY
   fi
 
   # ── --promote ──────────────────────────────────────────────────────────────
-  # 20404713  promote — one rename, then one user service restarts
+  # 20404833  promote — one rename, then one user service restarts
   #
   # The live path is a symlink, and every promote and every rollback is a
   # single rename of it. That is the whole reason for the indirection: a

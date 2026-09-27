@@ -307,6 +307,67 @@ def show_config():
     return setk, unset
 
 
+# ── TELESCOPE CODES ──────────────────────────────────────────────────────────
+# Every function is supposed to carry a unique 8-digit address. The rule was
+# "grep for the next free number", and that is not an allocator -- it is a
+# guess with a race in it. Four agents working in parallel on 2026-09-26 each
+# grepped before the others had written, and three of them chose 20404718. I
+# then moved one to 20404803, which situation.py had already taken, because I
+# assumed a band was free instead of computing it.
+#
+# So: this section computes. It reports every duplicate and the next genuinely
+# free code in a band, which is the thing that should have existed before any
+# code was ever hand-picked.
+CODE_RE = re.compile(r'^\s*(?:#|//)\s+(\d{8})\s', re.M)
+CODE_EXT = ('.py', '.sh', '.html', '.js')
+
+
+def _codes():
+    used = {}
+    for base, _dirs, files in os.walk(ROOT):
+        if '.git' in base:
+            continue
+        for f in files:
+            if not f.endswith(CODE_EXT):
+                continue
+            p = os.path.join(base, f)
+            try:
+                with open(p, encoding='utf-8', errors='ignore') as fh:
+                    body = fh.read()
+            except Exception:
+                continue
+            for m in CODE_RE.finditer(body):
+                used.setdefault(m.group(1), []).append(
+                    os.path.relpath(p, ROOT).replace('\\', '/'))
+    return used
+
+
+def show_codes():
+    used = _codes()
+    dupes = {k: v for k, v in used.items() if len(v) > 1}
+    print()
+    print('  TELESCOPE CODES — %d distinct, %d duplicated' % (len(used), len(dupes)))
+    print('  ' + '-' * 74)
+    if not dupes:
+        print('    Every code is unique. The address space holds.')
+    for code, where in sorted(dupes.items()):
+        print('    %s  %s' % (code, ' · '.join(where)))
+    if dupes:
+        print()
+        print('    A duplicated code means "go to this function" has two answers,')
+        print('    which is the one thing the scheme exists to prevent.')
+    # Next free in each band that is already in use, so a new function can be
+    # numbered by reading rather than by guessing.
+    bands = sorted({c[:6] for c in used})
+    print()
+    print('    next free per band in use:')
+    for b in bands:
+        nxt = next((b + '%02d' % i for i in range(1, 100)
+                    if b + '%02d' % i not in used), None)
+        print('      %s..  %s' % (b, nxt or 'band full'))
+    return dupes
+
+
 # ── TOPOLOGY ─────────────────────────────────────────────────────────────────
 # The node list comes from CLAUDE.md, the only place both servers are written
 # down. That is itself a finding: the fleet's membership is a document.
@@ -559,6 +620,8 @@ def main():
         show_step()
     else:
         BLIND.append('build order — not run (section filter %s)' % ' '.join(only))
+    if want('codes'):
+        show_codes()
     if want('phases'):
         show_phases()
     print()
