@@ -296,7 +296,9 @@ import os
 import threading
 
 # Gate enforcement is OFF by default. The route table declares the target
-# posture (52 of 65 routes gated) but the current UI only sends a token on a
+# posture (most routes gated; the count is derived, never typed -- it was
+# written down in SEVEN places and every one of them was wrong) but the
+# current UI only sends a token on a
 # handful of calls, so enforcing here would lock out the app. Shadow mode
 # records what WOULD have been denied; flip HUB_ENFORCE_GATES=1 once the UI
 # sends X-Hub-Token / X-Gate-Token on every gated call.

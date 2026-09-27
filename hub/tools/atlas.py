@@ -163,7 +163,11 @@ PLANES = [
         'what': 'tools/ — report, never repair. These replace the documents.',
         'built': ['hub/tools/step.py', 'hub/tools/situation.py', 'hub/tools/tracks.py'],
         'install_marks': [],          # nothing to install; they run from the checkout
-        'retires': ['TASKS.md (stale since 2026-09-16)', 'CAPABILITIES.md'],
+        # CAPABILITIES.md is gone and TASKS.md is drained to the record of why
+        # it failed, so naming them as things this plane WILL retire is itself
+        # a stale fact in the tool that hunts stale facts. What is left is the
+        # standing rule, which cannot go out of date.
+        'retires': ['any document that states a fact a command can answer'],
     },
 ]
 

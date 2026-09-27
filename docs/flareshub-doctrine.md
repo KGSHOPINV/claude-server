@@ -300,11 +300,23 @@ ISO is only possible once the installer converges**, because otherwise an ISO is
 a snapshot of one box's luck. So the order is forced: `--check`, then converge,
 then ISO.
 
-### Two things the installer still owes
-- **A converging mode.** `--check` asserts; nothing yet brings a box *to*
-  standard. Until then Law V cannot be satisfied by anything but hand work.
-- **A decommission path.** Nothing removes a node. Every dead server leaves a
-  tunnel, a DNS record and an Access app behind forever.
+### What the installer owes, and what it now has
+Both were owed when this was written on 2026-09-27; both landed the same day,
+and the entries stay because the *rule* each one serves is the doctrine — the
+status is not.
+
+- **A converging mode.** `bash bootstrap.sh --converge`. It repairs only what
+  `--check` reports missing, prints every action before taking it, and refuses
+  to touch anything `--check` calls a local addition. Without it, Law V can
+  only be satisfied by hand — and a person maintaining sameness is an
+  intermediary record stored where no tool can read it.
+- **A decommission path.** `bash decommission.sh`, dry-run by default. A
+  sibling script rather than a verb on `enroll.sh`, deliberately: a destructive
+  flag must not sit four characters from `--dry-run` on a line retyped out of
+  shell history, and cleanup outlives provisioning. Without it every dead
+  server leaves a tunnel, a DNS record and an Access app behind forever.
+  It refuses any name that is not `flareshub-fvn-<6hex>.<zone>`, and it keeps a
+  tunnel that still serves anyone else.
 
 ---
 

@@ -731,12 +731,26 @@ def sec_b(nodes):
         if hb_reg else 'no announcement anywhere')
 
     # 16 -- decommission
-    decom = any(k in enr for k in ('decommission', '--remove', '--destroy', 'unenroll'))
+    #
+    # THIS CHECK LOOKED IN THE WRONG FILE. It grepped enroll.sh alone, so when
+    # the capability landed as decommission.sh -- a SIBLING script, chosen so a
+    # destructive flag never sits four characters from --dry-run on a line
+    # retyped out of shell history -- this row would have reported FAIL on
+    # something that exists. A check that knows only one shape of an answer
+    # fails the right way exactly once and the wrong way forever after.
+    _dec_path = os.path.join(ROOT, 'decommission.sh')
+    _dec_src = src('decommission.sh') if os.path.exists(_dec_path) else ''
+    decom = bool(_dec_src) or any(
+        k in enr for k in ('decommission', '--remove', '--destroy', 'unenroll'))
+    _dry = '--dry-run' in _dec_src or 'DRY' in _dec_src
     row('B', 'e16', 'n', 'repo', 'decommission path -- remove tunnel, DNS, Access app',
         PASS if decom else FAIL,
-        'nothing removes a node. Unchanged since the doc was written, and the doc '
-        'is right that this is the one people skip: every dead server leaves a '
-        'tunnel, a DNS record and an Access app behind forever.')
+        ('decommission.sh, dry-run by default' if (_dec_src and _dry) else
+         'decommission.sh exists but no dry-run default was found -- a verb that '
+         'removes the way into a node must not act unless it is told twice'
+         if _dec_src else
+         'nothing removes a node: every dead server leaves a tunnel, a DNS '
+         'record and an Access app behind forever.'))
 
 
 # ── C. CROSS-CONNECT ─────────────────────────────────────────────────────────

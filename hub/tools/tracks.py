@@ -1588,7 +1588,7 @@ def decisions(ctx):
                   if apps else 'not read from here (%s)' % (why or 'no token')),
                  'path-scoped apps on one hostname, or one app per hostname?'),
         decision('D2', 'HUB_ENFORCE_GATES -- arm it or leave it',
-                 '59 of 77 routes declare a gate and the router records what it '
+                 'Most routes declare a gate -- edges.py prints the count -- and the router records what it '
                  'would have denied and then runs the handler anyway. Arming gate 1 '
                  'does not close gates 2 and 3, because gate_check() returns True '
                  'while TOTP is unconfigured -- and arming it can lock the UI out. '

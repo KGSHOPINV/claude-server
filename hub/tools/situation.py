@@ -719,7 +719,9 @@ def posture(ctx):
     """Declared and enforced are different words and the difference is the
     whole of this function.
 
-    52 of 65 routes carry a gate. HUB_ENFORCE_GATES defaults to OFF, so the
+    Most routes carry a gate -- run edges.py for the count, because an
+    instrument printing a hand-typed one is the defect it exists to remove.
+    HUB_ENFORCE_GATES defaults to OFF, so the
     router records what it WOULD have denied and then calls the handler
     anyway. On top of that, gate_check returns True whenever TOTP is
     unconfigured, so gates 2 and 3 pass even after gate 1 starts being
