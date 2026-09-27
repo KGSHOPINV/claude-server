@@ -303,7 +303,18 @@ PROBE = (
     '2>/dev/null | awk "{print \\$1}" | grep ^hub | tr "\\n" " ")"; '
     'echo "BACKUPDIR:$(ls -1d /backups 2>/dev/null || echo NONE)"; '
     'echo "BACKUPS:$(ls -1 /backups 2>/dev/null | grep -c ^20)"; '
+    # THE COMPARISON THAT MATTERS, AND THE ONE I GOT WRONG THREE TIMES.
+    #
+    # A backup is safe when it does not share a device with THE DATA IT
+    # BACKS UP. It is not "same device as /" that matters. On ksgcohub the
+    # data lives on sdb (/srv/data, 465G) and the backup writes to /backups
+    # on sda -- different physical disks, which is exactly what hub-backup.sh
+    # chose on purpose and says so at its line 26. Comparing /backups to /
+    # instead made a correct setup look like the worst finding on the page,
+    # three separate times, in both directions.
     'echo "BACKUPDEV:$(df --output=source /backups 2>/dev/null | tail -1)"; '
+    'echo "DATADEV:$(df --output=source /srv/data 2>/dev/null | tail -1)"; '
+    'echo "DATAROOT:$(ls -1d /srv/data 2>/dev/null || echo NONE)"; '
     'echo "ROOTDEV:$(df --output=source / 2>/dev/null | tail -1)"; '
     'echo "UP:$(uptime -p 2>/dev/null)"'
 )
@@ -368,11 +379,21 @@ def show_topology():
             print('    backups   NONE. No unit, no directory. Nothing is copied anywhere.')
         else:
             print('    backups   %s sets in %s' % (bn, bd))
-            if d.get('BACKUPDEV') and d.get('BACKUPDEV') == d.get('ROOTDEV'):
-                print('              SAME DEVICE AS THE DATA (%s). The unit is'
-                      % d.get('BACKUPDEV'))
-                print('              described as "backup to a device that does not hold')
-                print('              the data". One disk failure takes both.')
+            bdev, ddev = d.get('BACKUPDEV'), d.get('DATADEV')
+            if d.get('DATAROOT') in (None, '', 'NONE'):
+                print('              no /srv/data on this box, so there is no separate')
+                print('              data device to be clear of — cannot judge this.')
+                BLIND.append('%s — backup device vs data device: no /srv/data'
+                             % n['node'])
+            elif bdev and ddev and bdev == ddev:
+                print('              SHARES A DEVICE WITH THE DATA IT BACKS UP (%s).'
+                      % bdev)
+                print('              One disk failure takes the data and the copy.')
+            elif bdev and ddev:
+                print('              clear of the data device: data on %s, copy on %s'
+                      % (ddev, bdev))
+            else:
+                BLIND.append('%s — could not read backup/data devices' % n['node'])
         seen.append((n['node'], d))
     return seen
 
