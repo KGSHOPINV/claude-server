@@ -141,42 +141,33 @@ Ports are assigned by lane. Pick the next free port in the correct lane. Never u
 
 ## 5. What's on Each Server
 
-### fks-services (192.168.1.229) — Main Server
-| Service | Port | Status |
-|---------|------|--------|
-| Server Hub | 8765 | ✅ |
-| NPM | 80/81/443 | ✅ |
-| Homepage | 3000 | ✅ |
-| Uptime Kuma | 3001 | ✅ |
-| Netdata | 19999 | ✅ |
-| Dozzle | 8090 | ✅ |
-| Portainer | 9443 | ✅ |
-| ntfy | 8085 | ✅ |
-| n8n | 5678 | ✅ |
-| Redis | 6379 | ✅ |
-| SurrealDB | 8001 | ✅ |
-| Supabase | 8000 | ✅ |
-| MinIO | 9000/9001 | ✅ |
-| Adminer | 8082 | ✅ |
-| Mailpit | 8025 | ✅ |
-| Wiki.js | 3002 | ✅ |
+Two hand-typed tables stood here, one per server, each row carrying a green tick
+that nobody re-checked. They were a bill of materials in prose, which
+`hub/CONSTITUTION.md` §4 forbids: *the moment a bill of materials is typed into
+a table, it is wrong and nobody knows.* Deleted 2026-09-23 in favour of the node
+answering for itself.
 
-### ksgcohub (192.168.50.100) — Node 2
-| Service | Port | Status |
-|---------|------|--------|
-| Server Hub | 8765 | ✅ |
-| NPM | 80/81/443 | ✅ |
-| Homepage | 3000 | ✅ |
-| Uptime Kuma | 3001 | ✅ |
-| Netdata | 19999 | ✅ |
-| Portainer | 9443 | ✅ |
-| Nextcloud (snap) | 8181 | ✅ (moved from 80) |
-| ntfy | 8085 | ⬜ pending |
-| n8n | 5678 | ⬜ pending |
-| Redis | 6379 | ⬜ pending |
-| SurrealDB | 8001 | ⬜ pending |
-| Dozzle | 8090 | ⬜ pending |
-| /srv/data (sdb) | 458G | ✅ mounted |
+```bash
+curl -s <hub>/api/receipt  | jq '{hostname, os, uptime, disks, containers}'
+curl -s <hub>/api/services | jq                  # catalogue + live docker state
+curl -s <hub>/api/ports    | jq                  # what is really listening
+curl -s <hub>/api/storage  | jq                  # mounts and usage
+```
+
+Same answer in the UI: the **Server Receipt** view, per node. `/api/receipt`
+also returns `sync_issues` — services expected by the catalogue in
+`hub/kernel/collect.py` that are not running. That is the list that used to be
+guessed at with ticks.
+
+**Two things the receipt cannot tell you, so they are written down:**
+
+- **Nextcloud on ksgcohub is a snap, not a container** — it listens on `8181`
+  (moved off `80` so NPM could have it) and therefore never appears in
+  `docker ps` or in `/api/receipt`'s container list. `/api/ports` sees it. It is
+  still not behind NPM (gap G006, `knowledge/registry.json`).
+- **Port `8181` is Nextcloud's on that host.** A retired copy of
+  `reference/installation-map.md` once handed the same number to SurrealDB;
+  SurrealDB is `8001` everywhere real. Check `PORTS.md` before assigning.
 
 ---
 

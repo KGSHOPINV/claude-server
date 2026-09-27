@@ -65,41 +65,22 @@ cd ~/hub && git pull && systemctl --user restart hub
 These are installed by server-kit. None are required for hub to function.
 Hub monitors and controls all of them from the browser.
 
-**Infrastructure**
-| Service | Port | What it does |
-|---------|------|-------------|
-| Nginx Proxy Manager | 81 | Routes domains to containers |
-| Portainer | 9443 | Visual container manager |
-| Watchtower | -- | Auto-updates containers |
+This list is **not written down here any more.** It was one of four
+hand-maintained service tables in this repo that disagreed with each other, and
+`hub/CONSTITUTION.md` §4 is explicit: *a bill of materials may never be prose.*
 
-**Monitoring**
-| Service | Port | What it does |
-|---------|------|-------------|
-| Homepage | 3000 | Dashboard showing all services |
-| Uptime Kuma | 3001 | Uptime monitoring + alerts |
-| Netdata | 19999 | Real-time CPU/RAM/disk graphs |
-| Dozzle | 8090 | Live container log viewer |
-| Cockpit | 9090 | Linux admin panel |
+Ask the node:
 
-**Tools**
-| Service | Port | What it does |
-|---------|------|-------------|
-| Supabase | 8000 | Postgres platform |
-| PostgreSQL | 5432 | SQL database |
-| Redis | 6379 | Cache / key-value store |
-| SurrealDB | 8001 | Multi-model database |
-| MinIO | 9000/9001 | Object storage (S3-compatible) |
-| n8n | 5678 | Workflow automation |
-| Adminer | 8082 | Database browser |
-| Mailpit | 8025 | Dev email catcher |
-| Wiki.js | 3002 | Knowledge base |
-| LanguageTool | 8081 | Grammar checker API |
+```bash
+curl -s localhost:8765/api/receipt   | jq '.containers'   # what is running, with ports
+curl -s localhost:8765/api/services  | jq                 # known services + live docker state
+curl -s localhost:8765/api/ports     | jq                 # what is actually listening
+```
 
-**AI (keep OFF -- CPU-only, no GPU)**
-| Service | Port | What it does |
-|---------|------|-------------|
-| Ollama | 11434 | AI model engine |
-| Open WebUI | 3004 | Chat interface |
+In the UI: **Server Receipt** view. The catalogue those endpoints enrich is
+`SERVICES` in `hub/kernel/collect.py` — one list, in code, next to the scanner
+that checks it. Port *lanes* (which range a new service may claim) remain prose
+by necessity and live in `PORTS.md` and `MASTER.md` §2; port *assignments* do not.
 
 ---
 
@@ -255,31 +236,42 @@ Boot order:  SH -> FV -> MF    (SH is always first -- it installs before anythin
 
 ---
 
-## Multi-Server Architecture
+## Multi-Server Architecture — DESIGN, NOT BUILT (checked 2026-09-23)
 
-ServerHub supports a HQ/node model for running multiple servers.
+> The HQ/node pairing flow that stood here was written in the present tense as
+> though it existed. It does not. `POST /api/pair` and `GET /api/peers` are in
+> no route table — grep `hub/kernel/router.py`. They are listed as future work
+> in `TASKS.md` → "HQ/Node Pairing". There is no `role: "hq"` and no `hq_url`
+> anywhere in the codebase, and `install.sh` takes no `PAIR_TOKEN`/`PAIR_HOST`.
+> The design is kept below because it is still the intent; the labels are fixed
+> so nobody calls an endpoint that was never written.
 
-**HQ server** -- one server is designated headquarters. It has Cloudflare Tunnel for public access and aggregates status from all nodes. Set via `"role": "hq"` in hub config.
+**What is actually built and live**
 
-**Node servers** -- additional servers pair to HQ during install. Each node knows its HQ URL and reports to it. Set via `"role": "node"` and `"hq_url"` in hub config.
+| Route | Does |
+|---|---|
+| `POST /api/peer/register` | bidirectional peer handshake — adds the caller's URL to this hub's `peers` list in `hub_config` and calls back |
+| `GET /api/federation` | the peer list plus FlareVault / Metaforge URLs |
+| `POST /api/federation` | set `fv_url`, `mf_url`, `peers`, contact timestamps |
+| `POST /api/mesh/register`, `GET /api/mesh/fleet` | mesh membership and the fleet view |
+| `POST /api/heartbeat` | node liveness |
+| `GET /api/identity`, `GET /api/node` | who this node is |
 
-**Pairing flow:**
-1. HQ dashboard generates a one-time pairing token (24h expiry)
-2. New server install.sh uses: `PAIR_TOKEN=xxx PAIR_HOST=hub.yourdomain.com bash install.sh`
-3. New server calls `POST HQ_URL/api/pair` with token + its own identity
-4. HQ adds it to peer registry. Token consumed.
+Note the shape: the stored `peers` value is a **JSON list of URL strings**, not
+the `{name, url, role}` objects the old text showed. `hub/handlers/identity.py`
+and `hub/handlers/node.py` both carry the same warning — peers keyed by URL die
+when the address moves, so machine-id is the better key.
 
-**Peer registry** -- stored in hub config as a peers list:
-```json
-{ "peers": [
-  { "name": "home-lab", "url": "http://192.168.1.229:8765", "role": "hq" },
-  { "name": "new-server", "url": "http://100.75.x.x:8765", "role": "node" }
-]}
-```
+**Still to build** (design intent, see `TASKS.md`)
 
-`GET /api/peers` -- returns all peers with live status polled from each.
+- one-time pairing token with expiry, generated from the HQ dashboard
+- `POST /api/pair` — token + node identity, token consumed on use
+- `GET /api/peers` — all peers with live status polled from each
+- an explicit HQ role in hub config, so a node knows who aggregates it
 
-**Server identity** -- each hub declares its name at install time. Every API response includes `"server": "home-lab"`. Claude sessions always know which server they're on.
+**Server identity** — each hub declares its name at install time; it is served by
+`GET /api/identity`. Whether every response carries a `server` field is a
+property of the code, not of this file: check `hub/kernel/identity.py`.
 
 ---
 
@@ -297,7 +289,13 @@ Planned tools:
 - `get_activity()` -- event log
 - `get_peers()` -- all registered server nodes
 
-MCP server lives in `server-kit/mcp/`. Combined with Cloudflare Tunnel, any Claude session can connect to hub from anywhere.
+Two corrections to the list above, as of 2026-09-23: `server-kit/mcp/` does not
+exist (`server-kit/` contains `tools/` only), and `get_peers()` names a route
+that was never built — the live equivalents are `GET /api/federation` and
+`GET /api/mesh/fleet`. Build the tool list from `GET /api/sitemap`, which is
+generated from the route table, rather than from this list.
+
+When built, the MCP server lives in `server-kit/mcp/`. Combined with Cloudflare Tunnel, any Claude session can connect to hub from anywhere.
 
 ---
 

@@ -20,6 +20,7 @@ from datetime import datetime
 
 from kernel.ssh import ssh_run
 from kernel import collect as _srv
+from kernel import storage as _store
 
 PORT = int(os.environ.get('HUB_PORT', 8765))
 
@@ -103,11 +104,73 @@ def _ntfy_health():
     }
 
 
+# 20204319  _registry_block — the half of the beat that no node ever sent
+def _registry_block():
+    """THE BUG THIS EXISTS FOR. `mesh.post_heartbeat` has read
+    body['registry'] since the day it was written, and no node has ever put one
+    there. So `_record_registry` returned (None, None) on every beat of every
+    node, central kept no ref for anything, and `_congruence('', central)`
+    answered 'unknown' forever — correctly, and uselessly.
+
+    The cost was not that the check was wrong. It is that the check could not be
+    wrong: on 2026-09-26 both servers sat on fb09de8 and /api/mesh/fleet
+    reported ref '' and congruence unknown for fks-services, exactly as it would
+    have if the two boxes had been six weeks apart. "Are both servers running
+    the same build" was answered by a human running git on each box by hand,
+    while the thing built to answer it said nothing, and said it quietly.
+
+    WHAT GOES IN, AND WHY ONLY THIS. Two fields exist to be compared, and they
+    are the only two that are MEANT to be identical fleet-wide: `ref`, and
+    `console`, the sha of the one app.html every server serves byte for byte.
+    The counts ride along because central cannot ask an unreachable node for
+    them — they are carried, never compared. See `mesh._congruence`.
+
+    NEVER RAISES, AND NEVER OMITS ITSELF SILENTLY. A node whose control database
+    is unreadable still knows its ref and its console, so it still sends them
+    and names the failure in `error`. An absent block means something else at
+    central — "this node's build predates the field" — and the two must not be
+    collapsed into one another.
+    """
+    block = {'ref': '', 'console': ''}
+    try:
+        from handlers.registry import _master, console_sha   # noqa: PLC0415
+        block['ref'] = _master()
+        block['console'] = console_sha()
+    except Exception as e:
+        # Nothing below this line can be answered either, and a beat is worth
+        # more than a crash: the emitter would swallow the exception and the
+        # node would drop off the fleet view entirely rather than appear with a
+        # reason.
+        block['error'] = 'ref/console unavailable: %s' % e
+        return block
+    try:
+        from kernel import control as _ctl                   # noqa: PLC0415
+        projects = [{'name':   p.get('name', ''),
+                     'status': p.get('status', ''),
+                     'stale':  bool(p.get('stale'))}
+                    for p in _ctl.registry(block['ref'])['projects']]
+    except Exception as e:
+        # No counts at all rather than zeroes. A zero project count from a node
+        # whose database would not open is indistinguishable from a node that
+        # genuinely runs nothing, and the fleet total would quietly shrink.
+        block['error'] = 'control db unreadable: %s' % e
+        return block
+    block['project_count'] = len(projects)
+    block['stale_count'] = sum(1 for p in projects if p['stale'])
+    block['projects'] = projects
+    return block
+
+
 # 20204317  node_payload — the self-description, as data
 def node_payload():
     """Shared by GET /api/node and the heartbeat emitter, so what a node
     reports to central is byte-identical to what it reports to a browser.
-    Two builders would drift; one cannot."""
+    Two builders would drift; one cannot.
+
+    Which is also why the `registry` block is added HERE rather than in
+    kernel.heartbeat: an emitter that enriched the payload on its way out would
+    make the beat and /api/node two different shapes, and the thing central is
+    comparing would be the one thing a browser could not check."""
     si = _srv.get_server_info()
     projects = _projects()
     enrolled = _enrollment()
@@ -143,6 +206,14 @@ def node_payload():
         # ── what runs here ──────────────────────────────────────────────────
         'projects': sorted(projects.values(), key=lambda p: p['project']),
 
+        # ── what CODE runs here ─────────────────────────────────────────────
+        # The only block in this payload that exists to be compared against
+        # another machine's. Everything above is this box describing itself and
+        # is expected to differ; this is the ref and the console sha, which are
+        # expected not to. Rides the beat because the two servers sit on
+        # different tailnets and cannot reach each other at all.
+        'registry': _registry_block(),
+
         # ── things that need a human ────────────────────────────────────────
         # Not errors. Facts an authority should be able to see without asking.
         'attention': {
@@ -152,6 +223,11 @@ def node_payload():
             # A silently-failing alerting system is worse than none: you
             # believe you are covered. Report it as a fact about this node.
             'notifications': _ntfy_health(),
+            # Storage is reported for the same reason as notifications: the
+            # failure is silent. 40GB of dead build cache sat on this node's
+            # OS disk for two weeks while a 458GB disk sat empty, because
+            # nothing was looking.
+            'storage': _store.landscape()['findings'],
         },
     }
 
@@ -171,8 +247,12 @@ RESERVED = {
     22:   'ssh',
     80:   'http', 443: 'https',
 }
-BAND_SIZE = 10
-BAND_FLOOR, BAND_CEIL = 10020, 10990   # project bands live above the 10000 line
+# The band is the kernel's to define, not this handler's. It was briefly
+# declared here as 10020-10990, which sits inside the Supabase stack lane —
+# /api/admit was handing out ports another service already owns. One source.
+BAND_FLOOR = _srv.PROJECT_BAND_FLOOR
+BAND_CEIL  = _srv.PROJECT_BAND_CEIL
+BAND_SIZE  = _srv.PROJECT_BAND_SIZE
 
 
 # 20204315  _ports_in_use — every bound TCP port on the host
@@ -215,15 +295,60 @@ def get_admit(handler, path, params):
     band = _free_band(used)
     collision = wanted in projects if wanted else None
 
+    # Derived, not assumed. This node's data path depends on this node's disks:
+    # ksgcohub has a 458GB mount at /srv/data, fks-services does not. A single
+    # hardcoded path is correct on one machine and wrong on the other, and the
+    # project that believes it fills the OS disk.
+    land = _store.landscape()
+    dr = land['data_root']
+    data_dir = ('%s/<project>' % dr['path'].rstrip('/')) if dr['dedicated']                else '/srv/docker/<project>/data'
+
+    # WHICH SERVER, AND WHAT IS COMING. THE-PLAN step 6, verbatim: "YOUR GOING
+    # TO ALSO PROVIDE THEM WITH THERE SERVER REIPET AND THERE SERVER ID ... AND
+    # ALSO ALL THE PAENDINDING SHIT THAT IS GOING TO GO DOWN STREAM LATER".
+    # Both were missing.
+    #
+    # server_id: a project learned the node's NAME and machine-id, never
+    # fvn_xxxxxx -- the derived id the whole fleet keys on, which survives a
+    # rename while a hostname does not. A project recording "ksgcohub"
+    # recorded something that can change under it.
+    #
+    # pending: a project told its band is 7100-7899 will bind there. If that
+    # band is due to move it must know AT THE MOMENT IT IS TOLD, not in a
+    # bulletin it may never read. Pending is what makes a receipt honest about
+    # its own shelf life -- and it is why a NEW project can expect zero diffs:
+    # it was told everything, including what is coming, before it built.
+    # Both imported HERE. _idm is imported inside node_payload(), not at module
+    # scope, so referencing it from this function raised NameError and took
+    # /api/admit down completely -- the front door every project knocks on,
+    # returning nothing at all.
+    from kernel import identity as _idm         # noqa: PLC0415
+    try:
+        from handlers import registry as _reg   # noqa: PLC0415
+        _pend = _reg._pending()
+    except Exception:
+        _pend = []
+
     handler.send_json({
         'node':        (_enrollment() or {}).get('node', ''),
+        'server_id':   _idm.server_id(),
         'machine_id':  _machine_id(),
+        'pending':     _pend,
         'project':     wanted or None,
         'name_available': (not collision) if wanted else None,
         'existing_projects': existing,
 
         'assigned_band': band,          # [lo, hi] — bind only inside this
         'ports_in_use':  used,
+
+        # The disks this answer was derived from, so a project (or a human)
+        # can check the reasoning rather than trusting the conclusion.
+        'storage': {
+            'data_root': dr['path'],
+            'dedicated': dr['dedicated'],
+            'mounts':    land['mounts'],
+            'findings':  land['findings'],
+        },
 
         # The contract. Same words every project, so the fleet stays queryable.
         'contract': {
@@ -236,7 +361,7 @@ def get_admit(handler, path, params):
                 'com.ksg.role':    '<api|ui|db|worker>',
                 'com.ksg.data':    '/srv/docker/<project>/data',
             },
-            'data':      'one bind mount at ./data — the only thing needing backup',
+            'data':      data_dir + '  — one bind mount, the only thing needing backup',
             'secrets':   '.env, gitignored, generated fresh. Never copied between projects.',
             'git':       'its own repo. The server is never the source of truth.',
         },

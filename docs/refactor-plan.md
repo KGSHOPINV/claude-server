@@ -4,20 +4,26 @@
 
 ---
 
-## Current state (as of 2026-09-09)
+## Current state (as of 2026-09-23)
 
-### server.py — 3,119 lines
-- No kernel class. 5 scattered primitives: `db_conn`, `check_auth`, `gate_check`, `ssh_run`, `log_activity`
-- Route dispatch: flat if/elif chain. ~35 GET branches, ~25 POST branches
-- Auth is opt-in per route — not enforced globally
-- DB layer: ~60% extracted into helpers, ~40% inline SQL inside handlers
-- Modularity scores: Add API endpoint **2/10**, Add UI view **4/10**, Swap DB **2/10**
+> The 2026-09-09 block that stood here described `server.py` as a 3,119-line
+> monolith and listed per-file modularity scores. Phases 1 and 2 shipped; every
+> number in it was false. It is replaced by pointers, because a line count
+> written into a document is wrong the day after it is written.
 
-### app.html — 6,518 lines (5,250 JS)
-- View system: `mountPaneContent()` is a ~300-line `switch(viewType)` block
-- Global state: `const S = {}` mutated directly everywhere
-- Adding a new view requires touching 4 separate places
-- What IS modular: workspace system, pane system, individual view loaders
+- `hub/server.py` — **152 lines**, bootstrap only. Not a monolith. Count it:
+  `wc -l hub/server.py`.
+- Routes: one dispatch table in `hub/kernel/router.py`. No if/elif chain.
+  Live route list is `GET /api/sitemap` — self-documenting, never hand-maintained.
+- Handlers: `hub/handlers/`, one file per domain, importing `kernel/` only.
+- Shared machinery: `hub/kernel/` (`db`, `auth`, `ssh`, `log`, `router`,
+  `collect`, `fleet`, `heartbeat`, `identity`, `storage`).
+- `hub/app.html` — still one file, **6,176 lines**. This is the Phase 3 target
+  and the only part of the original plan still outstanding.
+
+Auth caveat that survives both phases: gates are declared per route in the
+table and evaluated at dispatch but **not enforced** unless `HUB_ENFORCE_GATES=1`.
+`router.shadow_report()` shows what would break first. See `AGENTS.md`.
 
 ---
 
@@ -146,13 +152,19 @@ Migrate one domain at a time, ship each separately:
 
 ## What the registry covers
 
-The registry (`knowledge/registry.json`) is NOT just the hub kernel.
-It covers everything:
-- **servers** — UUID as primary key (survives hostname/IP change)
-- **files** — every significant file, its purpose, phase, and refactor status
-- **services** — all Docker containers on all servers, desired vs actual state
+`knowledge/registry.json` was the hand-written manifest this plan assumed. It is
+now a SUPERSEDED stamp: it described the 3,119-line monolith and was read by no
+code. The machine-derived replacements are:
 
-The kernel reads and writes the registry. FV is the authority that keeps it current.
+- **what this node is** — `GET /api/receipt` (the BOM; `hub/CONSTITUTION.md` §4)
+- **what code exists** — `python hub/tools/registry_gen.py`, which scans
+  `hub/server.py`, `hub/kernel/*.py`, `hub/handlers/*.py` for telescope codes and
+  writes `knowledge/registry-live.json`. Regenerate it; never hand-edit it.
+- **servers and UUIDs** — `knowledge/servers.json`
+- **why things are shaped this way** — `knowledge/decisions.sql`
+
+Migration rule 4 above ("registry.json updates with every structural change")
+therefore means: **re-run `registry_gen.py`**, not "edit a JSON file by hand".
 
 ---
 
@@ -165,11 +177,11 @@ server.py a dependency of its own handlers.
 
 Fixed by adding `kernel/collect.py` (not in the original plan): the 1,888-line
 collector region moved out of server.py. Handlers now import `kernel.collect`.
-server.py went 2,890 -> 122 lines.
+server.py went 2,890 -> 122 lines at that commit (152 today — see Current state).
 
 Verified against production on fks-services: 41 GET routes status-identical,
 14 endpoints byte-identical against a copy of the live DB.
 
 ---
 
-*Last updated: 2026-09-10*
+*Last updated: 2026-09-23 — current-state block and registry section corrected; phases left intact.*

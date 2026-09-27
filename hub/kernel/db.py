@@ -32,6 +32,19 @@ def db_ensure_tables():
             role TEXT DEFAULT 'admin',
             created TEXT
         )""")
+        # Sessions were an in-memory dict, so every hub restart logged
+        # everyone out -- including out of the Runbooks view, which is the
+        # feature that exists so an operator does not need an AI to run
+        # routine work. Losing your session on every deploy is what made that
+        # feature unreachable in practice.
+        conn.execute("""CREATE TABLE IF NOT EXISTS sessions (
+            token TEXT PRIMARY KEY,
+            user TEXT NOT NULL,
+            role TEXT DEFAULT 'admin',
+            created TEXT,
+            expires TEXT,
+            via TEXT DEFAULT 'local'
+        )""")
         conn.execute("""CREATE TABLE IF NOT EXISTS hub_config (
             key TEXT PRIMARY KEY,
             value TEXT,

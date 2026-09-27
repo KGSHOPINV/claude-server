@@ -34,7 +34,9 @@ import time
 # FlareVault's USB tier names, used verbatim so there is never a translation
 # layer between the two systems.
 ROLES = ('master', 'operator', 'client-full', 'client-viewer')
-ROLE_RANK = {'client-viewer': 10, 'client-full': 20, 'operator': 50, 'master': 100}
+# Removed: ROLE_RANK, the numeric tier map. Its only reader was role_allows()
+# (see bottom of file), also removed. ROLES itself stays -- issue() and
+# verify() both validate against it.
 
 MODE_NODE = 'node'
 MODE_CENTRAL = 'central'
@@ -126,13 +128,13 @@ def mode():
 def is_central(): return mode() == MODE_CENTRAL
 
 
-def public_hostname(zone=None):
-    """flareshub-{server_id}.{zone} — flat, one level deep, so Cloudflare's
-    free wildcard cert covers it. Nested would need Advanced Certificate
-    Manager."""
-    z = zone or load().get('zone') or ''
-    sid = server_id()
-    return f'flareshub-{sid}.{z}' if (sid and z) else ''
+# Removed: public_hostname(zone=None), which returned
+# 'flareshub-{server_id}.{zone}'. Dead twice over. (1) No caller anywhere in the
+# repo. (2) It read a 'zone' key from the identity file, and nothing writes one
+# there -- enroll.sh does write "zone", but into ~/.flare/node.json, a different
+# file that load() never opens, so the default path always returned ''.
+# The naming scheme it encoded is also superseded: enroll.sh:64 builds the real
+# public hostname as "hub-${NODE_NAME}.${ZONE}".
 
 
 # ── HS256 tokens ─────────────────────────────────────────────────────────────
@@ -195,6 +197,11 @@ def verify(token):
     return claims
 
 
-# 20200328  role_allows — tier comparison using FlareVault's rank order
-def role_allows(claim_role, required):
-    return ROLE_RANK.get(claim_role, 0) >= ROLE_RANK.get(required, 999)
+# Removed: role_allows(claim_role, required) (telescope code 20200328), a
+# rank-order tier comparison. Zero callers -- it was a second, entirely
+# unenforced permission model sitting beside the one the hub actually uses
+# (the numeric `gate` column in kernel/router.py's ROUTES, evaluated in
+# _gate_allows). Nothing ever bridged JWT roles to gate levels.
+# knowledge/registry-live.json still indexes 20200328; that file is generated
+# output of hub/tools/registry_gen.py, not a caller, and drops the entry on
+# the next regen.
