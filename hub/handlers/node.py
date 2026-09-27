@@ -104,11 +104,73 @@ def _ntfy_health():
     }
 
 
+# 20204319  _registry_block — the half of the beat that no node ever sent
+def _registry_block():
+    """THE BUG THIS EXISTS FOR. `mesh.post_heartbeat` has read
+    body['registry'] since the day it was written, and no node has ever put one
+    there. So `_record_registry` returned (None, None) on every beat of every
+    node, central kept no ref for anything, and `_congruence('', central)`
+    answered 'unknown' forever — correctly, and uselessly.
+
+    The cost was not that the check was wrong. It is that the check could not be
+    wrong: on 2026-09-26 both servers sat on fb09de8 and /api/mesh/fleet
+    reported ref '' and congruence unknown for fks-services, exactly as it would
+    have if the two boxes had been six weeks apart. "Are both servers running
+    the same build" was answered by a human running git on each box by hand,
+    while the thing built to answer it said nothing, and said it quietly.
+
+    WHAT GOES IN, AND WHY ONLY THIS. Two fields exist to be compared, and they
+    are the only two that are MEANT to be identical fleet-wide: `ref`, and
+    `console`, the sha of the one app.html every server serves byte for byte.
+    The counts ride along because central cannot ask an unreachable node for
+    them — they are carried, never compared. See `mesh._congruence`.
+
+    NEVER RAISES, AND NEVER OMITS ITSELF SILENTLY. A node whose control database
+    is unreadable still knows its ref and its console, so it still sends them
+    and names the failure in `error`. An absent block means something else at
+    central — "this node's build predates the field" — and the two must not be
+    collapsed into one another.
+    """
+    block = {'ref': '', 'console': ''}
+    try:
+        from handlers.registry import _master, console_sha   # noqa: PLC0415
+        block['ref'] = _master()
+        block['console'] = console_sha()
+    except Exception as e:
+        # Nothing below this line can be answered either, and a beat is worth
+        # more than a crash: the emitter would swallow the exception and the
+        # node would drop off the fleet view entirely rather than appear with a
+        # reason.
+        block['error'] = 'ref/console unavailable: %s' % e
+        return block
+    try:
+        from kernel import control as _ctl                   # noqa: PLC0415
+        projects = [{'name':   p.get('name', ''),
+                     'status': p.get('status', ''),
+                     'stale':  bool(p.get('stale'))}
+                    for p in _ctl.registry(block['ref'])['projects']]
+    except Exception as e:
+        # No counts at all rather than zeroes. A zero project count from a node
+        # whose database would not open is indistinguishable from a node that
+        # genuinely runs nothing, and the fleet total would quietly shrink.
+        block['error'] = 'control db unreadable: %s' % e
+        return block
+    block['project_count'] = len(projects)
+    block['stale_count'] = sum(1 for p in projects if p['stale'])
+    block['projects'] = projects
+    return block
+
+
 # 20204317  node_payload — the self-description, as data
 def node_payload():
     """Shared by GET /api/node and the heartbeat emitter, so what a node
     reports to central is byte-identical to what it reports to a browser.
-    Two builders would drift; one cannot."""
+    Two builders would drift; one cannot.
+
+    Which is also why the `registry` block is added HERE rather than in
+    kernel.heartbeat: an emitter that enriched the payload on its way out would
+    make the beat and /api/node two different shapes, and the thing central is
+    comparing would be the one thing a browser could not check."""
     si = _srv.get_server_info()
     projects = _projects()
     enrolled = _enrollment()
@@ -143,6 +205,14 @@ def node_payload():
 
         # ── what runs here ──────────────────────────────────────────────────
         'projects': sorted(projects.values(), key=lambda p: p['project']),
+
+        # ── what CODE runs here ─────────────────────────────────────────────
+        # The only block in this payload that exists to be compared against
+        # another machine's. Everything above is this box describing itself and
+        # is expected to differ; this is the ref and the console sha, which are
+        # expected not to. Rides the beat because the two servers sit on
+        # different tailnets and cannot reach each other at all.
+        'registry': _registry_block(),
 
         # ── things that need a human ────────────────────────────────────────
         # Not errors. Facts an authority should be able to see without asking.

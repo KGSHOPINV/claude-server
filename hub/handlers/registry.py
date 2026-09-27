@@ -41,6 +41,7 @@ from kernel.log import log_activity
 from kernel.ssh import ssh_run
 
 
+# 20313712  _master — the ref this server runs, derived and always a string
 def _master():
     """The code ref this server is running. Derived, never stored -- a stored
     copy would be the exact drift this whole system exists to catch.
@@ -57,6 +58,13 @@ def _master():
 
     Anchored to this file's own location instead, which is inside the repo by
     construction.
+
+    AND IT RETURNS A STRING OR NOTHING ELSE. The except arm said `return` with
+    no value, so a git that was missing, slow or wedged put None -- not '' --
+    into every consumer of this one function: /api/registry.who.master, the
+    heartbeat's ref, the congruence verdict. None is not "unknown", it is a
+    different type that serialises as JSON null and compares equal to nothing,
+    so the second failure mode was invisible behind the first.
     """
     import os                                   # noqa: PLC0415
     repo = os.path.dirname(os.path.dirname(os.path.dirname(
@@ -66,7 +74,43 @@ def _master():
                            capture_output=True, text=True, timeout=5, cwd=repo)
         return r.stdout.strip() if r.returncode == 0 else ''
     except Exception:
-        return 
+        return ''
+
+
+# 20313713  console_sha — the bytes of the console this box actually serves
+def console_sha():
+    """Congruence's second question, and the one the ref cannot answer.
+
+    The console is ONE file, served by every server, byte for byte. The accepted
+    cost of that decision is that a box on an old commit silently shows an old
+    console. A ref comparison catches that. What a ref comparison does NOT catch
+    is the box on the RIGHT ref whose app.html was hand-edited, or whose
+    checkout moved without the service being restarted from it -- that box
+    reports a matching ref and serves different bytes, which is the same silent
+    old console with the alarm switched off.
+
+    So the ref says what the checkout claims and this says what is on the wire.
+    Both are things that are MEANT to be identical fleet-wide, which is the only
+    test for whether a field belongs in a congruence check at all.
+
+    Cheap on purpose and never cached: one 330KB read and a sha256 at call time.
+    A cached hash of a file that has since changed is the same lie as a stored
+    ref, which is the lie this whole subsystem exists to catch.
+
+    Returns '' when the file cannot be read, never a hash of nothing: '' is read
+    as unknown one layer up, and two servers that both failed to read their own
+    console must not be reported as agreeing with each other.
+    """
+    import hashlib                              # noqa: PLC0415
+    try:
+        # Imported here, not at module scope: this module is imported by the
+        # heartbeat path, and a broken identity module must not take the
+        # registry endpoints down with it.
+        from handlers.identity import APP_PATH   # noqa: PLC0415
+        with open(APP_PATH, 'rb') as f:
+            return hashlib.sha256(f.read()).hexdigest()[:12]
+    except Exception:
+        return ''
 
 
 def _who():

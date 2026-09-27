@@ -255,7 +255,7 @@ cleanup removed the duplicate `guides/` tree and missed this one.
 | `enroll.sh` | 232 | a human — **never executed against the live Cloudflare API** |
 | `maintenance.py` | 222 | `hub-maintenance.timer`, 03:00 nightly |
 | `update.sh` | 24 | a human; the deploy path this repaired was broken for weeks |
-| `alert-startup.sh` | 19 | nothing |
+| `alert-startup.sh` | 110 | `ExecStartPost=` in fks-services' **user** unit `~/.config/systemd/user/hub.service` — this said *nothing*, and the wrongest alert in the fleet was being sent by it every restart |
 | `server-kit/tools/boot-health-check.sh` | 69 | `boot-health-check.service`, oneshot at boot |
 | `server-kit/tools/fix-netplan.sh` | 48 | a human, once |
 | `hub/launcher.py` | 129 | `hub/build-exe.bat` (PyInstaller); Windows tray app |
@@ -265,8 +265,12 @@ cleanup removed the duplicate `guides/` tree and missed this one.
 (Sun 04:00), `hub-maintenance.timer` (nightly 03:00),
 `boot-health-check.service` (at boot).
 
-**Invoked by nothing, total: 9** — 8 shell scripts plus `alert-startup.sh`.
-That is 467 lines of alerting and check-in logic that has never run on a timer.
+**Invoked by nothing, total: 8** — 8 shell scripts. `alert-startup.sh` was
+counted here and should not have been: the audit read the system units under
+/etc/systemd/system and fks-services runs the hub from a USER unit, which has
+had `ExecStartPost=/home/admin1/hub/alert-startup.sh` all along. A script
+believed to be dead was pushing `IP: 1000 | Port: 7000` to a phone every
+restart. Look in both unit paths before writing "nothing" in this column.
 
 ---
 

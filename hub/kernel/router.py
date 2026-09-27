@@ -99,6 +99,12 @@ ROUTES = [
     {"code": "20312701", "method": "POST", "path": "/api/heartbeat",              "prefix": False, "gate": 0, "handler": "post_heartbeat",       "module": "mesh"},
     {"code": "20312702", "method": "POST", "path": "/api/mesh/register",          "prefix": False, "gate": 0, "handler": "post_mesh_register",   "module": "mesh"},
     {"code": "20312703", "method": "GET",  "path": "/api/mesh/fleet",             "prefix": False, "gate": 1, "handler": "get_mesh_fleet",       "module": "mesh"},
+    # A handler with no route is not a feature, it is a 404 with a telescope
+    # code. get_mesh_registry was written, coded 20312709 and documented, and
+    # this line was never added -- so the one address that answers "what runs
+    # where, and is it the same build" answered 404 on both servers. Verified
+    # against ksgcohub on 2026-09-26 before this entry existed.
+    {"code": "20312709", "method": "GET",  "path": "/api/mesh/registry",          "prefix": False, "gate": 1, "handler": "get_mesh_registry",    "module": "mesh"},
 
     # ── The lobby (module 16) — dashboard.<zone>, central mode ───────────────
     # Gate 1 here is a DECLARATION, not the control. A gate level cannot say
