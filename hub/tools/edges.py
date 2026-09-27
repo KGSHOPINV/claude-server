@@ -930,20 +930,34 @@ WRITERS = [
      'owner': 'the node the record is about',
      'key': 'payload["server_id"] or payload["machine_id"]',
      'key_from': 'BODY',
-     'bound': False,
-     'note': 'fleet.heartbeat() creates a record for any sid it has never '
-             'seen (fleet.py:186, `_fleet.get(sid, {...})`). handlers/mesh '
-             'records whether a beat was authenticated and never requires it, '
-             'so `authenticated: false` is an accepted outcome.'},
+     'bound': True,
+     'note': 'BOUND as of 9c32ac3. The sid is still a claim, but fleet._bound '
+             '(20200316) decides whether the beat may have the record it '
+             'names: the record must already exist -- a beat never creates one '
+             '-- and the payload machine_id must equal the record\'s. Over the '
+             'edge, a recorded edge_identity must also match the service '
+             'token\'s common_name; that leg is additive so the tailnet '
+             'failsafe still binds on machine_id alone. Unknown sid answers '
+             '403 unknown_server_id. heartbeat() now PERSISTS too. '
+             '`authenticated: false` still means what it always meant (no '
+             'FlareVault join token); the binding is reported separately as '
+             'bound_by = machine_id | edge+machine_id.'},
     {'route': ('POST', '/api/mesh/register'),
      'writes': 'kernel.fleet._fleet[server_id] — name, machine_id, '
                'reachability, and it PERSISTS to db/fleet.json',
      'owner': 'the node the record is about',
      'key': 'body["server_id"]',
      'key_from': 'BODY',
-     'bound': False,
-     'note': 'register() persists; heartbeat() does not. So the durable half '
-             'of the fleet file is the one whose key the caller chose.'},
+     'bound': True,
+     'note': 'BOUND as of 9c32ac3, and now the ONLY thing that creates a fleet '
+             'record. machine_id is required, because a record without one can '
+             'never accept a beat. A known server_id arriving with a different '
+             'machine_id is refused rather than absorbed. A known machine_id '
+             'under a new sid is a note, not a refusal -- it keys a new row and '
+             'cannot overwrite anyone. heartbeat() persists as well now, so the '
+             'durable half is no longer the caller-keyed half. Still gate 0: '
+             'anyone reaching :8765 can register a NEW server_id, which is '
+             'registration\'s job and is explicit and logged.'},
     {'route': ('POST', '/api/registry/'),
      'writes': 'control.db projects — owner, status, purpose, claim, state',
      'owner': 'the project (its claim) + the registry (state, home)',
@@ -967,16 +981,23 @@ WRITERS = [
      'owner': 'the project',
      'key': 'body["project"]',
      'key_from': 'BODY',
-     'bound': False,
-     'note': 'control.read_bulletin INSERTs whatever project string it is '
-             'given, unchecked — it does not even verify the project exists in '
-             'the registry. And the PIN is PRINTED IN THE BULLETIN BODY by '
-             'design, so every recipient holds the proof every other recipient '
-             'needs. So one project can acknowledge a bulletin AS another '
-             'project, and the forged row lands in who_read, which control.py '
-             'itself calls "the matrix, the most useful thing the server '
-             'knows". This does not merely miss an auth check: it writes a '
-             'FALSE ENTRY into the record the operator reads as evidence.'},
+     'bound': True,
+     'note': 'BOUND as of 9c32ac3. It used to INSERT whatever project string '
+             'it was handed, unchecked, without even verifying the project '
+             'existed -- and because ONE PIN was shared across every recipient, '
+             'every recipient held the proof every other recipient needed. So '
+             'a project could acknowledge a bulletin AS another project and the '
+             'forged row landed in who_read, which control.py itself calls '
+             '"the matrix, the most useful thing the server knows": not a '
+             'missing auth check but a FALSE ENTRY in the record the operator '
+             'reads as evidence. The PIN is now the credential -- per '
+             '(bulletin, project), an HMAC of a per-bulletin secret in '
+             'bulletins.secret, published nowhere. Three checks in order: the '
+             'project is in the registry, the bulletin was addressed to it, '
+             'and the code matches THAT project\'s. Still rendered into the '
+             'readout, never a JSON field. The project name remains a body '
+             'claim: there is no per-project credential on this server and one '
+             'was deliberately not invented -- that half is FlareVault\'s.'},
     # THE CONTRAST, and the reason the findings above are cheap to fix: the
     # correct pattern is already written in this repo, one layer out, twice.
     {'route': ('POST', '/api/outbox-ack/'),
@@ -1059,26 +1080,33 @@ def show_invariant(routes):
     for w in split:
         print('    %s %s  ->  %s' % (w['route'][0], w['route'][1], w['key']))
     print()
-    print('  THE WORST OF THEM, stated plainly: POST /api/heartbeat and')
-    print('  POST /api/mesh/register are gate 0, take the server_id out of the')
-    print('  request body, and create a record for an id they have never seen.')
-    print('  So ANY caller that can reach central on :8765 can overwrite ANY')
-    print('  node\'s fleet row -- its name, its status, its machine_id, its')
-    print('  counts -- or invent a node that does not exist. Two writers for')
-    print('  one fact, which is the definition of the split brain this')
-    print('  invariant exists to prevent. handlers/mesh.py:246 names the cause')
-    print('  honestly ("Authentication is FlareVault\'s to provide (join')
-    print('  tokens)") and records `authenticated: false` rather than')
-    print('  pretending -- that is the right way to be wrong, and it is still')
-    print('  wrong.')
+    print('  CLOSED, 2026-09-27, commit 9c32ac3. Kept here because a finding')
+    print('  that vanishes the moment it is fixed teaches nobody why the shape')
+    print('  was wrong.')
     print()
-    print('  ONE COMMENT THAT IS NOT TRUE. handlers/mesh.py:_record_registry is')
-    print('  introduced as "Recorded only for a beat the fleet already')
-    print('  accepted, so an unknown server_id cannot grow this table behind')
-    print('  the fleet\'s back." The fleet accepts every beat carrying any id,')
-    print('  so that guard guards nothing. The table can be grown by a')
-    print('  stranger; what saves it is that it is in-memory and lossy by')
-    print('  design, not that anything checks.')
+    print('  WHAT IT WAS. POST /api/heartbeat and POST /api/mesh/register are')
+    print('  gate 0, took the server_id out of the request body, and created a')
+    print('  record for an id they had never seen. Any caller that could reach')
+    print('  central on :8765 could overwrite ANY node\'s fleet row -- name,')
+    print('  status, machine_id, counts -- or invent a node. POST /api/bulletin')
+    print('  was worse in kind: one PIN shared across every recipient, so a')
+    print('  project could acknowledge a bulletin AS another project and the')
+    print('  forged row landed in who_read, the record the operator reads as')
+    print('  evidence.')
+    print()
+    print('  WHAT BINDS THEM NOW. A beat must name a record that already')
+    print('  exists and carry the machine_id that record holds; over the edge a')
+    print('  recorded identity must match the service token too. register() is')
+    print('  the only creator and requires machine_id. The bulletin PIN became')
+    print('  per (bulletin, project), an HMAC of a secret published nowhere.')
+    print('  Bound, not authenticated: join tokens are still FlareVault\'s, and')
+    print('  `authenticated: false` still says so rather than pretending.')
+    print()
+    print('  A COMMENT THAT WAS NOT TRUE, AND IS NOW. mesh._record_registry')
+    print('  claimed "an unknown server_id cannot grow this table behind the')
+    print('  fleet\'s back" while the fleet accepted every beat carrying any')
+    print('  id. It was made true rather than deleted, because the binding is')
+    print('  exactly what it had always claimed.')
     print()
     print('  WHAT IS NOT BROKEN, and worth saying because it is the harder')
     print('  half: no reverse leg writes a fact belonging to a DIFFERENT')
@@ -1192,13 +1220,20 @@ SEAMS = [
               'currently gate 0.'},
     {'where': 'hub/handlers/mesh.py', 'marker': r'Authentication is FlareVault',
      'stands_in_for': 'authenticating a node to central',
-     'today': 'a beat is accepted unauthenticated; the receiver records '
-              '`authenticated: false` instead of pretending otherwise.',
-     'when_fv': 'join tokens become REQUIRED, and an unauthenticated beat is '
-                'refused rather than recorded. That is also the fix for the '
-                'split-brain finding above — it is the same missing thing.',
-     'watch': 'this is the one seam whose absence is currently a live '
-              'correctness hole, not just a shape problem.'},
+     'today': 'a beat is BOUND but not AUTHENTICATED. Since 9c32ac3 it must '
+              'name an existing record and carry that record\'s machine_id, so '
+              'it cannot rekey or invent a node; the receiver still records '
+              '`authenticated: false`, which remains true and is reported '
+              'alongside bound_by.',
+     'when_fv': 'join tokens become REQUIRED and an unauthenticated beat is '
+                'refused rather than recorded. This closes the TOKEN half only '
+                '— the caller-keyed half was closed in 9c32ac3 by binding on '
+                'machine_id, without inventing a credential.',
+     'watch': 'machine_id binds a beat to a record; it does not PROVE the '
+              'sender is that machine, because the payload carries it. A '
+              'caller who knows a node\'s machine_id can still beat as it. '
+              'That residue is what the join token removes, and nothing '
+              'short of it does.'},
     {'where': 'hub/handlers/lobby.py', 'marker': r'layer 3 step-up',
      'stands_in_for': 'the step-up proof for destructive actions, and the vault',
      'today': 'POST /api/lobby/server/<id> refuses writes BY NAME with owner '
