@@ -95,7 +95,7 @@ forgotten.
 | 13 | `~/.flare/node.json` — facts only, no credentials | The node holds no key and creates no hostname |
 | 14 | Verify the public hostname answers | An enrolment that did not prove its own result is a belief |
 | 15 | Announce itself to a sponsor node | So a new server can be admitted from a known server, with no ISO and no central |
-| 16 | **Decommission path** | Nothing removes a node today. Every dead server leaves a tunnel, a DNS record and an Access app behind forever. This is the row people skip |
+| 16 | **Decommission path** | Enrolment gives a node a hostname, a DNS record, an ingress rule, an Access app and sometimes a tunnel. Something has to be able to take all five back, or the zone fills with names answering 401 for machines that no longer exist. This is the row people skip. It lives in a **sibling script**, not behind a flag on `enroll.sh`, deliberately: `--decommission` is a few characters from `--dry-run` on a line that removes the way IN to a node, and dry-run is its default with no short way past it |
 
 ---
 
