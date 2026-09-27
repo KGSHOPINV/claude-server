@@ -3,6 +3,7 @@
 # 20200004  kernel.log — activity logging, ntfy push, Docker event watcher
 Hub kernel: observability layer.
 """
+import base64
 import json
 import os
 import subprocess
@@ -74,6 +75,22 @@ def ntfy_state():
     return d
 
 
+# 20206304  _ascii_header — an em dash in a title used to kill the whole push
+# http.client encodes header values as latin-1, so any non-ASCII character in
+# the Title (the docker watcher sends emoji, login alerts send em dashes) raised
+# UnicodeEncodeError before the request ever left the process. Every alert on
+# ksgcohub was lost this way: 24 failed, 0 sent. ntfy accepts RFC 2047
+# encoded-words for any header, title included — docs.ntfy.sh/publish/#utf-8.
+def _ascii_header(value):
+    """Return value unchanged if it is ASCII, else as an RFC 2047 encoded-word."""
+    try:
+        value.encode('ascii')
+        return value
+    except (UnicodeEncodeError, AttributeError):
+        raw = value if isinstance(value, str) else str(value)
+        return '=?UTF-8?B?' + base64.b64encode(raw.encode('utf-8')).decode('ascii') + '?='
+
+
 def _ntfy_send(title, body, priority='default', tags='server'):
     """Send ntfy push notification. Reads config from ~/.server-alerts.conf or env."""
     try:
@@ -87,7 +104,9 @@ def _ntfy_send(title, body, priority='default', tags='server'):
                 if line.startswith('NTFY_URL='):    url   = line.split('=',1)[1].strip()
                 if line.startswith('NTFY_TOPIC='):  topic = line.split('=',1)[1].strip()
                 if line.startswith('NTFY_TOKEN='):  token = line.split('=',1)[1].strip()
-        headers = {'Title': title, 'Priority': priority, 'Tags': tags}
+        headers = {'Title': _ascii_header(title),
+                   'Priority': _ascii_header(priority),
+                   'Tags': _ascii_header(tags)}
         if token: headers['Authorization'] = f'Bearer {token}'
         req = urllib.request.Request(
             f'{url}/{topic}', data=body.encode(),
