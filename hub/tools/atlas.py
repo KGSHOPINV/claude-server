@@ -324,8 +324,15 @@ CODE_EXT = ('.py', '.sh', '.html', '.js')
 
 def _codes():
     used = {}
-    for base, _dirs, files in os.walk(ROOT):
-        if '.git' in base:
+    for base, dirs, files in os.walk(ROOT):
+        # Skip .git AND the background tasks' worktrees. Each worktree is a
+        # full checkout, so walking them reported every code in the repo as
+        # duplicated four times over -- 403 "collisions" that were one file
+        # seen from four sessions. Pruning `dirs` in place stops os.walk from
+        # descending rather than merely filtering what it yields.
+        dirs[:] = [d for d in dirs if d not in ('.git', 'worktrees', 'node_modules',
+                                                '__pycache__', '.venv')]
+        if '.git' in base or 'worktrees' in base.replace('\\', '/').split('/'):
             continue
         for f in files:
             if not f.endswith(CODE_EXT):
