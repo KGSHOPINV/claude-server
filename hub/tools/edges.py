@@ -487,9 +487,7 @@ EDGES = [
         'reach': 'db/server.db, db/control.db, db/bank.db, plus db/fleet.json '
                  'and db/changewatch.json as flat state. $HUB_DB, '
                  '$HUB_BANK_DB, $HUB_FLEET_STATE override the paths.',
-        'cred': ['db/.bank-salt  (mode 600, the bank\'s key half)',
-                 'hub_config row `ai_api_key` in server.db — a credential in '
-                 'a table, see the note under UNANNOUNCED below'],
+        'cred': ['db/.bank-salt  (mode 600, the bank\'s key half)'],
         'direction': 'local file I/O. Neither in nor out.',
         'pair': 'kernel.control writes control.db; tools/backup.sh copies it',
         'breaks': [
@@ -551,15 +549,16 @@ EDGES = [
                 'generativelanguage.googleapis.com, selected by the '
                 'hub_config row `ai_provider`. Optional and off by default.',
         'reach': 'https POST to whichever provider is configured',
-        'cred': ['hub_config row `ai_api_key` in server.db  (PLAINTEXT, and '
-                 'server.db IS copied by tools/backup.sh:290)',
-                 '$HUB_AI_KEY',
-                 '~/.server-alerts.conf  (ANTHROPIC_API_KEY=, used by '
-                 'hub/scripts/alert-ai-explain.sh)'],
+        'cred': ['$HUB_AI_KEY',
+                 '~/.server-alerts.conf  (HUB_AI_KEY= or ANTHROPIC_API_KEY=, '
+                 'also read by hub/scripts/alert-ai-explain.sh)',
+                 '(NOT the database. handlers/ai.py refuses to store a key and '
+                 'refuses to serve while a legacy `ai_api_key` row exists)'],
         'direction': 'OUT only.',
         'pair': None,
         'breaks': [
-            'POST /api/ai/chat returns "No AI API key configured"',
+            'POST /api/ai/chat returns "No AI API key available" and names the '
+            'two pointers it reads',
             'hub/scripts/alert-ai-explain.sh sends the raw alert with no '
             'explanation — the alert still goes out',
             'nothing else. This is the only edge on this page whose absence '
@@ -609,13 +608,18 @@ LAW_V = [
      'long-lived by design, mode 0600 enforced on read, never logged, held '
      'only inside _Secret whose __repr__ redacts. Deletable the day '
      'FlareVault brokers node calls.'),
-    ('handlers/ai.py  ->  hub_config.ai_api_key', 'NOT ANNOUNCED',
-     '_config_set writes the provider key into hub_config in server.db in '
-     'plaintext (ai.py:193). tools/backup.sh:290 copies server.db by name, so '
-     'the key is copied into every backup set. No TTL, no read-once, nothing '
-     'fails while it is set. The Gemini branch also puts it in the URL query '
-     'string (ai.py:143), where it reaches any request log on the way. '
-     'LATENT, not live: 0 rows on both servers today.'),
+    ('handlers/ai.py', 'CLOSED, NOT ANNOUNCED',
+     'it used to write the provider key into hub_config in server.db in '
+     'plaintext, and tools/backup.sh copies server.db by name, so the key '
+     'would have been duplicated into every backup set with no TTL and '
+     'nothing failing while it was set; the Gemini branch also put it in a '
+     'URL query string. Latent, never live: 0 rows on both boxes. This one '
+     'is CLOSED rather than announced, because unlike a service token the AI '
+     'key already had a pointer source. POST /api/ai/config refuses an '
+     'api_key, _ai_key reads $HUB_AI_KEY then ~/.server-alerts.conf, Gemini '
+     'takes x-goog-api-key as a header, and every AI route REFUSES while a '
+     'legacy row is still in the database — the bank\'s discipline applied to '
+     'the residue instead of to a standing exception.'),
 ]
 
 
@@ -1395,7 +1399,7 @@ PRESENCE = [
     # into a tick.
     ('host-cli',    'CLI',       lambda v: 'all present' if v == 'OK' else None),
     ('ssh',         'HUBLOCAL',  lambda v: v if v != 'unset' else None),
-    ('ai-api',      'AIKEY',     lambda v: ('%s row(s) in hub_config' % v)
+    ('ai-api',      'AIKEY',     lambda v: ('%s legacy row(s) in hub_config' % v)
                                  if v not in ('0', '?', '') else None),
 ]
 

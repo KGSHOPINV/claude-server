@@ -1145,12 +1145,15 @@ async function apiFetch(endpoint, opts) {
 }
 function invalidateCache() { Object.keys(_cache).forEach(k => delete _cache[k]); }
 
+// This box asked for an API key and posted it to /api/ai/config, which wrote
+// it into server.db in plaintext. The hub no longer stores keys at all, so
+// there is no key field: this saves the PROVIDER and shows where the key goes.
 async function saveAIConfig() {
   const provider = document.getElementById('ai-provider')?.value;
-  const api_key  = document.getElementById('ai-key')?.value.trim();
-  if (!api_key) { alert('Enter an API key first.'); return; }
-  await fetch(API + '/api/ai/config', {method:'POST', headers:{'Content-Type':'application/json','X-Hub-Token':localStorage.getItem('hub_token')||''}, body: JSON.stringify({provider, api_key})});
-  document.getElementById('ai-test-result').textContent = 'Saved. Click Test to verify.';
+  const r = await fetch(API + '/api/ai/config', {method:'POST', headers:{'Content-Type':'application/json','X-Hub-Token':localStorage.getItem('hub_token')||''}, body: JSON.stringify({provider})});
+  const d = await r.json();
+  document.getElementById('ai-test-result').textContent =
+    d.error ? d.error : 'Provider saved. The key is read from $HUB_AI_KEY or ~/.server-alerts.conf.';
 }
 
 async function testAIChat() {
@@ -1169,8 +1172,10 @@ async function loadAISettings() {
     const d = await r.json();
     const sel = document.getElementById('ai-provider');
     if (sel && d.provider) sel.value = d.provider;
-    const keyEl = document.getElementById('ai-key');
-    if (keyEl) keyEl.placeholder = d.has_key ? '(key saved — paste to replace)' : 'sk-ant-... / sk-... / AIza...';
+    const srcEl = document.getElementById('ai-key-source');
+    if (srcEl) srcEl.textContent = d.law_v_breach_open ? d.law_v_breach_open
+      : (d.has_key ? 'Key found in ' + d.key_source
+                   : 'No key. Set ' + (d.key_accepted_from || []).join(' or ') + ', then restart the hub.');
   } catch(e) {}
 }
 
@@ -2987,10 +2992,14 @@ function setCfgSection(section) {
             </select>
           </div>
           <div class="vs-row"><label>API Key</label>
-            <input id="ai-key" class="vs-inp" type="password" placeholder="sk-ant-… / sk-… / AIza…" style="flex:1">
+            <div id="ai-key-source" style="flex:1;font-size:11px;color:var(--muted)">…</div>
+          </div>
+          <div style="font-size:11px;color:var(--muted);margin-top:4px">
+            The hub does not store API keys. Put the key in <code>$HUB_AI_KEY</code>
+            or in <code>~/.server-alerts.conf</code> (mode 600) and restart the hub.
           </div>
           <div style="display:flex;gap:6px;margin-top:8px">
-            <button class="btn p" onclick="saveAIConfig()">Save Key</button>
+            <button class="btn p" onclick="saveAIConfig()">Save Provider</button>
             <button class="btn" onclick="testAIChat()">Test Connection</button>
           </div>
           <div id="ai-test-result" style="font-size:11px;color:var(--muted);margin-top:8px"></div>

@@ -206,15 +206,23 @@ ROUTES = [
     #
     # Gate 1 for reading and answering: a project holds a session already.
     # Gate 2 to PUBLISH -- that speaks for the server to every project at once.
+    # GET /api/bulletins is gate 1 and POST is gate 2, on the same path. That
+    # is not an inconsistency: listing is reading, publishing speaks for the
+    # server to every project at once. resolve() keys the exact table on
+    # (method, path), so the two never see each other.
+    {"code": "20315715", "method": "GET",  "path": "/api/bulletins",              "prefix": False, "gate": 1, "handler": "get_all_bulletins",     "module": "exchange"},
     {"code": "20315701", "method": "GET",  "path": "/api/bulletins/",             "prefix": True,  "gate": 1, "handler": "get_bulletins",         "module": "exchange"},
     {"code": "20315704", "method": "POST", "path": "/api/bulletins",              "prefix": False, "gate": 2, "handler": "post_bulletins",        "module": "exchange"},
     # Longest-prefix first: /read and /readers must be tested before the bare
-    # /api/bulletin/<n>, or the bare route swallows them.
+    # /api/bulletin/<n>, or the bare route swallows them. -trail is its own
+    # prefix for the same reason -readers is: it does not hang off /bulletin/.
     {"code": "20315703", "method": "POST", "path": "/api/bulletin/",              "prefix": True,  "gate": 1, "handler": "post_bulletin_read",    "module": "exchange"},
     {"code": "20315705", "method": "GET",  "path": "/api/bulletin-readers/",      "prefix": True,  "gate": 1, "handler": "get_bulletin_readers",  "module": "exchange"},
+    {"code": "20315717", "method": "GET",  "path": "/api/bulletin-trail/",        "prefix": True,  "gate": 1, "handler": "get_bulletin_trail",    "module": "exchange"},
     {"code": "20315702", "method": "GET",  "path": "/api/bulletin/",              "prefix": True,  "gate": 1, "handler": "get_bulletin",          "module": "exchange"},
 
     {"code": "20315706", "method": "GET",  "path": "/api/tickets",                "prefix": False, "gate": 1, "handler": "get_tickets",           "module": "exchange"},
+    {"code": "20315716", "method": "GET",  "path": "/api/tickets/",               "prefix": True,  "gate": 1, "handler": "get_ticket",            "module": "exchange"},
     {"code": "20315707", "method": "POST", "path": "/api/tickets",                "prefix": False, "gate": 1, "handler": "post_tickets",          "module": "exchange"},
 
     {"code": "20315708", "method": "GET",  "path": "/api/project-log/",           "prefix": True,  "gate": 1, "handler": "get_project_log",       "module": "exchange"},
@@ -427,7 +435,11 @@ SPLASH_BEHIND_LOGIN = ('/fleet', '/flareshub', '/s/', '/api/lobby', '/api/door',
                        '/ui/', '/api/auth/check', '/api/node')
 
 
-# 20200325  _splash_only — the apex must never reach the API
+# MOVED, 2026-09-27: 202003 25-26 -> 38-39. These two were duplicates of
+# kernel/identity.py's `mode` and `issue`, which own a contiguous run at
+# 202003 21-27. Two answers to "go to 20200325" is exactly what the address
+# space exists to rule out. Reallocated with `hub/tools/atlas.py --codes`.
+# 20200338  _splash_only — the apex must never reach the API
 def _splash_only(handler, path):
     """Door 1 is a PUBLIC page, so it cannot sit behind Access. That means the
     hostname serving it reaches this origin with no gate in front of it at all.
@@ -460,7 +472,7 @@ def _splash_only(handler, path):
     return True
 
 
-# 20200326  _alias_redirect — an alias answers 301 and serves nothing
+# 20200339  _alias_redirect — an alias answers 301 and serves nothing
 def _alias_redirect(handler, path):
     """True if this request was answered with a redirect to the canonical host.
 
