@@ -16,7 +16,10 @@ reports, and the caller decides. Findings carry the command that would fix them
 rather than running it, because "the monitor quietly repartitioned your server"
 is a worse outcome than a full disk.
 """
+import datetime as dt
 import json
+import os
+import re
 import subprocess
 import threading
 import time
@@ -62,6 +65,20 @@ def _run(cmd, timeout=10):
         r = subprocess.run(cmd, shell=True, capture_output=True,
                            text=True, timeout=timeout)
         return r.stdout.strip() if r.returncode == 0 else ''
+    except Exception:
+        return ''
+
+
+def _say(cmd, timeout=10):
+    """Stdout whatever the exit code. `systemctl is-active` exits non-zero for
+    BOTH "inactive" and "not-found", and _run would flatten the two to ''. The
+    difference between a timer that exists and one that was never installed is
+    the entire finding on a node where the backup step never ran, so the word
+    has to survive the exit code."""
+    try:
+        r = subprocess.run(cmd, shell=True, capture_output=True,
+                           text=True, timeout=timeout)
+        return r.stdout.strip()
     except Exception:
         return ''
 
@@ -202,6 +219,374 @@ def backup_target(ms=None):
                     else best['target'],
             'mount': best, 'dedicated': True,
             'declared': bool(named)}
+
+
+# ── is anything actually being backed up? ────────────────────────────────────
+# backup_target() above answers where a copy SHOULD land. This section answers
+# whether one ever DOES, which is a different question and has been answered
+# wrongly in two places for the same reason: each asked something adjacent.
+#
+#   hub/tools/install-preflight.py   passed "backups running" on the PRESENCE
+#                                    of a server-backup binary (fixed 2e71992).
+#   kernel/collect.py step 09        ticked the install step Backup on the
+#                                    PRESENCE of a server-backup binary, and
+#                                    fed that tick to the hub's install-steps
+#                                    display in app.html.
+#
+# Both were wrong on fks-services in the same direction, on the same box, on
+# the same day: server-backup ships with server-kit, nothing schedules it,
+# hub-backup.timer is not-found, and the newest set is stale. A binary nothing
+# invokes has never copied anything.
+#
+# It lives here, in the kernel, rather than in either caller, because a tool
+# and a handler disagreeing about whether this machine is backed up is how one
+# report ends up contradicting another on the same page. One derivation: the
+# tool prints it, the step reads its verdict. Dependencies still flow one way —
+# handlers and tools read the kernel, never the reverse.
+
+# A daily timer (bootstrap.sh:815, OnCalendar 03:00 with a 15min jitter) means
+# yesterday's set is normal and the day before that is a missed run. Two days.
+BACKUP_STALE_DAYS = 2
+
+# The unit bootstrap.sh:811 writes. Named exactly, NOT matched by the word
+# "backup": these boxes also carry dpkg-db-backup.timer, which is Debian's
+# package-database dump and would pass a word match while backing up none of
+# this hub's data.
+HUB_BACKUP_UNIT = 'hub-backup.timer'
+
+# What counts as an invocation of THIS hub's backup, by path. bootstrap.sh:799
+# installs hub/tools/backup.sh as ~/.local/bin/hub-backup.sh, so this is
+# knowable rather than guessable.
+HUB_BACKUP_CMDS = ('hub-backup.sh', 'hub/tools/backup.sh', 'server-backup')
+
+# Backup tools that, if a schedule invokes one, are doing the job. Listed so a
+# report can say what is installed — never so that presence can pass a row.
+BACKUP_TOOLS = ('server-backup', 'restic', 'borg', 'rsnapshot')
+
+# A dated set as backup.sh names it: "$DEST_ROOT/$(date +%F)".
+SET_RE = re.compile(r'^\d{4}-\d{2}-\d{2}$')
+
+# Where a dated set can be. The DERIVED target is asked first, because that is
+# what backup.sh gets from this module. The conventional roots follow because
+# the copies that actually exist on fks-services are at /srv/backups/hub —
+# written before the target was derived, and therefore invisible to a check
+# that looks only where backups are supposed to go.
+CONVENTIONAL_ROOTS = ('/backups', '/backup', '/srv/backups', '/srv/backups/hub',
+                      '/mnt/backups', '/var/backups')
+
+_backup_cache = {'at': 0.0, 'value': None}
+
+
+def _ok(cmd, timeout=5):
+    try:
+        return subprocess.run(cmd, shell=True, capture_output=True,
+                              timeout=timeout).returncode == 0
+    except Exception:
+        return False
+
+
+def _machine_id():
+    """This node's stable key, for attributing a set to this machine.
+
+    kernel.identity is asked first so the answer matches everything else the
+    hub says about itself, and /etc/machine-id is the fallback: identity is
+    optional on a bare box, and a module that cannot be imported must not take
+    the backup question down with it. Imported inside the function because
+    identity is a peer, not a dependency of the storage landscape.
+    """
+    try:
+        from kernel import identity as _ident
+        mid = _ident.machine_id()
+        if mid:
+            return mid
+    except Exception:
+        pass
+    try:
+        with open('/etc/machine-id', encoding='utf-8') as f:
+            return f.read().strip()
+    except Exception:
+        return ''
+
+
+def _device_for(path, ms):
+    """Which device holds this path: the longest mount point containing it.
+
+    Resolved against this module's own mount list so the answer comes from the
+    same place data_root() and backup_target() get theirs. Asking `df` here
+    would be a second source of truth for the one comparison these checks have
+    already been burned by twice.
+    """
+    rp = os.path.realpath(path)
+    best, best_len = None, -1
+    for m in ms:
+        t = m.get('target') or ''
+        stem = '' if t == '/' else t.rstrip('/')
+        if rp == (stem or '/') or rp.startswith(stem + '/'):
+            if len(stem) > best_len:
+                best, best_len = m, len(stem)
+    return (best or {}).get('source', '')
+
+
+def _manifest(path):
+    """backup.sh writes MANIFEST.txt into every set it completes, carrying the
+    machine_id of the box it copied. That makes "is this set mine" a fact on
+    disk instead of an inference from a directory name — which matters here:
+    /srv/backups on fks-services has a metaforge/ sibling, and a check that
+    trusted the path would have counted another project's dumps as the hub's.
+    """
+    out = {}
+    try:
+        with open(path, encoding='utf-8', errors='ignore') as f:
+            for line in f:
+                if not line.strip():
+                    break               # the manifest header ends at the blank
+                parts = line.split(None, 1)
+                if len(parts) == 2:
+                    out[parts[0]] = parts[1].strip()
+    except Exception:
+        return {}
+    return out
+
+
+def _age_days(name):
+    try:
+        y, m, d = (int(x) for x in name.split('-'))
+        return (dt.date.today() - dt.date(y, m, d)).days
+    except Exception:
+        return None
+
+
+def _sets_in(root, mid):
+    """Dated sets under one root, split by whether they belong to this machine.
+
+    An unattributed directory (no MANIFEST.txt) is neither counted nor
+    discarded silently — it is reported, because a dated directory nothing
+    claims is its own kind of unfinished.
+    """
+    mine, foreign, unclaimed = [], [], []
+    try:
+        names = sorted(os.listdir(root))
+    except Exception:
+        return mine, foreign, unclaimed
+    for n in names:
+        p = os.path.join(root, n)
+        if not SET_RE.match(n) or not os.path.isdir(p):
+            continue
+        man = _manifest(os.path.join(p, 'MANIFEST.txt'))
+        if not man:
+            unclaimed.append(n)
+        elif not mid or not man.get('machine_id') or man['machine_id'] == mid:
+            mine.append(n)
+        else:
+            foreign.append('%s (%s)' % (n, man.get('host') or man['machine_id'][:8]))
+    return mine, foreign, unclaimed
+
+
+def _walk_roots(bt, ms):
+    """Every existing candidate root, each with its sets split three ways.
+
+    Separated from backup_sets() because the two callers want different halves
+    of this: a verdict needs only the sets that are MINE, while a report must
+    also mention the ones that are not. Folding them together is what made a
+    root holding nothing but another machine's sets disappear from the report
+    entirely -- see backup_state.
+    """
+    mid = _machine_id()
+    cands = []
+    if bt.get('path'):
+        cands.append(bt['path'])
+    if os.environ.get('BACKUP_DEST'):
+        cands.append(os.environ['BACKUP_DEST'])
+    cands.extend(CONVENTIONAL_ROOTS)
+
+    out, seen = [], set()
+    for r in cands:
+        rp = os.path.realpath(r)
+        if rp in seen or not os.path.isdir(rp):
+            continue
+        seen.add(rp)
+        mine, foreign, unclaimed = _sets_in(rp, mid)
+        if not (mine or foreign or unclaimed):
+            continue
+        out.append({'path': r, 'dev': _device_for(r, ms), 'mine': mine,
+                    'foreign': foreign, 'unclaimed': unclaimed})
+    return out
+
+
+# 20200357  backup_sets — every dated set on this box that belongs to this box
+def backup_sets(bt=None, ms=None):
+    """Every root holding at least one dated set attributed to this machine,
+    newest first. Empty means nothing here has ever been backed up by this hub,
+    whatever binaries are installed and whatever disks are free.
+
+    Sets belonging to another machine, and dated directories nothing claims,
+    are deliberately NOT here: this is the evidence a verdict may rest on. They
+    are reported by backup_state() instead, which is where they belong -- a
+    directory full of someone else's backups is a fact an operator needs and
+    not a fact that can tick a row.
+    """
+    ms = ms if ms is not None else mounts()
+    bt = bt if bt is not None else backup_target(ms)
+
+    roots = []
+    for r in _walk_roots(bt, ms):
+        if not r['mine']:
+            continue
+        newest = max(r['mine'])
+        roots.append({'path': r['path'], 'dev': r['dev'], 'n': len(r['mine']),
+                      'newest': newest, 'age': _age_days(newest),
+                      'foreign': r['foreign'], 'unclaimed': r['unclaimed']})
+    roots.sort(key=lambda r: r['newest'], reverse=True)
+    return roots
+
+
+def describe_sets(roots):
+    return '; '.join('%d set(s) in %s on %s, newest %s'
+                     % (r['n'], r['path'], r['dev'] or '?', r['newest'])
+                     for r in roots)
+
+
+def _hub_backup_timer():
+    """Is the hub's OWN backup timer active, in either scope? The unit is named
+    rather than pattern-matched — see HUB_BACKUP_UNIT."""
+    for scope, label in (('--user ', 'user'), ('', 'system')):
+        out = _say('systemctl %sis-active %s 2>/dev/null'
+                   % (scope, HUB_BACKUP_UNIT))
+        if out == 'active':
+            return 'active', label
+        if out and out != 'inactive':
+            # "not-found" is a different answer from "inactive", and the
+            # difference is the whole finding on a node where the backup step
+            # never ran.
+            return out, label
+    return 'not-found', ''
+
+
+def _cron_backup_lines():
+    """Crontab lines that run something backup-shaped, split into this hub's
+    and another project's. Attribution is by the command PATH.
+
+    A grep for the word cannot tell /srv/backups/metaforge/backup.sh from
+    ~/.local/bin/hub-backup.sh, and on fks-services only the first one exists
+    — so counting the word reported metaforge's nightly dump as evidence that
+    this hub was being backed up.
+    """
+    out = _say('crontab -l 2>/dev/null')
+    mine, foreign = [], []
+    for raw in out.splitlines():
+        line = raw.strip()
+        if not line or line.startswith('#'):
+            continue
+        low = line.lower()
+        if not any(w in low for w in ('backup', 'restic', 'borg', 'rsnapshot')):
+            continue
+        (mine if any(c in line for c in HUB_BACKUP_CMDS) else foreign).append(line)
+    return mine, foreign
+
+
+def backup_tools_present():
+    """What is INSTALLED. A note for a report, never a verdict: this is the
+    exact fact that carried two wrong ticks."""
+    return [c for c in BACKUP_TOOLS if _ok('command -v %s' % c)]
+
+
+# 20200358  backup_state — is this machine's data actually being copied?
+def backup_state(ms=None, refresh=False):
+    """The two halves of "running", derived once for every caller.
+
+    A backup is running when a schedule is ACTIVE and a dated set attributed to
+    this machine is RECENT. Either half alone is a different situation, and
+    each gets its own answer rather than being rounded to yes or no:
+
+        scheduled + fresh    running — the row is true
+        scheduled, stale     a schedule producing no copy is not a backup
+        fresh, unscheduled   a copy exists and nothing will make the next one
+        neither              nothing is being backed up
+
+    `running` is the verdict a caller may tick a box with. `state` names which
+    of the four this is, and `notes` carries every fact that LOOKS like
+    evidence and is not — an installed binary, another project's cron line, a
+    dated directory belonging to another machine — so no caller has to
+    re-derive why a plausible-looking signal was refused.
+
+    Cached like landscape(): three shell-outs and a directory walk, read by an
+    install-steps panel that gets polled.
+    """
+    now = time.time()
+    with _lock:
+        if (not refresh and _backup_cache['value'] is not None
+                and (now - _backup_cache['at']) < CACHE_TTL):
+            return _backup_cache['value']
+
+    ms = ms if ms is not None else mounts()
+    bt = backup_target(ms)
+    roots = backup_sets(bt, ms)
+    seen = _walk_roots(bt, ms)
+    timer, scope = _hub_backup_timer()
+    cron_mine, cron_foreign = _cron_backup_lines()
+    tools = backup_tools_present()
+
+    scheduled = timer == 'active' or bool(cron_mine)
+    newest = roots[0] if roots else None
+    age = newest['age'] if newest else None
+    fresh = age is not None and age <= BACKUP_STALE_DAYS
+
+    schedule = ('%s is active (%s scope)' % (HUB_BACKUP_UNIT, scope)
+                if timer == 'active' else '%s is %s' % (HUB_BACKUP_UNIT, timer))
+    if cron_mine:
+        schedule += "; cron runs this hub's backup (%s)" % cron_mine[0]
+    sets = (describe_sets(roots) + (', %d day(s) old' % age if age is not None else '')
+            if roots else 'no dated set attributed to this machine anywhere')
+
+    notes = []
+    if tools and not scheduled:
+        notes.append('%s on PATH but nothing invokes it — presence is not a '
+                     'schedule' % ', '.join('`%s`' % t for t in tools))
+    if cron_foreign:
+        notes.append('%d crontab line(s) mention backup and belong to another '
+                     'project, read the path not the word: %s'
+                     % (len(cron_foreign), '; '.join(cron_foreign)))
+    # Walked over every candidate root rather than over `roots`, which holds
+    # only the ones with a set of this machine's. A root containing NOTHING but
+    # another box's sets has no entry in `roots`, so looping there reported it
+    # as empty -- the report would say "no dated set attributed to this machine
+    # anywhere" while /backups sat full of dated directories. That is the same
+    # silence this whole check exists to remove, pointing the other way.
+    for r in seen:
+        if r['foreign']:
+            notes.append('sets in %s belong to another machine: %s'
+                         % (r['path'], ', '.join(r['foreign'])))
+        if r['unclaimed']:
+            notes.append('dated dirs in %s carry no MANIFEST.txt, so nothing '
+                         'claims them: %s' % (r['path'], ', '.join(r['unclaimed'])))
+
+    state = ('running'     if scheduled and fresh else
+             'stale'       if scheduled else
+             'unscheduled' if fresh else
+             'none')
+
+    out = {
+        'running':      scheduled and fresh,
+        'state':        state,
+        'scheduled':    scheduled,
+        'fresh':        fresh,
+        'timer':        timer,
+        'timer_scope':  scope,
+        'schedule':     schedule,
+        'cron_mine':    cron_mine,
+        'cron_foreign': cron_foreign,
+        'roots':        roots,
+        'newest':       newest['newest'] if newest else None,
+        'age_days':     age,
+        'stale_after':  BACKUP_STALE_DAYS,
+        'sets':         sets,
+        'tools':        tools,
+        'notes':        notes,
+        'derived_at':   int(now),
+    }
+    with _lock:
+        _backup_cache.update({'at': now, 'value': out})
+    return out
 
 
 # 20200354  findings — what an operator should be told, with the fix

@@ -792,6 +792,30 @@ def get_setup_status():
     def svc_running(name):
         return cmd_ok(f"systemctl is-active {name} --quiet 2>/dev/null || systemctl --user is-active {name} --quiet 2>/dev/null")
 
+    # Step 09 is the one row here whose label names an ongoing ACTIVITY rather
+    # than an installed thing, so `command -v` cannot carry it. It used to:
+    #
+    #     {'id': '09', 'label': 'Backup', 'done': cmd_ok('command -v server-backup')}
+    #
+    # server-backup ships with server-kit. On fks-services it is on PATH, no
+    # schedule invokes it, hub-backup.timer is not-found, and the newest set is
+    # days old — yet this row ticked, and app.html drew the tick. The same
+    # mistake was fixed in hub/tools/install-preflight.py (2e71992); the
+    # derivation now lives in kernel.storage so the tool and this row cannot
+    # disagree about whether this machine is backed up.
+    #
+    # `running` means a schedule is ACTIVE and a dated set carrying this
+    # machine's id is RECENT. Imported inside the function, matching how this
+    # module already reaches kernel.storage for /api/status, and degrading to
+    # False if storage is unavailable — an untickable row is the safe direction
+    # for this one.
+    def backups_running():
+        try:
+            from kernel import storage as _st
+            return bool(_st.backup_state()['running'])
+        except Exception:
+            return False
+
     steps = [
         {'id': '01', 'label': 'System packages',   'done': cmd_ok('command -v git && command -v curl && command -v ufw')},
         {'id': '02', 'label': 'Docker',             'done': cmd_ok('docker info >/dev/null 2>&1')},
@@ -801,7 +825,7 @@ def get_setup_status():
         {'id': '06', 'label': 'Monitoring',         'done': cmd_ok('docker ps --filter name=uptime-kuma --format "{{.Names}}" | grep -q uptime-kuma')},
         {'id': '07', 'label': 'Claude CLI',         'done': cmd_ok('command -v claude')},
         {'id': '08', 'label': 'Optional services',  'done': os.path.isfile(os.path.join(home, '.server-kit-extras-done'))},
-        {'id': '09', 'label': 'Backup',             'done': cmd_ok('command -v server-backup')},
+        {'id': '09', 'label': 'Backup',             'done': backups_running()},
         {'id': '10', 'label': 'CLI helpers',        'done': cmd_ok('command -v health-check')},
         {'id': '11', 'label': 'Hardware monitor',   'done': cmd_ok('command -v hw-monitor')},
         {'id': '12', 'label': 'Security tools',     'done': cmd_ok('command -v rkhunter')},
