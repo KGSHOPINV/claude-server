@@ -5,6 +5,15 @@
     bash bootstrap.sh --check                     the installer's own entry point
     python3 hub/tools/install-check.py
     python3 hub/tools/install-check.py --strict    also fail on warns and unknowns
+    python3 hub/tools/install-check.py --json      the same rows, for a machine
+
+--json exists for exactly one caller: `bootstrap.sh --converge`. Converge is
+only allowed to repair what THIS file reports as missing, and the only way to
+keep that promise is for it to read this file's rows rather than re-deriving
+them. The same JSON carries the standard unit bodies, lifted from bootstrap.sh's
+own heredocs by std_unit() below, so converge writes the standard rather than a
+second copy of it typed somewhere else. Two definitions of "the standard" is the
+failure this whole file exists to end.
 
 THE PROBLEM THIS EXISTS FOR. Of the two servers in this fleet, bootstrap.sh
 produced exactly one. ksgcohub carries hub.service, hub-backup.timer and
@@ -40,6 +49,7 @@ checklist B2's rows against a machine. Its module is imported and its own checks
 are run in process, so each of those ten rows has exactly one definition. They
 are printed in their own section, labelled with the bootstrap step each covers.
 """
+import json
 import os
 import shlex
 import subprocess
@@ -707,6 +717,45 @@ def header():
         print('  systemd     USER MANAGER UNREACHABLE — %s' % SYSTEMD_WHY)
 
 
+# ── the same answer, for a machine ───────────────────────────────────────────
+# 20404725  emit_json — the rows and the standard, so converge cannot invent either
+#
+# Nothing here is computed for the JSON. It is the rows the human report prints,
+# plus the unit bodies std_unit() already lifts out of bootstrap.sh, so a
+# converge driven by this file can never repair something this file did not
+# report or write a unit body this file did not derive.
+CONVERGE_UNITS = ('hub.service', 'hub-backup.service', 'hub-backup.timer',
+                  'hub-reclaim.service', 'hub-reclaim.timer')
+
+
+def emit_json(dele):
+    units = {}
+    for u in CONVERGE_UNITS:
+        body = std_unit(u)
+        if body:
+            units[u] = body
+    doc = {
+        'standard': {
+            'bootstrap': BOOT_PATH,
+            'readable': bool(BOOT),
+            'home': HOME,
+            'hub_dir': HUB_DIR,
+            'root': ROOT,
+            'tools': TOOLS,
+            'units': units,
+            'packages': std_list('PACKAGES'),
+            'clone_url': std_clone_url(),
+        },
+        'rows': [{'step': s, 'name': n, 'state': st, 'detail': d}
+                 for s, n, st, d in (ROWS + dele)],
+        'blind': BLIND,
+        'notes': NOTES,
+        'systemd_user_manager': SYSTEMD_OK,
+    }
+    json.dump(doc, sys.stdout, indent=2, sort_keys=True)
+    sys.stdout.write('\n')
+
+
 STEP_TITLE = {
     '1': 'Detecting OS',
     '2': 'Installing system packages',
@@ -723,7 +772,9 @@ STEP_TITLE = {
 
 def main():
     strict = '--strict' in sys.argv
-    header()
+    as_json = '--json' in sys.argv
+    if not as_json:
+        header()
 
     step1_os()
     step2_packages()
@@ -735,6 +786,21 @@ def main():
     step8_reclaim()
     step_ufw()
     step9_enrol()
+
+    # Run before the report branches, so the JSON and the human page are the
+    # same rows asked once. A second run would be a second answer.
+    dele = delegate()
+
+    if as_json:
+        emit_json(dele)
+        n = {}
+        for _s, _name, state, _d in (ROWS + dele):
+            n[state] = n.get(state, 0) + 1
+        if n.get(MISSING, 0) + n.get(DIFFERENT, 0):
+            return 1
+        if strict and (n.get(WARN, 0) or n.get(UNKNOWN, 0)):
+            return 1
+        return 0
 
     order = ['1', '2', '3', '4', '5', '6', '7', '8', 'ufw', '9']
     print()
@@ -749,7 +815,6 @@ def main():
         for _s, name, state, detail in mine:
             print('    %s %-28s %s' % (MARK[state], name, detail))
 
-    dele = delegate()
     print()
     print('  DELEGATED — checklist B2, asserted by tools/install-preflight.py')
     print('  ' + '-' * 74)
