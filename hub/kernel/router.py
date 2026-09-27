@@ -350,15 +350,45 @@ def _load(module):
 
 
 def _gate_allows(handler, route, db_conn_fn):
-    """Evaluate the route's declared gate. Returns (allowed, reason)."""
+    """Evaluate the route's declared gate. Returns (allowed, reason).
+
+    LEVEL 2 AND LEVEL 3 ARE DIFFERENT QUESTIONS, and asking gate_check both of
+    them conflated them. Per the FlareVault login-flow spec the layers are:
+
+        1  read the fleet          a session
+        2  console / containers    an ADMIN ROLE -- what logging in earns you
+        3  destructive             a STEP-UP, proved at the moment of use
+        4  vault / kill switch     FlareVault's
+
+    Level 2 was being answered by gate_check, which only knows about TOTP. That
+    is the wrong instrument: TOTP is the step-up for 3, and requiring it at 2
+    would put the whole console behind an authenticator while ALSO -- because
+    gate_check returns True when TOTP is unconfigured -- leaving 2 and 3 both
+    wide open in exactly the state both live boxes are in. One call answering
+    two questions got both wrong at once.
+
+    So 2 asks the session's role and 3 asks for the step-up. This makes
+    shadow_report() tell the truth about WHICH gate a route would have failed
+    and why, which matters because that report is what anyone reads before
+    flipping HUB_ENFORCE_GATES on.
+
+    A caveat this cannot fix from here: the role is only as good as the
+    allowlist behind it. check_auth grants CF_ROLE to any identity Cloudflare
+    Access approved, and on a box where HUB_CF_EMAILS is unset the test
+    short-circuits on the empty list and admits everyone. Level 2 is then
+    'anyone Access let in', which is not the same as 'an admin'.
+    """
     level = route.get('gate', 0)
     if level <= 0:
         return True, ''
     from kernel.auth import check_auth, gate_check
-    if level >= 1 and check_auth(handler) is None:
+    sess = check_auth(handler)
+    if level >= 1 and sess is None:
         return False, 'no_session'
-    if level >= 2 and not gate_check(handler.headers, level, db_conn_fn):
-        return False, 'gate_required'
+    if level >= 2 and (sess or {}).get('role') != 'admin':
+        return False, 'admin_required'
+    if level >= 3 and not gate_check(handler.headers, level, db_conn_fn):
+        return False, 'step_up_required'
     return True, ''
 
 
