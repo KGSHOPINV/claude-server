@@ -32,6 +32,7 @@ REPORT, NEVER REPAIR. Nothing here reaches into a project, retries on a
 project's behalf, or decides a message was received. Staged is reported as
 staged until the project itself takes it.
 """
+from kernel import control as _ctl
 from kernel import identity as _id
 from kernel import outbox as _out
 from kernel.db import db_conn
@@ -76,6 +77,13 @@ def get_outbox_board(handler, path, params):
     b = _out.board(params.get('project'))
     b['ok'] = True
     b['who'] = _who()
+    # `now` is the server's clock at the moment it answered, and it is here for
+    # the same reason it is on every exchange response: the board renders ages
+    # off `staged_at` and `collected_at`, and an age computed against the
+    # VIEWER's clock carries the difference between two machines. Both ends of
+    # the subtraction now come from this one. Still not an age field -- an age
+    # is computed once and then rots in the tab it was rendered into.
+    b['now'] = _ctl.now()
     b['reading_this'] = ('Nothing here has been delivered by being listed. '
                          '"staged" means it is sitting on this server and no '
                          'project has taken it.')

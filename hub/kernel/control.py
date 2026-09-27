@@ -47,6 +47,21 @@ def _now():
     return datetime.now().isoformat(timespec='seconds')
 
 
+# 20200390  now — the server's clock, so a page can compute age without skew
+def now():
+    """Every timestamp this module writes comes from _now(). A screen that
+    renders "2 days ago" has to subtract one of them from something, and if
+    that something is the VIEWER's clock the answer carries the difference
+    between two machines. So the API returns this alongside the rows: both
+    ends of every subtraction then came from the same clock.
+
+    Deliberately not an age. An age is computed once and then rots -- a board
+    left open for forty minutes would still say "2 minutes ago". A `now` that
+    is forty minutes old visibly lags, and the page can say so.
+    """
+    return _now()
+
+
 # 20200361  ensure_tables — one schema owner, same rule as kernel/db.py
 def ensure_tables():
     c = _conn()
@@ -733,22 +748,79 @@ def publish(title, body, action='none', scope='all', rung=1):
     return n, 'one code per recipient, rendered into that project\'s readout'
 
 
+# 20200384  addressed — the one scope rule, asked in both directions
+def addressed(scope, project):
+    """Does a bulletin with this scope reach this project?
+
+    ONE definition, because there used to be two and only one of them was
+    right. bulletins_for asked it of the BULLETINS for a known project, in SQL
+    ("scope='all' OR scope=?"). who_read asked it of the PROJECTS for a known
+    bulletin -- and did not ask it at all. So a bulletin addressed to one
+    project named every other project on the box as not having read something
+    that was never sent to them.
+
+    Both directions come through here now, and bulletins_for filters in Python
+    rather than in SQL on purpose: a second expression of this rule, even a
+    correct one, is a second thing that has to stay correct. There are tens of
+    bulletins on a box, not millions.
+    """
+    s = (scope or 'all').strip().lower()
+    return s == 'all' or s == (project or '').strip().lower()
+
+
+BULLETIN_COLUMNS = 'n,scope,rung,title,action,published'
+# NOT `pin` and NOT `secret`. The pin is per (bulletin, project), derived from
+# `secret`, and rendered into that recipient's readout text -- never a field,
+# never listable. A SELECT * on `bulletins` that reaches a response is a bug.
+
+
 # 20200376  bulletins_for
 def bulletins_for(project, unread_only=True):
     """Oldest first, because the ladder is ordered: a project cannot judge what
     is changing until it has confirmed what is."""
     ensure_exchange()
+    project = (project or '').strip().lower()
     c = _conn()
     seen = set(r['bulletin'] for r in
                c.execute('SELECT bulletin FROM reads WHERE project=?', (project,)))
     out = []
-    for b in c.execute("SELECT n,scope,rung,title,action,published FROM bulletins"
-                       " WHERE scope='all' OR scope=? ORDER BY n", (project,)):
+    for b in c.execute('SELECT %s FROM bulletins ORDER BY n' % BULLETIN_COLUMNS):
+        if not addressed(b['scope'], project):
+            continue
         d = dict(b)
         d['read'] = b['n'] in seen
         if unread_only and d['read']:
             continue
         out.append(d)
+    c.close()
+    return out
+
+
+# 20200386  all_bulletins — every bulletin on this server, addressed or not
+def all_bulletins(scope='', limit=0):
+    """The listing that did not exist.
+
+    GET /api/bulletins/<project> could only answer "what was addressed to the
+    project you thought to name". A bulletin scoped to a project nobody named
+    was invisible from every address on the server -- published, stored,
+    counted by nothing, and unfindable without opening the database by hand.
+
+    Newest first, which is the opposite of bulletins_for and deliberate: that
+    list is a LADDER a project climbs from the bottom; this one is a BOARD an
+    operator reads from the top.
+    """
+    ensure_exchange()
+    c = _conn()
+    q = 'SELECT %s FROM bulletins' % BULLETIN_COLUMNS
+    args = []
+    if (scope or '').strip():
+        q += ' WHERE scope=?'
+        args.append(scope.strip().lower())
+    q += ' ORDER BY n DESC'
+    if limit and int(limit) > 0:
+        q += ' LIMIT ?'
+        args.append(int(limit))
+    out = [dict(r) for r in c.execute(q, args)]
     c.close()
     return out
 
@@ -801,7 +873,7 @@ def read_bulletin(project, n, pin, answer=''):
                       'recorded as having read bulletin %s' % (project, n))
     c.close()
     scope = (b.get('scope') or 'all').strip().lower()
-    if scope != 'all' and scope != project:
+    if not addressed(scope, project):
         return None, ('bulletin %s is addressed to %s, not %s' % (n, scope, project))
     expected = bulletin_pin(n, project)
     if not expected or str(pin).strip() != expected:
@@ -823,13 +895,106 @@ def read_bulletin(project, n, pin, answer=''):
 
 # 20200379  who_read - the matrix, the most useful thing the server knows
 def who_read(n):
+    """Who was TOLD, which of them has answered, and what they said.
+
+    TWO WRONG ANSWERS, not two missing features.
+
+    It listed every project in `projects` for any bulletin, with no reference
+    to scope. A bulletin addressed to one project therefore reported "0 of 4"
+    when the truth was "0 of 1", and named three projects as not having read
+    something that was never sent to them. A matrix that counts people who
+    were never told is not a matrix, it is an accusation. The denominator
+    comes through addressed() now, the same rule bulletins_for uses.
+
+    And it threw the ANSWER away. `reads` stores it and read_bulletin refuses
+    an empty one -- "answer required, 'none' is valid, silence is not" -- so
+    the server insists on collecting the single most useful fact on the board
+    and then no route returned it. What a project said it would do is on the
+    row.
+
+    The answer here is the LATEST: a project may read twice, and the second
+    answer supersedes the first. Every answer it ever gave, in order, is
+    bulletin_trail(n). Neither carries the pin.
+    """
+    ensure_exchange()
+    ensure_tables()                 # `projects`, whose owner is ensure_tables
+    c = _conn()
+    b = c.execute('SELECT scope FROM bulletins WHERE n=?', (n,)).fetchone()
+    scope = b['scope'] if b else 'all'
+    # ORDER BY id so the LAST row for a project wins the dict -- the latest
+    # answer, not whichever one SQLite happened to hand back first.
+    read = dict((r['project'], r) for r in c.execute(
+        'SELECT project,answer,at FROM reads WHERE bulletin=? ORDER BY id', (n,)))
+    out = []
+    for p in c.execute('SELECT name FROM projects ORDER BY name'):
+        if not addressed(scope, p['name']):
+            continue                # never told, so not a row in this matrix
+        r = read.get(p['name'])
+        out.append({'project': p['name'], 'read': r is not None,
+                    'at': r['at'] if r else None,
+                    'answer': r['answer'] if r else None})
+    c.close()
+    return out
+
+
+# 20200387  read_matrix — the matrix for many bulletins, in one pass
+def read_matrix(ns):
+    """who_read(n) is a pair of queries per bulletin. Drawing a board of 24
+    bulletins that way costs 24 round trips after the list that named them --
+    from a page that by doctrine holds nothing and assembles everything. This
+    answers the same question for a whole set in three queries.
+
+    The per-bulletin shape is deliberately identical to who_read's, so a
+    caller can take either without branching.
+    """
+    ensure_exchange()
+    ensure_tables()
+    ns = [int(x) for x in (ns or [])]
+    if not ns:
+        return {}
+    c = _conn()
+    names = [p['name'] for p in c.execute('SELECT name FROM projects ORDER BY name')]
+    marks = ','.join('?' * len(ns))
+    scopes = dict((r['n'], r['scope']) for r in c.execute(
+        'SELECT n,scope FROM bulletins WHERE n IN (%s)' % marks, ns))
+    got = {}
+    for r in c.execute('SELECT bulletin,project,answer,at FROM reads'
+                       ' WHERE bulletin IN (%s) ORDER BY id' % marks, ns):
+        got.setdefault(r['bulletin'], {})[r['project']] = r
+    c.close()
+    out = {}
+    for n in ns:
+        if n not in scopes:
+            continue                # no such bulletin; say nothing about it
+        seen = got.get(n, {})
+        rows = []
+        for name in names:
+            if not addressed(scopes[n], name):
+                continue
+            r = seen.get(name)
+            rows.append({'project': name, 'read': r is not None,
+                         'at': r['at'] if r else None,
+                         'answer': r['answer'] if r else None})
+        out[n] = {'read': sum(1 for r in rows if r['read']),
+                  'total': len(rows), 'readers': rows}
+    return out
+
+
+# 20200385  bulletin_trail — every acknowledgement of one bulletin, in order
+def bulletin_trail(n):
+    """The same shape as outbox.trail(message), and for the same reason.
+
+    `reads` is append-only and nothing read it back as a sequence. A project
+    that answered "will do Tuesday", read again on Thursday and answered
+    "done" showed one row saying "done" -- true, and silent about the fact
+    that it slipped. Append-only and never collapsed: two answers are two
+    rows here, which is the true story.
+    """
     ensure_exchange()
     c = _conn()
-    read = dict((r['project'], r['at']) for r in
-                c.execute('SELECT project,at FROM reads WHERE bulletin=?', (n,)))
-    out = [{'project': p['name'], 'read': p['name'] in read,
-            'at': read.get(p['name'])}
-           for p in c.execute('SELECT name FROM projects ORDER BY name')]
+    out = [dict(r) for r in c.execute(
+        'SELECT id,project,answer,at FROM reads WHERE bulletin=? ORDER BY id',
+        (n,))]
     c.close()
     return out
 
@@ -868,15 +1033,57 @@ def close_ticket(tid, resolution):
     return tid, 'closed'
 
 
-def open_tickets(project=None):
+# 20200388  tickets — the list, at any state, not only the open ones
+def tickets(project=None, state='open'):
+    """state: 'open' (anything not closed), 'closed', 'all', or one exact state.
+
+    Only the open ones were ever reachable. close_ticket writes `resolution` --
+    what the project ACTUALLY DID, and says right there that an unrecorded
+    self-fix is indistinguishable from drift six weeks later -- and then
+    closing the ticket was the last moment anyone could read it. The system
+    could close a ticket and never show why.
+
+    Default stays 'open', because open_tickets() and GET /api/tickets both
+    mean that today and changing what they answer would be a different route
+    wearing the same name.
+    """
     ensure_exchange()
     c = _conn()
-    q = "SELECT * FROM tickets WHERE state!='closed'"
-    rows = (c.execute(q + ' AND project=? ORDER BY id', (project,)) if project
-            else c.execute(q + ' ORDER BY id'))
-    out = [dict(r) for r in rows]
+    state = (state or 'open').strip().lower()
+    where, args = [], []
+    if state == 'open':
+        where.append("state!='closed'")
+    elif state == 'closed':
+        where.append("state='closed'")
+    elif state != 'all':
+        where.append('state=?')
+        args.append(state)
+    if project:
+        where.append('project=?')
+        args.append(project)
+    q = 'SELECT * FROM tickets'
+    if where:
+        q += ' WHERE ' + ' AND '.join(where)
+    out = [dict(r) for r in c.execute(q + ' ORDER BY id', args)]
     c.close()
     return out
+
+
+# 20200389  ticket_by_id — one ticket, including how it ended
+def ticket_by_id(tid):
+    """There was no way to fetch one. A closed ticket's diagnosis and
+    resolution existed only in a row that nothing selected."""
+    ensure_exchange()
+    c = _conn()
+    r = c.execute('SELECT * FROM tickets WHERE id=?', (int(tid),)).fetchone()
+    c.close()
+    return dict(r) if r else None
+
+
+def open_tickets(project=None):
+    """Same answer as before, one implementation underneath it. Every existing
+    caller keeps exactly what it had."""
+    return tickets(project, state='open')
 
 
 # 20200382  activity - a project's log, kept OUTSIDE its container

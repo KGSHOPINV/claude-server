@@ -38,7 +38,107 @@ def _target(path, prefix):
     return path[len(prefix):].split('?')[0].strip('/')
 
 
+def _truthy(v):
+    return (v or '') in ('1', 'true', 'yes', 'on')
+
+
+# AGE IS NOT IN THIS API, AND THAT IS A DECISION.
+#
+# Every timestamp the exchange holds is an ISO string on the server's clock:
+# `published`, `at`, `staged_at`, `collected_at`, `closed_at`. No route
+# returns "2d ago", and none will. Two clocks are involved in any age -- the
+# one the row was written on and the one the reader is looking at -- and the
+# only way to get an age with no skew in it is to take BOTH ends from the same
+# clock. So every response below carries `now`: the server's clock at the
+# moment it answered. The page subtracts, and both operands came from here.
+#
+# Doing it the other way round -- the server returning `age_seconds` -- is the
+# same arithmetic done early, and it goes stale the instant the response is
+# cached, proxied or left open in a tab. A board that has been on screen for
+# forty minutes would still say "2 minutes ago". `now` does not rot: a stale
+# `now` visibly lags, and the page can say so.
+#
+# What the API therefore owes, and what is checked below: every timestamp a
+# screen needs must actually be returned. `published` is on every bulletin
+# row, `at` on every matrix row and every trail row, `at` and `closed_at` on
+# every ticket.
+
+
 # ── Bulletins ────────────────────────────────────────────────────────────────
+
+# 20315715  GET /api/bulletins — every bulletin on this server
+def get_all_bulletins(handler, path, params):
+    """# 20315715  The board's list. Gate 1: reading, not publishing.
+
+    POST /api/bulletins existed and GET did not, so "every bulletin on this
+    server" was a question with no address. The only listing route named a
+    project, which meant a bulletin scoped to a project you did not think to
+    name was invisible -- published, stored, and findable only by opening the
+    database by hand.
+
+    ?scope=<project>  only bulletins addressed to exactly that scope
+    ?limit=<n>        newest n
+    ?readers=1        carry the matrix with the list
+
+    READERS IS OPT-IN AND STAYS OPT-IN. Drawing the board was 1 + N calls:
+    the list, then /api/bulletin-readers/<n> once per bulletin -- about 36
+    requests across the two boxes for one page. One flag collapses that to
+    one request, and it is a flag rather than the default because a caller
+    that wants a cheap list must be able to get a cheap list. A bulk matrix
+    route would have been the other option; it would have meant two round
+    trips to draw one screen, and a second route that can disagree with this
+    one about which bulletins exist.
+
+    No pin, ever. The list selects named columns (control.BULLETIN_COLUMNS),
+    never `pin` or `secret`.
+    """
+    scope = (params.get('scope') or '').strip().lower()
+    try:
+        limit = int(params.get('limit') or 0)
+    except Exception:
+        limit = 0
+    items = _ctl.all_bulletins(scope=scope, limit=limit)
+    out = {'ok': True, 'who': _who(), 'now': _ctl.now(),
+           'total': len(items), 'scope': scope or 'any',
+           'bulletins': items}
+    if _truthy(params.get('readers')):
+        matrix = _ctl.read_matrix([b['n'] for b in items])
+        for b in items:
+            m = matrix.get(b['n'])
+            if m:
+                b['read_count'] = m['read']
+                b['told'] = m['total']
+                b['readers'] = m['readers']
+        out['readers'] = 'included'
+    else:
+        out['readers'] = ('not included — add ?readers=1, or '
+                          'GET /api/bulletin-readers/<n> one at a time')
+    handler.send_json(out)
+
+
+# 20315717  GET /api/bulletin-trail/<n>
+def get_bulletin_trail(handler, path, params):
+    """# 20315717  Every acknowledgement of one bulletin, in order.
+
+    `reads` is append-only and nothing read it back as a sequence, so a
+    project that answered twice showed only its second answer. Same shape as
+    outbox's trail, on purpose: one pattern for "what happened to this
+    thing", not two.
+    """
+    raw = _target(path, '/api/bulletin-trail/')
+    try:
+        n = int(raw)
+    except Exception:
+        handler.send_json({'ok': False, 'error': 'bulletin number required'}, 400)
+        return
+    if not _ctl.bulletin(n):
+        handler.send_json({'ok': False, 'error': 'no bulletin %d' % n}, 404)
+        return
+    events = _ctl.bulletin_trail(n)
+    handler.send_json({'ok': True, 'bulletin': n, 'who': _who(),
+                       'now': _ctl.now(), 'events': len(events),
+                       'trail': events})
+
 
 # 20315701  GET /api/bulletins/<project>
 def get_bulletins(handler, path, params):
@@ -237,8 +337,16 @@ def get_bulletin_readers(handler, path, params):
     except Exception:
         handler.send_json({'ok': False, 'error': 'bulletin number required'}, 400)
         return
+    # `total` is now the number of projects the bulletin was ADDRESSED to, not
+    # the number of projects on the box. who_read had no scope filter, so a
+    # bulletin sent to one project reported "0 of 4" and named the other three
+    # as having ignored it. Same field, same meaning it always claimed to have;
+    # it just answers truthfully now. Each row also carries `answer` -- what
+    # that project said it would do, which the exchange has always insisted on
+    # collecting and never once returned.
     rows = _ctl.who_read(n)
     handler.send_json({'ok': True, 'bulletin': n, 'who': _who(),
+                       'now': _ctl.now(),
                        'read': sum(1 for r in rows if r['read']),
                        'total': len(rows), 'readers': rows})
 
@@ -247,9 +355,41 @@ def get_bulletin_readers(handler, path, params):
 
 # 20315706  GET /api/tickets
 def get_tickets(handler, path, params):
-    """# 20315706  Open tickets, optionally ?project=<name>."""
-    handler.send_json({'ok': True, 'who': _who(),
-                       'tickets': _ctl.open_tickets(params.get('project'))})
+    """# 20315706  Tickets, optionally ?project=<name>.
+
+    ?state=open|closed|all — DEFAULT STAYS open, so every caller that exists
+    today gets exactly what it got before.
+
+    Closed tickets had no address at all. `resolution` is what the project
+    actually did about the problem, and the moment it was written was the
+    moment it became unreadable: the system could close a ticket and then
+    never show why.
+    """
+    state = (params.get('state') or 'open').strip().lower()
+    rows = _ctl.tickets(params.get('project'), state=state)
+    handler.send_json({'ok': True, 'who': _who(), 'now': _ctl.now(),
+                       'state': state, 'total': len(rows), 'tickets': rows})
+
+
+# 20315716  GET /api/tickets/<id>
+def get_ticket(handler, path, params):
+    """# 20315716  One ticket, whatever state it is in.
+
+    Including diagnosis and resolution, which is the whole point: a closed
+    ticket is the only record of a self-fix, and nothing could fetch one.
+    """
+    raw = _target(path, '/api/tickets/')
+    try:
+        tid = int(raw)
+    except Exception:
+        handler.send_json({'ok': False, 'error': 'ticket id required'}, 400)
+        return
+    t = _ctl.ticket_by_id(tid)
+    if not t:
+        handler.send_json({'ok': False, 'error': 'no ticket %d' % tid}, 404)
+        return
+    handler.send_json({'ok': True, 'who': _who(), 'now': _ctl.now(),
+                       'ticket': t})
 
 
 # 20315707  POST /api/tickets
