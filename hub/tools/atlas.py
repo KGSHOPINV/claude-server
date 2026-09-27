@@ -170,13 +170,36 @@ PLANES = [
 INSTALLERS = ('bootstrap.sh', 'enroll.sh')
 
 
+# A marker that NAMES A FILE has to be a file that exists, not a string the
+# installer happens to contain. P1 scored DONE on 'requirements.txt' purely
+# because bootstrap.sh mentions it -- and hub/requirements.txt does not exist
+# anywhere in the repo, so that pip3 line is dead code and the plane's DONE was
+# a lie of exactly the kind this tool is supposed to catch. Mentioning a thing
+# is not installing it.
+FILE_MARK = ('.txt', '.sh', '.py', '.service', '.timer', '.json', '.html', '.js')
+
+
+def _marker_hit(mark, blob):
+    if mark not in blob:
+        return False, 'not mentioned by the installer'
+    if mark.endswith(FILE_MARK) and '/' not in mark:
+        for base in ('', 'hub'):
+            if os.path.exists(os.path.join(ROOT, base, mark)):
+                return True, 'mentioned, and the file exists'
+        return False, 'MENTIONED BUT THE FILE DOES NOT EXIST — dead installer line'
+    return True, 'mentioned'
+
+
 def plane_state(p):
     built = all(os.path.exists(os.path.join(ROOT, b)) for b in p['built'])
     if not p['install_marks']:
         return built, None                      # n/a — runs from the checkout
     blob = ''.join(src(i) for i in INSTALLERS)
-    hits = [m for m in p['install_marks'] if m in blob]
-    return built, (len(hits), len(p['install_marks']), hits)
+    hits, dead = [], []
+    for m in p['install_marks']:
+        ok, why = _marker_hit(m, blob)
+        (hits if ok else dead).append(m if ok else '%s (%s)' % (m, why))
+    return built, (len(hits), len(p['install_marks']), hits, dead)
 
 
 def show_planes():
@@ -190,7 +213,7 @@ def show_planes():
             mark = 'built' if built else 'PARTIAL'
             note = 'n/a — runs from the checkout'
         else:
-            got, need, hits = inst
+            got, need, hits, dead = inst
             if not built:
                 mark, note = 'PARTIAL', 'code incomplete'
             elif got == need:
@@ -209,6 +232,8 @@ def show_planes():
         print('  [%-10s] %s  %s' % (mark, p['id'], p['name']))
         print('               %s' % p['what'])
         print('               %s' % note)
+        for dm in (inst[3] if inst else []):
+            print('               marker: %s' % dm)
         for r in p['retires']:
             print('               phases out: %s' % r)
     print()
