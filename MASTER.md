@@ -1,20 +1,31 @@
 # MASTER — Complete System Reference
 
-> This is the single source of truth for the entire server ecosystem.
-> Every Claude session, every install, every planning conversation starts here.
-> When anything changes — update this file first.
+> **This file holds laws and the reasons for them. It is not a source of
+> truth about any machine** — it was, and it was wrong: it listed a "7. Backup"
+> step that nothing executed, so a server ran for months with no backups while
+> this page looked correct. *Prose has no failure mode.*
+>
+> Ask a machine what a machine is:
+>
+> ```bash
+> python3 hub/tools/atlas.py        what exists, and what was typed rather than installed
+> python3 hub/tools/situation.py    what is serving and what is exposed
+> curl -s <hub>/api/receipt         this machine, completely
+> curl -s <hub>/api/ports           what is actually listening
+> ```
 
 ---
 
 ## 1. Servers in the Ecosystem
 
-| Name | Role | LAN IP | Tailscale IP | SSH User | OS |
-|------|------|--------|--------------|----------|----|
-| fks-services | Main / HQ | 192.168.1.229 | 100.75.1.105 | admin1 | Ubuntu 24.04 |
-| ksgcohub | Node 2 | 192.168.50.100 | 100.107.234.9 | ksgco | Ubuntu 24.04 |
+**Not listed here.** Addresses, Tailscale IPs and SSH users live in `CLAUDE.md`,
+`notes/secrets.env` and `knowledge/servers.json` — all gitignored, none of which
+ships to a node. Which nodes exist is derived from the zone's records by
+`kernel.fleet.discover`; ask `python3 hub/tools/situation.py`.
 
-**Hub on every server:** `~/hub/` — Python HTTP server, port **8765**, systemd user service.  
-**Source:** https://github.com/KGSHOPINV/claude-server  
+**Hub on every server:** `~/hub/` — Python stdlib HTTP server, port **8765**,
+systemd **user** service (so it runs without root and survives the SSH session).
+**Source:** https://github.com/KGSHOPINV/claude-server
 **Bootstrap:** https://github.com/KGSHOPINV/server-kit
 
 ---
@@ -37,33 +48,24 @@ Ports are assigned by lane. Pick the next free port in the correct lane. Never u
 | Admin | 9400–9499 | Container managers, Linux admin |
 | AI | 11000–11999 | Model engines, chat UIs |
 
-### Full Port Registry
+### Assignments are not written down here
 
-| Port | Service | Lane | Server |
-|------|---------|------|--------|
-| 80 | NPM — HTTP ingress | System | all |
-| 81 | NPM Admin UI | System | all |
-| 443 | NPM — HTTPS ingress | System | all |
-| **8765** | **Server Hub** | **Hub** | **all** |
-| 3000 | Homepage Dashboard | Infrastructure | all |
-| 3001 | Uptime Kuma | Infrastructure | all |
-| 3002 | Wiki.js | Infrastructure | optional |
-| 3004 | Open WebUI (AI chat) | Infrastructure | AI servers |
-| 3005 | OpenClaw | Infrastructure | AI servers |
-| 19999 | Netdata | Monitoring | all |
-| 9090 | Cockpit (HTTPS) | Admin | optional |
-| 5678 | n8n | Automation | all |
-| 5432 | PostgreSQL | Database | optional |
-| 6379 | Redis | Database | all |
-| 8001 | SurrealDB | Database | all |
-| 8025 | Mailpit UI | API/Tools | dev servers |
-| 8082 | Adminer | API/Tools | optional |
-| 8085 | ntfy | Notifications | all |
-| 8090 | Dozzle | API/Tools | all |
-| 9000 | MinIO API | Storage | optional |
-| 9001 | MinIO Console | Storage | optional |
-| 9443 | Portainer (HTTPS) | Admin | all |
-| 11434 | Ollama | AI | GPU servers only |
+A port *lane* is a rule and belongs in a document. A port *assignment* is a fact
+about a machine and does not — two hand-typed assignment tables stood here, each
+row carrying a tick nobody re-checked, and they disagreed with three other
+service inventories in this repo.
+
+```bash
+curl -s <hub>/api/ports              what is bound, with lane and owner per port
+curl -s "<hub>/api/admit?project=X"  the band a project may bind inside, derived live
+python3 hub/tools/situation.py       plus what is exposed beyond the box
+```
+
+`/api/admit` computes a free band from the live port map at the moment you ask,
+so it is never stale. **Lanes are a declaration, not a policy** — nothing
+enforces them, which is exactly how admission handed out ports inside another
+stack's reserved lane for months while two places answered the same question
+differently.
 
 **Rules:**
 - 8765 is Hub. Always. Never a container.
@@ -141,46 +143,53 @@ Ports are assigned by lane. Pick the next free port in the correct lane. Never u
 
 ## 5. What's on Each Server
 
-### fks-services (192.168.1.229) — Main Server
-| Service | Port | Status |
-|---------|------|--------|
-| Server Hub | 8765 | ✅ |
-| NPM | 80/81/443 | ✅ |
-| Homepage | 3000 | ✅ |
-| Uptime Kuma | 3001 | ✅ |
-| Netdata | 19999 | ✅ |
-| Dozzle | 8090 | ✅ |
-| Portainer | 9443 | ✅ |
-| ntfy | 8085 | ✅ |
-| n8n | 5678 | ✅ |
-| Redis | 6379 | ✅ |
-| SurrealDB | 8001 | ✅ |
-| Supabase | 8000 | ✅ |
-| MinIO | 9000/9001 | ✅ |
-| Adminer | 8082 | ✅ |
-| Mailpit | 8025 | ✅ |
-| Wiki.js | 3002 | ✅ |
+Two hand-typed tables stood here, one per server, each row carrying a green tick
+that nobody re-checked. They were a bill of materials in prose, which
+`hub/CONSTITUTION.md` §4 forbids: *the moment a bill of materials is typed into
+a table, it is wrong and nobody knows.* Deleted 2026-09-23 in favour of the node
+answering for itself.
 
-### ksgcohub (192.168.50.100) — Node 2
-| Service | Port | Status |
-|---------|------|--------|
-| Server Hub | 8765 | ✅ |
-| NPM | 80/81/443 | ✅ |
-| Homepage | 3000 | ✅ |
-| Uptime Kuma | 3001 | ✅ |
-| Netdata | 19999 | ✅ |
-| Portainer | 9443 | ✅ |
-| Nextcloud (snap) | 8181 | ✅ (moved from 80) |
-| ntfy | 8085 | ⬜ pending |
-| n8n | 5678 | ⬜ pending |
-| Redis | 6379 | ⬜ pending |
-| SurrealDB | 8001 | ⬜ pending |
-| Dozzle | 8090 | ⬜ pending |
-| /srv/data (sdb) | 458G | ✅ mounted |
+```bash
+curl -s <hub>/api/receipt  | jq '{hostname, os, uptime, disks, containers}'
+curl -s <hub>/api/services | jq                  # catalogue + live docker state
+curl -s <hub>/api/ports    | jq                  # what is really listening
+curl -s <hub>/api/storage  | jq                  # mounts and usage
+```
+
+Same answer in the UI: the **Server Receipt** view, per node. `/api/receipt`
+also returns `sync_issues` — services expected by the catalogue in
+`hub/kernel/collect.py` that are not running. That is the list that used to be
+guessed at with ticks.
+
+**The one class of thing the receipt cannot tell you**, stated as a rule
+rather than as a list:
+
+**A service installed outside Docker is invisible to every container-shaped
+question.** A snap, an apt package, anything bound by the host directly — it
+never appears in `docker ps` and never in `/api/receipt`'s container list. Only
+`/api/ports` sees it, because only `/api/ports` reads the sockets rather than
+the daemon. So a port can be occupied by something no container view will ever
+show you, and **`/api/ports` is the authority on what is bound**, not the
+container list.
+
+That is also why Law VIII matters — *only projects are containers*. Anything
+unclaimed by a project label is drift, and anything bound with no container at
+all needs a human to say what it is.
 
 ---
 
 ## 6. Install Order — Why This Order
+
+> **This list is a recipe, and a recipe is not a spec.** `hub/CONSTITUTION.md`
+> §5: the recipe and the assertions *"must become one map"*, where every step
+> ends in an assertion and every assertion names the step that satisfies it.
+> Until they are one map, a step here can be true on paper and absent on the
+> machine — which is exactly what happened to step 7.
+>
+> **The order below is the doctrine. Whether a given step happened is
+> `bash bootstrap.sh --check`**, which derives what to expect from the
+> installer's own heredocs rather than from this page, so it cannot drift from
+> the installer the way this page drifted from it.
 
 1. **System** — apt updates, UFW, Fail2Ban, timezone, static IP
 2. **Docker** — everything else depends on this
@@ -233,9 +242,15 @@ Each hub exposes:
 - `GET /api/ports` — all bound ports
 - `POST /api/peer/register` — bidirectional registration
 
-**Current peers:**
-- fks-services hub: `http://100.75.1.105:8765`
-- ksgcohub hub: `http://100.107.234.9:8765`
+**Peers are not listed here.** `curl -s <hub>/api/federation` and
+`python3 hub/tools/situation.py` answer who is registered and who has been
+heard from — and those are different questions: a DNS-sourced row means *this
+server exists*; a heartbeat-sourced row means *this server is alive*. Collapsing
+the two showed a dead box as healthy.
+
+**Peers must be keyed on `machine_id`, never on a URL.** Keyed by URL, a moved
+peer is a dead peer; keyed by machine-id, it has simply changed address. That is
+Law X, and it was learned by having two hubs list each other and never connect.
 
 **What the mesh is for:**
 - Cross-server health monitoring (peer goes offline → ntfy alert)
@@ -264,64 +279,29 @@ Each hub exposes:
 
 ---
 
-## 10. Hub API Surface
+## 10. Hub API surface, planned builds, CLI tools — all derived
 
-| Endpoint | Method | What |
-|----------|--------|------|
-| `/api/status` | GET | RAM, disk, uptime, load, containers |
-| `/api/storage` | GET | All mounts, disk tree, docker volumes |
-| `/api/containers` | GET | All Docker containers, state, ports |
-| `/api/ports` | GET | All bound ports + federation fields |
-| `/api/activity` | GET | Event log |
-| `/api/receipt` | GET | Full server snapshot |
-| `/api/identity` | GET | Hostname, hub_url, IPs — peer beacon |
-| `/api/federation` | GET/POST | FV/MF/peer config |
-| `/api/peer/register` | POST | Bidirectional peer handshake |
-| `/api/vault` | GET/POST | Encrypted notes (TOTP gated) |
-| `/api/run` | POST | Shell command execution (TOTP gated) |
-| `/api/ai/chat` | POST | AI chat with server context |
-| `/api/journal` | POST | Manual activity log entry |
-| `/api/sitemap` | GET | All available endpoints (**planned**) |
+Three hand-maintained tables stood here: an endpoint list, a numbered roadmap,
+and a catalogue of CLI tools. Each was a record kept alongside the thing it
+described, and each drifted. The endpoint table named routes that were never
+built and omitted ones that were; the roadmap outlived its own priorities.
 
----
+| What you wanted | What answers it |
+|---|---|
+| Every route, from the route table itself | `curl -s <hub>/api/sitemap` |
+| Which routes declare a gate, and whether anything applies it | `python3 hub/tools/matrix.py`, sequence A |
+| What is next, and what gates it | `python3 hub/tools/tracks.py` · `python3 hub/tools/step.py` |
+| What is built vs hand-built vs phasing out | `python3 hub/tools/atlas.py` |
+| Operator decisions nothing proceeds on by itself | `python3 hub/tools/atlas.py`, its closing section |
+| Which CLI tools exist on a node | `ls /usr/local/bin/` on that node, and `python3 hub/tools/atlas.py --parts` for this repo's own |
 
-## 11. Planned Builds — In Order
-
-| Priority | What | Why now |
-|----------|------|---------|
-| 1 | Deploy missing services on ksgcohub | Node 2 not fully running |
-| 2 | Route registry + `/api/sitemap` | Unlocks MCP server |
-| 3 | MCP server | Claude tool access to hub |
-| 4 | HQ/node pairing UI | Multi-server management |
-| 5 | Cloudflare Tunnel + Access | Public access without VPN |
-| 6 | TOTP gate | Security layer |
-| 7 | Service tokens | AI vs human identity |
-| 8 | ntfy bidirectional | Phone → server commands |
-| 9 | Agentic loop | AI with tool execution |
-
----
-
-## 12. CLI Tools (at /usr/local/bin/)
-
-| Command | What |
-|---------|------|
-| `server-menu` | Interactive menu for everything |
-| `health-check` | Full service + port status |
-| `server-backup` | Run backup now |
-| `server-update` | Update all containers + apt |
-| `dkps` | Docker ps (running containers) |
-| `dklogs [name]` | Docker logs for container |
-| `dkrestart [name]` | Restart a container |
-| `dkstop [name]` | Stop a container |
-| `dkstart [name]` | Start a container |
-| `deploy-project` | Deploy a project stack |
-| `network-check` | Check connectivity |
-| `new-service` | Add a new service (**planned**) |
-| `port-scan` | Show all open ports |
-
----
-
-## 13. Key Decisions (Why We Did It This Way)
+**A tool nothing calls is a document with a shebang**, and an invoker column in
+a document is the least reliable column of all: one script listed here as
+"invoked by nothing" was `ExecStartPost=` in a **user** unit and had been firing
+the fleet's wrongest alert on every restart. The audit that declared it dead had
+read only `/etc/systemd/system`. Look in both unit paths — or better, do not
+keep the column.
+## 11. Key Decisions (Why We Did It This Way)
 
 | Decision | Reason |
 |----------|--------|
@@ -338,7 +318,7 @@ Each hub exposes:
 
 ---
 
-## 14. Repos
+## 12. Repos
 
 | Repo | URL | What |
 |------|-----|------|
@@ -349,7 +329,7 @@ Each hub exposes:
 
 ---
 
-## 15. Never Do
+## 13. Never Do
 
 - Never commit passwords, IPs, or secrets to GitHub
 - Never run AI stack (Ollama/OpenWebUI) without a GPU

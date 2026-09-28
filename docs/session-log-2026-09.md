@@ -1,7 +1,16 @@
-# Session Log — 2026-09-10 → 2026-09-16
+# Session Log — 2026-09-10 -> 2026-09-16
 
 What happened, in order, so a new session can pick up without re-deriving it.
 Every commit is on `master` unless noted.
+
+> **This is a LOG. It is frozen at 2026-09-16 and is true forever as a record
+> of that week.** Nothing in it is a present-tense claim — in particular, the
+> "still open" and "deliberately not done" lists at the foot describe that
+> week's state, and several of those rows have since closed. Read them as
+> history, not as status.
+>
+> For anything current: `python3 hub/tools/step.py`,
+> `python3 hub/tools/matrix.py`, `python3 hub/tools/atlas.py`.
 
 ---
 
@@ -128,7 +137,7 @@ Unmerged: PR #11 (7 commits — the security fix, two-door auth, docs, Phase 3).
 4. Remove the stale system unit: `sudo systemctl disable --now hub.service &&
    sudo rm /etc/systemd/system/hub.service`.
 
-**Ready to build:**
+**Ready to build, as of 2026-09-16:**
 - Phase 3 — 17 views left. The next ones are not static stubs; `dashboard`,
   `network`, `terminal`, `logs` call helpers still in `app.html`.
 - Enable two-door auth — needs `HUB_CF_TRUST_IP` on ksgcohub's unit.
@@ -137,7 +146,7 @@ Unmerged: PR #11 (7 commits — the security fix, two-door auth, docs, Phase 3).
 - Fix `_users_list()` — returns `[]` on any exception, so `/api/users` lies.
 - Persist sessions — in-memory dict, so every restart logs everyone out.
 
-**Deliberately not done:**
+**Deliberately not done, as of 2026-09-16:**
 - Gate enforcement stays **off**. 52 of 66 routes gated in the table; `app.html`
   sends a token on 16 calls. Arming it locks the UI out.
 - Vault view hardcodes `192.168.1.229:7779` — wrong on ksgcohub.

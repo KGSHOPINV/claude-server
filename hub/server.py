@@ -5,44 +5,37 @@ Run: python hub/server.py
 Then open: http://localhost:7000
 """
 
-import base64
-import hashlib
-import hmac
 import http.server
-import re
 import socketserver
 import json
 import os
-import secrets
-import shutil
-import sqlite3
-import ssl
-import struct
-import subprocess
 import threading
-import time
-import urllib.error
 import urllib.parse
-import urllib.request
-from datetime import datetime
+
+# Removed: base64, hashlib, hmac, re, secrets, shutil, sqlite3, ssl, struct,
+# subprocess, time, urllib.error, urllib.request, datetime.datetime. Leftovers
+# from the pre-Phase-2 monolith; every user of them moved to kernel/ or
+# handlers/ and none is referenced in this file any more.
 
 # ── Kernel imports ────────────────────────────────────────────────────────────
 from kernel.db   import db_conn, db_ensure_tables, DB_PATH
-from kernel.ssh  import ssh_run, LOCAL_MODE, SSH_HOST, SSH_USER, SERVER_IP
-from kernel.log  import log_activity, activity_recent, _ntfy_send, _docker_event_loop
+from kernel.ssh  import ssh_run, SSH_HOST          # LOCAL_MODE/SSH_USER/SERVER_IP: unused here
+from kernel.log  import log_activity, _ntfy_send, _docker_event_loop
 from kernel import router
-from kernel.auth import (
-    check_auth, gate_check, gate_create,
-    _totp_hotp, totp_verify, totp_new_secret, totp_verify_secret, totp_uri,
-    _sessions, _users_lock, _gate_sessions, _gate_lock,
-)
+# Removed: the `from kernel.auth import (...)` block. All twelve names were
+# unused here after the handler split -- kernel.auth is imported by
+# kernel.router._gate_allows and by the handler modules that actually need it.
 
 from kernel.collect import PORT, _port_scan_loop
 
 # ── HTTP handler ───────────────────────────────────────────────────────────────
 
 # 20200008  _route — bridge from the HTTP server into kernel.router.
-# HUB_ROUTER=legacy falls back to the original if/elif chain below.
+# NOT A FALLBACK. The if/elif chain this used to fall back to was deleted in the
+# Phase 2 handler split; there is nothing below to fall through to. Setting
+# HUB_ROUTER=legacy today makes _route return False for every request, so the
+# hub answers 404 to everything. Kept only because removing the switch would
+# change behaviour for anyone who has it set. Nothing in this repo sets it.
 ROUTER_MODE = os.environ.get('HUB_ROUTER', 'dispatch').lower()
 
 # HUB_LOG_REQUESTS=1 logs every request with its source address and any
@@ -52,9 +45,9 @@ LOG_REQUESTS = os.environ.get('HUB_LOG_REQUESTS', '0').lower() not in ('0', 'fal
 
 
 def _route(handler, method, path, body=None):
-    """Try the kernel dispatch table. Returns False to fall through to legacy."""
+    """Try the kernel dispatch table. Returns False -> caller answers 404."""
     if ROUTER_MODE == 'legacy':
-        return False
+        return False  # see ROUTER_MODE above: this 404s everything, by accident
     params = {}
     if '?' in handler.path:
         qs = handler.path.split('?', 1)[1]
@@ -63,7 +56,21 @@ def _route(handler, method, path, body=None):
 
 
 class Handler(http.server.BaseHTTPRequestHandler):
-    # 20200309  Handler.log_message — access logging, off unless HUB_LOG_REQUESTS=1
+    # THREE CODES MOVED, 2026-09-27: 202003 09, 10 and 12 -> 28, 29, 30.
+    #
+    # They sat on top of kernel/auth.py's _session_load, session_put and
+    # access_identity, so "go to 20200310" had two answers -- auth's
+    # session_put and this file's send_json. A duplicated code is the one
+    # thing the scheme exists to prevent, and the squatter moves, not the
+    # owner. do_OPTIONS keeps 20200311: it was never duplicated, and moving a
+    # code that is not broken only costs the next person a diff to read.
+    #
+    # Allocated with `python3 hub/tools/atlas.py --codes`, which computes the
+    # free run rather than guessing at it, and re-checked immediately before
+    # commit -- three agents picked 20404718 on the same afternoon by grepping,
+    # and this very edit had to be redone once because a code that was free
+    # when it was chosen was taken by the time it was written.
+    # 20200328  Handler.log_message — access logging, off unless HUB_LOG_REQUESTS=1
     def log_message(self, fmt, *args):
         if not LOG_REQUESTS:
             return
@@ -84,7 +91,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
             msg = str(fmt)
         print('REQ src=%s cf_email=%s cf_jwt=%s :: %s' % (src, email, jwt, msg), flush=True)
 
-    # 20200310  Handler.send_json — serialize + write JSON response with CORS
+    # 20200329  Handler.send_json — serialize + write JSON response with CORS
     def send_json(self, data, status=200):
         body = json.dumps(data, default=str).encode()
         self.send_response(status)
@@ -102,7 +109,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
         self.send_header('Access-Control-Allow-Headers', 'Content-Type, X-Hub-Token')
         self.end_headers()
 
-    # 20200312  Handler.get_body — parse JSON request body
+    # 20200330  Handler.get_body — parse JSON request body
     def get_body(self):
         n = int(self.headers.get('Content-Length', 0))
         return json.loads(self.rfile.read(n)) if n else {}
@@ -145,6 +152,18 @@ if __name__ == '__main__':
         print('  heartbeat: emitting to central every %ds' % _heartbeat.INTERVAL)
     else:
         print('  mode: CENTRAL — receiving heartbeats')
+
+    # Outbound delivery. Started EXPLICITLY, never on import -- a worker that
+    # spins up merely because a module was imported also runs inside every
+    # tool, test and one-off script that touches it, and then two processes
+    # are pushing the same queue.
+    #
+    # Until this line runs the push leg is inert, and outbox.worker_state()
+    # says NOT STARTED in words rather than showing a zero count that looks
+    # like 'nothing to send'.
+    from kernel import outbox as _outbox
+    _outbox.start(lambda m: log_activity(db_conn, m, 'outbox', 'delivery', '', 'warn'))
+    print('  outbox: delivery worker started')
 
     # Log startup
     log_activity(db_conn, 'Hub started', 'hub', 'startup', f'port={PORT}', 'info')

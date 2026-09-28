@@ -4,18 +4,243 @@
 
 Central-mode endpoints. A node in NODE mode still serves these (same codebase,
 one binary) but they stay empty, which is the honest answer: a node has no
-fleet, only itself.
+fleet, only itself. The one exception is /api/mesh/registry, where "only
+itself" is a row rather than nothing — a machine always knows what it runs.
 
 Per the FlareVault mesh spec, nodes never talk to each other. Everything here
 is nodes reporting UP.
+
+Cross-server visibility rides that same beat rather than opening a second
+channel: a node may attach a `registry` block to its heartbeat, and central
+serves every node's block from one address. This costs no new reachability,
+which matters because the two servers currently sit on different tailnets and
+cannot reach each other at all — the beat is the only wire there is.
 """
 import json
-from datetime import datetime
+import threading
+from datetime import datetime, timezone
 
+from kernel import auth as _auth
+from kernel import control as _ctl
 from kernel import fleet as _fleet
 from kernel import identity as _id
 from kernel.db import db_conn
 from kernel.log import log_activity
+# Borrowed rather than re-derived. "Which ref is this server on" already has
+# one answer in handlers/registry; a second `git rev-parse` here would be a
+# second source for one question, which is the bug this file is checking for.
+from handlers.registry import _master as _central_ref
+from handlers.registry import console_sha as _console_sha
+
+# server_id -> the registry SUMMARY that node last sent. Only what a node
+# alone can answer is kept; see _record_registry for what is deliberately
+# dropped. Bounded by the fleet, since nothing lands here that _fleet.heartbeat
+# did not already accept, and lost on restart like the fleet itself — one beat
+# interval of blindness, not a rebuild.
+_registries = {}
+_reg_lock = threading.Lock()
+
+
+def _now():
+    return datetime.now(timezone.utc).isoformat(timespec='seconds')
+
+
+# 20312704  _count — a malformed number from a node must not take a route down
+def _count(value, fallback):
+    """Counts arrive over the network from a machine central does not control.
+    A node sending "12" or null is a bug on that node; a 500 here would turn
+    one node's bug into the whole fleet view going dark.
+    """
+    try:
+        return max(0, int(value))
+    except (TypeError, ValueError):
+        return fallback
+
+
+# 20312705  _record_registry — what central keeps from a beat, and what it drops
+def _record_registry(server_id, block):
+    """Returns (record, previous_ref), or (None, None) if there was no block.
+
+    Deliberately lossy. The claims themselves are NOT copied here: central
+    holding a second copy of data the node owns is the two-sources bug this
+    project spent a fortnight deleting, and between beats that copy would be
+    wrong besides. What is kept is only what cannot be asked of a node central
+    cannot reach — how many projects it carries, how many have not been told
+    what it is running, and the two fields drift may compare: the ref and the
+    sha of the console the node serves.
+
+    A node that could not build its own block sends `error` instead of counts.
+    That is kept too, because an error and a zero are not the same answer and
+    central must not flatten one into the other.
+    """
+    if not isinstance(block, dict):
+        return None, None
+    projects = []
+    for p in block.get('projects') or []:
+        if isinstance(p, dict):
+            projects.append({'name':   str(p.get('name', '')),
+                             'status': str(p.get('status', '')),
+                             'stale':  bool(p.get('stale'))})
+    # /api/registry calls this field `master`; the heartbeat calls it `ref`.
+    # Both are accepted rather than making one side rename a field it already
+    # publishes — a rename is a flag day across two machines for no gain.
+    ref = str(block.get('ref') or block.get('master') or '').strip()
+    rec = {
+        'ref': ref,
+        # Absent on a node whose build predates the field, which is '' here and
+        # therefore unknown rather than mismatched. An old node must not be
+        # reported as drifted for a question it was never asked.
+        'console': str(block.get('console') or '').strip(),
+        'error':   str(block.get('error') or '').strip(),
+        # The node's own count wins over a recount of the list it sent. A node
+        # that truncated the list still knows its true total, and a recount
+        # here would quietly disagree with the node about the node.
+        'projects': _count(block.get('project_count'), len(projects)),
+        'stale':    _count(block.get('stale_count'),
+                           sum(1 for p in projects if p['stale'])),
+        'list':     projects,
+        'at':       _now(),
+    }
+    with _reg_lock:
+        prior = _registries.get(server_id) or {}
+        _registries[server_id] = rec
+    return rec, prior.get('ref') or ''
+
+
+# 20312706  _congruence — the drift rule, and the two fields it may read
+def _congruence(node_ref, central_ref, node_console='', central_console=''):
+    """Congruence is SAME CODE REF. It is never same values.
+
+    WHY VALUES ARE EXCLUDED, STATED ONCE. ksgcohub derives /srv/data;
+    fks-services derives /srv/docker and /backup. One has 34 containers, the
+    other has fewer. Their uptimes, disks and project counts differ and always
+    will. Those numbers disagree because each machine was read CORRECTLY —
+    identical values across the fleet would mean the derivation is broken, not
+    that the fleet agrees. A check that compared them would fire constantly,
+    always be wrong, and within a week nobody would look at it. A monitor that
+    is ignored is worse than no monitor, because it occupies the space where a
+    real one would go.
+
+    So only what is MEANT to be identical fleet-wide is compared, and there are
+    exactly two such things:
+
+      ref      what the checkout says it is on.
+      console  the sha of app.html, the ONE file every server serves byte for
+               byte. A box on the right ref that serves different bytes — hand
+               edit, or a checkout that moved without the service restarting
+               from it — is showing an old console while its ref says otherwise.
+               That is the failure the single-file decision accepted, and this
+               is the field that makes it visible.
+
+    A node that has never reported a ref is 'unknown', not congruent. Reading
+    silence as agreement is the monitor lying instead of alarming, which is the
+    failure `_derive_status` exists to avoid one layer down. The same rule
+    applies to console one step softer: an absent console on either side leaves
+    a ref match as congruent, because an old node that does not send the field
+    is not a node that disagrees about it.
+    """
+    if not node_ref or not central_ref:
+        return 'unknown'
+    if node_ref != central_ref:
+        return 'drift'
+    if node_console and central_console and node_console != central_console:
+        return 'drift'
+    return 'congruent'
+
+
+# 20312710  _drift_fix — the command that closes THIS drift, not a generic one
+def _drift_fix(name, node_ref, central_ref, node_console, central_console):
+    """Report, never repair: the command goes in the payload and a human runs
+    it. Central cannot know which of two refs is the one that should win.
+
+    Two kinds of drift need two different commands, and printing the wrong one
+    is how a real finding gets dismissed as noise: `git log a..b` between two
+    IDENTICAL refs prints nothing at all, which reads as "there is no drift"
+    directly underneath a banner saying there is.
+    """
+    if node_ref != central_ref:
+        return ('git log --oneline %s..%s  (in the hub checkout) shows what %s '
+                'has not got' % (node_ref, central_ref, name))
+    return ('%s is on %s, the same ref as here, and serves a DIFFERENT console '
+            '(%s vs %s). Same commit, different bytes: its app.html was edited '
+            'in place, or its service is still running from an older checkout. '
+            'Restart its hub from %s and compare again.'
+            % (name, node_ref, node_console, central_console, node_ref))
+
+
+# 20312707  _age — how old the beat behind a cached summary is
+def _age(iso):
+    """A cached summary must carry its age or it reads as live. Negative ages
+    (clock skew between node and central) clamp to 0, the same clamp fleet
+    applies, so skew cannot present as a fresher report than exists.
+    """
+    try:
+        return max(0, int((datetime.now(timezone.utc)
+                           - datetime.fromisoformat(iso)).total_seconds()))
+    except Exception:
+        return None
+
+
+# 20312708  _self_entry — this machine's own row, derived at call time
+def _self_entry(ref, console=''):
+    """Central runs projects too, and in NODE mode this is the only row there
+    is. Derived live from the control database rather than from a beat, which
+    is why its source differs from every other row and says so.
+
+    Carries its own console sha for the same reason it carries its ref: the row
+    is the baseline every other row is compared against, so the baseline has to
+    state both halves of what it is claiming.
+    """
+    entry = {
+        'server_id':  _id.server_id(),
+        'name':       _id.node_name(),
+        'self':       True,
+        'status':     'self',
+        'ref':        ref,
+        'console':    console,
+        'congruence': 'self',
+        'source':     'derived',
+        # Reporting, with age 0: this row was read now, not remembered. Same
+        # keys as every other row so the UI has one shape to render.
+        'reporting':   True,
+        'reported_at': None,
+        'age_seconds': 0,
+    }
+    try:
+        reg = _ctl.registry(ref)
+        projects = [{'name': p.get('name', ''), 'status': p.get('status', ''),
+                     'stale': bool(p.get('stale'))} for p in reg['projects']]
+        entry['projects'] = len(projects)
+        entry['stale'] = sum(1 for p in projects if p['stale'])
+        entry['list'] = projects
+    except Exception as e:
+        # A local database that cannot be read is a finding, not a blank row.
+        # Reporting zero projects here would be indistinguishable from a
+        # machine that genuinely has none.
+        entry['error'] = 'control db unreadable: %s' % e
+        entry['fix'] = 'python3 -c "from kernel import control; control.ensure_tables()"'
+    return entry
+
+
+# 20312711  _edge_identity — who Cloudflare says is calling, if anyone
+def _edge_identity(handler):
+    """The service token's common_name, or ''.
+
+    Read through kernel.auth.service_identity and nowhere else, so the one rule
+    that makes the header safe is not restated here where it could rot: the
+    header is believed ONLY on a request that arrived from the tunnel's own
+    address, because cloudflared forwards only what Access already validated.
+
+    '' on the tailnet and the LAN, where there is no edge in the path to assert
+    anything. That is why this can never be REQUIRED — see kernel.fleet._bound.
+    """
+    try:
+        return _auth.service_identity(handler) or ''
+    except Exception:
+        # An unreadable assertion is the same fact as no assertion: nothing was
+        # proved. It must not be an error, or a malformed header from the edge
+        # would take the receiver down instead of the beat.
+        return ''
 
 
 # 20312701  POST /api/heartbeat — a node reports in
@@ -25,6 +250,19 @@ def post_heartbeat(handler, path, params, body):
     Body is the node's /api/node response, unchanged. Deliberately not a
     bespoke shape: one payload, so what the fleet view shows is exactly what
     the node said about itself, with no lossy translation in between.
+
+    One OPTIONAL addition: a `registry` block — {ref, project_count,
+    stale_count, projects:[{name,status,stale}]}. Optional in both directions.
+    A node whose build predates it still beats normally and is reported as not
+    reporting a registry, which is different from having no projects and must
+    stay different.
+
+    WHAT THIS ENDPOINT TRUSTS, per path. The sid in the body is a CLAIM, and
+    kernel.fleet._bound decides whether the beat may have the record it names.
+    Over the edge, the service token's common_name is checked too when the
+    record has one recorded. Over tailscale or LAN there is no edge identity to
+    check and machine_id is the whole binding. Either way the record must
+    already exist: a beat cannot create one.
     """
     if not _id.is_central():
         # Not an error — a node simply is not an aggregator. Say so plainly
@@ -34,30 +272,103 @@ def post_heartbeat(handler, path, params, body):
         return
 
     src = params.get('path') or 'unknown'
-    # Authentication is FlareVault's to provide (join tokens). Until then the
-    # receiver records whether a beat was authenticated rather than pretending
-    # it was. An unauthenticated mesh accepts rogue nodes; this at least makes
-    # that visible instead of invisible.
+    # THE SEAM, still open: Authentication is FlareVault's to provide (join
+    # tokens), and this is not it. _id.verify checks a signature made with THIS
+    # box's jwt_secret, so a beat signed by another box can never verify here —
+    # which is why the live record reads authenticated: false, and why this
+    # field was never the binding it looked like.
+    #
+    # WHAT CHANGED is that the beat is now bound by something that does exist:
+    # kernel.fleet._bound holds it to the machine_id the record was registered
+    # with, and to the edge identity where one is recorded. So `authenticated`
+    # keeps recording exactly what it always recorded — did a verifiable join
+    # token arrive — and `bound_by` records what actually let the beat through.
+    # Two facts, two fields: when FlareVault arrives, the token becomes required
+    # and nothing here has to be un-taught.
     authed = False
     tok = handler.headers.get('X-Flare-Token', '')
     if tok:
         authed = _id.verify(tok) is not None
+    edge = _edge_identity(handler)
 
-    rec, event = _fleet.heartbeat(body or {}, path=src, authenticated=authed)
+    rec, event = _fleet.heartbeat(body or {}, path=src, authenticated=authed,
+                                  edge_identity=edge)
     if rec is None:
-        handler.send_json({'ok': False, 'error': event}, 400)
+        # A refused beat is logged. A rejection nobody can see is how an
+        # attempt to overwrite a node's row, or to invent one, passes as
+        # silence — and silence is what this whole file exists to convert into
+        # a fact. Logged as warn, not error: a node that was reprovisioned
+        # without re-registering produces exactly this and is not an attack.
+        detail = event if isinstance(event, dict) else {'error': str(event)}
+        log_activity(db_conn,
+                     'mesh: beat REFUSED for %s — %s'
+                     % ((body or {}).get('server_id') or '(no server_id)',
+                        detail.get('detail') or detail.get('error')),
+                     'mesh', 'fleet', (body or {}).get('server_id', ''), 'warn')
+        # 403 for a beat that claimed a record it could not prove, 400 for one
+        # that never named a record at all. Two different things went wrong and
+        # a node retrying on a loop should be able to tell which.
+        code = 400 if detail.get('error') == 'no_identity' else 403
+        out = {'ok': False}
+        out.update(detail)
+        handler.send_json(out, code)
         return
     if event:
         log_activity(db_conn, event, 'mesh', 'fleet', rec.get('server_id', ''), 'info')
 
+    # Recorded only for a beat the fleet already accepted — and as of the
+    # binding above that sentence is finally true. It used to guard nothing:
+    # fleet.heartbeat accepted every beat carrying any id, so an unknown
+    # server_id grew this table exactly as easily as it grew the fleet. Now an
+    # unknown sid never reaches this line, so the bound on this dict really is
+    # the set of registered nodes.
+    reg, prev_ref = _record_registry(rec['server_id'], (body or {}).get('registry'))
+    central = _central_ref()
+    central_console = _console_sha()
+    congruence = _congruence(reg['ref'] if reg else '', central,
+                             (reg or {}).get('console', ''), central_console)
+    if reg and prev_ref and prev_ref != reg['ref']:
+        # A node changing ref is an event; a node SITTING on a different ref is
+        # a state, and logging a state every 30s buries the events. So this
+        # fires on the transition only.
+        log_activity(db_conn,
+                     'mesh: %s moved %s -> %s' % (rec.get('name') or rec['server_id'],
+                                                  prev_ref[:7], reg['ref'][:7]),
+                     'mesh', 'fleet', rec['server_id'],
+                     'warn' if congruence == 'drift' else 'info')
+
     handler.send_json({'ok': True, 'server_id': rec['server_id'],
                        'status': rec['status'], 'authenticated': authed,
-                       'next_beat_seconds': _fleet.HEARTBEAT_INTERVAL})
+                       # Reported back beside `authenticated` because they are
+                       # two different facts and the node should be able to see
+                       # which one carried its beat: `authenticated` is a join
+                       # token that does not exist yet, `bound_by` is what this
+                       # beat was actually held to.
+                       'bound_by': rec.get('bound_by', ''),
+                       'next_beat_seconds': _fleet.HEARTBEAT_INTERVAL,
+                       # Told back to the node, because the node is the one
+                       # that can act on it: it learns central's ref without a
+                       # second request, on a wire it already has.
+                       'registry': {'recorded': reg is not None,
+                                    'congruence': congruence,
+                                    'central_ref': central,
+                                    'central_console': central_console}})
 
 
 # 20312702  POST /api/mesh/register — a node joins
 def post_mesh_register(handler, path, params, body):
-    """# 20312702  POST /api/mesh/register"""
+    """# 20312702  POST /api/mesh/register
+
+    THE ONLY ENDPOINT THAT CREATES A FLEET RECORD, as of this change. Beats
+    report on records; this one brings them into existence, so this is where the
+    binding every later beat is checked against is written: the machine_id, and
+    the edge identity if the registration came over the edge.
+
+    Still gate 0 and still idempotent, because a node retries it on every start.
+    What it will NOT do is rekey an existing record from the body — a known
+    server_id arriving with a different machine_id is refused, not absorbed. See
+    kernel.fleet.register.
+    """
     if not _id.is_central():
         handler.send_json({'ok': False, 'error': 'not_central',
                            'mode': _id.mode()}, 409)
@@ -65,8 +376,15 @@ def post_mesh_register(handler, path, params, body):
     b = body or {}
     rec, note = _fleet.register(
         b.get('server_id', ''), b.get('name', ''),
-        b.get('machine_id', ''), b.get('reachability'))
+        b.get('machine_id', ''), b.get('reachability'),
+        edge_identity=_edge_identity(handler))
     if rec is None:
+        # A refused registration is logged for the same reason a refused beat
+        # is: an attempt to rekey another box's record must not be invisible.
+        log_activity(db_conn,
+                     'mesh: register REFUSED for %s — %s'
+                     % (b.get('server_id') or '(no server_id)', note),
+                     'mesh', 'fleet', b.get('server_id', ''), 'warn')
         handler.send_json({'ok': False, 'error': note}, 400)
         return
     msg = f'mesh register: {rec["name"] or rec["server_id"]}'
@@ -82,17 +400,180 @@ def post_mesh_register(handler, path, params, body):
 def get_mesh_fleet(handler, path, params):
     """# 20312703  GET /api/mesh/fleet
 
-    On a node this returns an empty fleet and mode:node — which is the truthful
-    answer, and lets one UI talk to either without branching.
+    NO LONGER EMPTY ON A NODE. kernel.fleet reads the zone's `flareshub-*`
+    records, so any box that knows its zone and holds a Cloudflare token
+    enumerates the fleet whether or not anything beats to it. A node with
+    neither still answers an empty fleet, and `summary.register` says why in
+    words instead of leaving a zero to be misread as "no servers".
+
+    Rows from the register alone carry status `enrolled` and no last_seen: we
+    know they exist, we have never heard from them. Never `healthy`.
+
+    Each node also carries its `congruence`: congruent, drift or unknown. That
+    is a comparison of the ref and of the served console sha, and of nothing
+    else — a node reporting different paths, disks and container counts from
+    central is a node deriving correctly, not a node out of step. See
+    `_congruence` for why values are excluded.
+
+    `unknown` is published in the summary beside `drift` on purpose. This
+    endpoint reported drift=0 from the day it was written while holding no ref
+    for any node, because nothing ever sent one, and drift=0 reads as agreement.
+    Drift 0 with unknown 1 reads as what it is: not asked.
     """
+    ref = _central_ref()
+    console = _console_sha()
+    with _reg_lock:
+        snap = {k: dict(v) for k, v in _registries.items()}
+
+    f = _fleet.fleet()
+    drift = 0
+    unknown = 0
+    for sid, rec in f.items():
+        rec['ref'] = (snap.get(sid) or {}).get('ref', '')
+        rec['console'] = (snap.get(sid) or {}).get('console', '')
+        rec['congruence'] = _congruence(rec['ref'], ref, rec['console'], console)
+        if rec['congruence'] == 'drift':
+            drift += 1
+        elif rec['congruence'] == 'unknown':
+            unknown += 1
+
+    summary = _fleet.summary()
+    summary['ref'] = ref
+    summary['console'] = console
+    summary['drift'] = drift
+    # Counted and published next to drift, because drift=0 on its own is the
+    # sentence this endpoint spent its whole life saying while knowing nothing.
+    # A reader seeing drift 0 / unknown 1 knows it was not asked; a reader
+    # seeing drift 0 alone reads it as agreement.
+    summary['unknown_ref'] = unknown
+
     handler.send_json({
         'mode':      _id.mode(),
         'self': {
             'server_id':  _id.server_id(),
             'name':       _id.node_name(),
             'machine_id': _id.machine_id(),
+            'ref':        ref,
+            'console':    console,
         },
         'generated': datetime.now().isoformat(timespec='seconds'),
-        'summary':   _fleet.summary(),
-        'fleet':     _fleet.fleet(),
+        'summary':   summary,
+        'fleet':     f,
+    })
+
+
+# 20312709  GET /api/mesh/registry — what runs where, across the fleet
+def get_mesh_registry(handler, path, params):
+    """# 20312709  GET /api/mesh/registry
+
+    One address answering, for every node: what it runs, and which of its
+    projects have not been told what their server is running.
+
+    In NODE mode this returns exactly one entry — itself — rather than an
+    error, the same way /api/mesh/fleet returns an empty fleet. One UI talks to
+    either without branching, and a node answering "here is me" is not a
+    degraded version of the fleet answer; it is the true one for a machine with
+    no fleet.
+
+    Every row but this machine's is AS OF that node's last beat, and says so
+    with age_seconds. A cached summary presented as live is how a monitor ends
+    up describing a node that stopped reporting an hour ago.
+
+    This is also where the congruence answer for each node is served, and it
+    404'd until 2026-09-26: the handler was written, given a telescope code, and
+    never given a route in kernel/router.py. So the one address that answers
+    "are these servers running the same build" could not be reached at all,
+    which is why nobody noticed that it had nothing to answer with either.
+    """
+    ref = _central_ref()
+    console = _console_sha()
+    with _reg_lock:
+        snap = {k: dict(v) for k, v in _registries.items()}
+
+    self_id = _id.server_id()
+    nodes = [_self_entry(ref, console)]
+
+    # A summary older than the unreachable threshold is stale by the same rule
+    # the fleet already uses for status. One threshold, not a second opinion.
+    stale_after = _fleet.HEARTBEAT_INTERVAL * _fleet.UNREACHABLE_AFTER
+
+    for sid, rec in _fleet.fleet().items():
+        if sid == self_id:
+            continue                       # central does not beat to itself
+        reg = snap.get(sid)
+        name = rec.get('name') or sid
+        entry = {
+            'server_id':   sid,
+            'name':        name,
+            'self':        False,
+            'status':      rec.get('status', ''),
+            'source':      'heartbeat',
+            'ref':         (reg or {}).get('ref', ''),
+            'console':     (reg or {}).get('console', ''),
+            'reported_at': (reg or {}).get('at'),
+        }
+        entry['congruence'] = _congruence(entry['ref'], ref,
+                                          entry['console'], console)
+        if reg is None:
+            # Not zero projects. Nothing was ever said, and the difference
+            # between "none" and "never told" is the whole point of stale.
+            entry['reporting'] = False
+            entry['projects'] = None
+            entry['stale'] = None
+            entry['list'] = []
+            entry['fix'] = ('%s beats without a registry block — deploy %s there '
+                            'and restart its hub' % (name, ref or 'the current ref'))
+        else:
+            age = _age(reg['at'])
+            entry['age_seconds'] = age
+            entry['report_stale'] = age is not None and age > stale_after
+            if reg.get('error'):
+                # The node beat, and said out loud that it could not read its
+                # own registry. Its ref still counts for congruence — that part
+                # it answered — but its counts are NOT zero, they are absent,
+                # and a zero here would shrink the fleet total and read as good
+                # news. Same rule as reg is None, different reason, so the
+                # reason travels with it.
+                entry['reporting'] = False
+                entry['projects'] = None
+                entry['stale'] = None
+                entry['list'] = []
+                entry['error'] = reg['error']
+            else:
+                entry['reporting'] = True
+                entry['projects'] = reg['projects']
+                entry['stale'] = reg['stale']
+                entry['list'] = reg['list']
+        if entry['congruence'] == 'drift':
+            entry['fix'] = _drift_fix(name, entry['ref'], ref,
+                                      entry['console'], console)
+        nodes.append(entry)
+
+    reporting = [n for n in nodes if n.get('projects') is not None]
+    handler.send_json({
+        'mode':      _id.mode(),
+        'ref':       ref,
+        'console':   console,
+        'generated': datetime.now().isoformat(timespec='seconds'),
+        'summary': {
+            # EXCLUDES CENTRAL. A central node does not heartbeat to itself, so
+            # it can never appear in this list. GET /api/lobby counts the same
+            # fleet PLUS central, so the two legitimately differ by one and
+            # that difference is not drift. Said here because two endpoints
+            # answering 'how many servers' with different numbers is exactly
+            # the shape of defect this project keeps deleting, and someone
+            # will otherwise spend an afternoon proving it is fine.
+            'counts':       'nodes reporting to central; central itself is not counted',
+            'nodes':        len(nodes),
+            'reporting':    len(reporting),
+            # Summed only over nodes that actually reported. Counting a silent
+            # node as zero would make the fleet total shrink when a node goes
+            # quiet, which reads as good news.
+            'projects':     sum(n.get('projects') or 0 for n in reporting),
+            'stale':        sum(n.get('stale') or 0 for n in reporting),
+            'drift':        sum(1 for n in nodes if n['congruence'] == 'drift'),
+            'unknown_ref':  sum(1 for n in nodes if n['congruence'] == 'unknown'),
+            'stale_after_seconds': stale_after,
+        },
+        'nodes': nodes,
     })

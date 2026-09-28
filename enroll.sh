@@ -30,12 +30,16 @@ warn(){ echo -e "  ${YELLOW}!${RESET} $*"; }
 die(){  echo -e "  ${RED}✗${RESET} $*" >&2; exit 1; }
 step(){ echo -e "\n${BOLD}${CYAN}$*${RESET}"; }
 
-NODE_NAME=""; ZONE=""; DRY_RUN=0; HUB_PORT="${HUB_PORT:-8765}"
+NODE_NAME=""; ZONE=""; DRY_RUN=0; HUB_PORT="${HUB_PORT:-8765}"; ALLOW_EMAIL=""
 while [ $# -gt 0 ]; do
   case "$1" in
     --node)    NODE_NAME="$2"; shift 2;;
     --zone)    ZONE="$2";      shift 2;;
     --port)    HUB_PORT="$2";  shift 2;;
+    # Accepted and ignored. Node endpoints are service-token only now, so
+    # there is no human identity to allow here. Kept so an old command line
+    # does not die; it warns below instead.
+    --email)   ALLOW_EMAIL="$2"; shift 2;;
     --dry-run) DRY_RUN=1;      shift;;
     *) die "unknown argument: $1";;
   esac
@@ -53,15 +57,59 @@ MACHINE_ID=$(cat /etc/machine-id)
 # hostname label rules: lowercase alnum + hyphen
 echo "$NODE_NAME" | grep -qE '^[a-z0-9][a-z0-9-]{0,30}[a-z0-9]$' \
   || die "--node '$NODE_NAME' is not a valid hostname label (lowercase, alnum, hyphen)"
+# THE HOSTNAME COMES FROM THE ID, NOT FROM WHAT THE BOX IS CALLED.
+#
+# It used to be hub-${NODE_NAME}, where NODE_NAME defaulted to `hostname -s`
+# and could be overridden with --node. That is how DNS on flarevault.dev ended
+# up holding hub-ksgco while the machine is called ksgcohub: someone typed
+# --node ksgco once, and a typo became permanent DNS pointing at a tunnel that
+# nothing runs.
+#
+# A name anyone can type is a name anyone can get wrong, and it changes when
+# the box is renamed. The server id is derived from /etc/machine-id, survives
+# renames and IP changes, and cannot collide. So it is the address.
+#
+# Derived here with the SAME algorithm as hub/kernel/identity.py. If these two
+# ever disagree the node answers to a name the fleet does not know it by, so
+# they are computed identically on purpose.
+SERVER_ID=$(printf '%s' "$MACHINE_ID" | python3 -c '
+import sys, hashlib
+print("fvn_" + hashlib.sha256(sys.stdin.read().strip().encode()).hexdigest()[:6])')
+[ -n "$SERVER_ID" ] || die "could not derive server id from machine-id"
+# fvn_685a59 -> fvn-685a59; underscores are not legal in a hostname label.
+ID_LABEL=$(printf '%s' "$SERVER_ID" | tr '_' '-')
+
+[ -n "$ALLOW_EMAIL" ] && warn "--email is ignored: node endpoints are service-token only (humans use login.${ZONE:-<zone>})"
 ok "machine-id : $MACHINE_ID"
-ok "node       : $NODE_NAME"
+ok "server id  : $SERVER_ID"
+ok "node       : $NODE_NAME  (label only — not used in any hostname)"
 
 # ── 2. preflight ─────────────────────────────────────────────────────────────
 step "2. Preflight"
 command -v curl    >/dev/null || die "curl not installed"
 command -v python3 >/dev/null || die "python3 not installed"
 [ -n "$ZONE" ] || die "--zone is required (e.g. --zone ksgdev.com)"
-HOSTNAME_FQDN="hub-${NODE_NAME}.${ZONE}"
+# flareshub-<id>.<zone>, per the FlareVault login-flow spec. This is a NODE
+# endpoint, not a human door: the lobby at dashboard.<zone> proxies to it with
+# a service token and a person browsing here is refused outright.
+#
+# The full server id is kept, underscore swapped for a hyphen, rather than
+# trimmed to 685a59. Nobody ever types this -- it is service-token only -- so
+# there is no cost to length, and a hostname that contains the id verbatim can
+# be matched back to /api/node without a lookup table.
+HOSTNAME_FQDN="flareshub-${ID_LABEL}.${ZONE}"
+
+# NO READABLE ALIAS. There was one -- ${NODE_NAME}.${ZONE} -- and it put the
+# hub on the public internet with no gate in front of it for about four
+# minutes. The Access application is created for ONE domain, so the second
+# hostname reached the same origin ungated, and with HUB_ENFORCE_GATES unset
+# the router's gates only record what they would have refused. A stranger
+# could read /api/config.
+#
+# One hostname gets an Access app, so there is exactly one hostname. If a
+# second is ever wanted it needs its own Access application created in the
+# same breath, and an alias is not worth that.
+ALIAS_FQDN=""
 ok "target     : https://${HOSTNAME_FQDN} -> http://localhost:${HUB_PORT}"
 
 # the hub must actually be running, or we would publish a dead endpoint
@@ -93,9 +141,24 @@ cf() { # cf METHOD PATH [JSON_BODY]
 }
 jq_py() { python3 -c "import sys,json;d=json.load(sys.stdin);$1" 2>/dev/null || true; }
 
+# DO NOT GATE ON /user/tokens/verify.
+#
+# It returned 401 "1000 Invalid API Token" for a token that answered 200 on
+# every endpoint this script actually uses -- zones, cfd_tunnel and access/apps.
+# Verified 2026-09-24. That gate refused a working token and blocked enrolment
+# for a full day while the token was blamed.
+#
+# So it is reported, never enforced. The token is proved by USING it: the zone
+# lookup below is the first real call and it fails loudly on its own if the
+# token cannot do the job. An endpoint that can only say yes-or-no about a
+# credential is a worse judge than the endpoints that need it.
 VERIFY=$(cf GET /user/tokens/verify | jq_py 'print(d.get("success"))')
-[ "$VERIFY" = "True" ] || die "token rejected by Cloudflare (Invalid API Token). Create one with: Zone>DNS>Edit, Account>Cloudflare Tunnel>Edit, Account>Access Apps>Edit"
-ok "token      : valid"
+if [ "$VERIFY" = "True" ]; then
+  ok "token      : verify endpoint accepts it"
+else
+  warn "token      : /user/tokens/verify rejects it -- continuing anyway."
+  warn "             that endpoint is not authoritative; the calls below are."
+fi
 
 ZONE_ID=$(cf GET "/zones?name=${ZONE}" | jq_py 'r=d.get("result") or [];print(r[0]["id"] if r else "")')
 [ -n "$ZONE_ID" ] || die "zone '${ZONE}' not visible to this token — check the token's zone scope"
@@ -104,56 +167,181 @@ ACCOUNT_ID=$(cf GET "/zones/${ZONE_ID}" | jq_py 'print((d.get("result") or {}).g
 ok "zone       : ${ZONE} (${ZONE_ID:0:8}…)"
 
 if [ "$DRY_RUN" = "1" ]; then
-  step "DRY RUN — stopping before any change"
-  echo "  would create tunnel   : hub-${NODE_NAME}"
-  echo "  would create DNS      : ${HOSTNAME_FQDN}"
-  echo "  would create Access   : ${HOSTNAME_FQDN}"
-  echo "  would install service : cloudflared (host systemd)"
+  step "DRY RUN — reading only, changing nothing"
+  # This block used to print a fixed list -- "would create tunnel hub-<node>",
+  # "would install service" -- because it exited BEFORE the adopt logic ran. So
+  # it announced the exact behaviour that took this box down, while the real
+  # run would have adopted instead. A dry run that misreports the plan is worse
+  # than no dry run: it is a rehearsal of a different script.
+  #
+  # It now performs the same read-only discovery the real run does.
+  DR_TUNNEL=""
+  if [ -f /etc/cloudflared/token ]; then
+    DR_TUNNEL=$(sudo -n cat /etc/cloudflared/token 2>/dev/null | python3 -c '
+import sys, json, base64
+t = sys.stdin.read().strip()
+try:
+    print(json.loads(base64.b64decode(t + "=" * (-len(t) % 4))).get("t",""))
+except Exception:
+    print("")' 2>/dev/null || echo "")
+  fi
+
+  if [ -n "$DR_TUNNEL" ]; then
+    DR_NAME=$(cf GET "/accounts/${ACCOUNT_ID}/cfd_tunnel/${DR_TUNNEL}" \
+      | jq_py 'print((d.get("result") or {}).get("name",""))')
+    echo "  tunnel      : ADOPT '${DR_NAME}' (${DR_TUNNEL:0:8}…) — this host already runs it"
+    echo "  service     : left alone (already serving this tunnel)"
+  else
+    echo "  tunnel      : create hub-${NODE_NAME} (nothing running here to adopt)"
+    echo "  service     : cloudflared install — existing token backed up first"
+  fi
+
+  DR_CUR=$(cf GET "/accounts/${ACCOUNT_ID}/cfd_tunnel/${DR_TUNNEL:-none}/configurations" 2>/dev/null)
+  echo "$DR_CUR" | HOSTNAME_FQDN="$HOSTNAME_FQDN" ALIAS_FQDN="$ALIAS_FQDN" python3 -c '
+import json, os, sys
+mine = [h for h in (os.environ["HOSTNAME_FQDN"], os.environ.get("ALIAS_FQDN","")) if h]
+try:
+    cur = ((json.load(sys.stdin).get("result") or {}).get("config") or {}).get("ingress") or []
+except Exception:
+    cur = []
+have = [r["hostname"] for r in cur if r.get("hostname")]
+add  = [h for h in mine if h not in have]
+print("  ingress     : %d existing hostname(s) kept, %d added" % (len(have), len(add)))
+for h in have: print("                  keep  %s" % h)
+for h in add:  print("                  ADD   %s" % h)
+' 2>/dev/null || echo "  ingress     : could not read current config"
+
+  for FQDN in "$HOSTNAME_FQDN" "$ALIAS_FQDN"; do
+    [ -n "$FQDN" ] || continue
+    EX=$(cf GET "/zones/${ZONE_ID}/dns_records?name=${FQDN}" \
+      | jq_py 'r=d.get("result") or [];print(r[0]["content"] if r else "")')
+    if [ -n "$EX" ]; then
+      echo "  dns         : ${FQDN} exists -> ${EX:0:20}… (would be repointed)"
+    else
+      echo "  dns         : ${FQDN} would be created"
+    fi
+  done
+
+  EXAPP=$(cf GET "/accounts/${ACCOUNT_ID}/access/apps" \
+    | jq_py "r=d.get('result') or [];print(next((a['id'] for a in r if a.get('domain')=='${HOSTNAME_FQDN}'),''))")
+  if [ -n "$EXAPP" ]; then
+    NPOL=$(cf GET "/accounts/${ACCOUNT_ID}/access/apps/${EXAPP}/policies" | jq_py 'print(len(d.get("result") or []))')
+    echo "  access      : app exists (${EXAPP:0:8}…) with ${NPOL} policy(ies)"
+    [ "${NPOL:-0}" = "0" ] && echo "                  would ADD service-token-only policy"
+  else
+    echo "  access      : would create app + service-token-only policy"
+  fi
+  echo
+  echo "  nothing above was changed."
   exit 0
 fi
 
-# ── 4. tunnel (idempotent) ───────────────────────────────────────────────────
+# ── 4. tunnel — ADOPT what the host already runs ─────────────────────────────
+#
+# This block used to do two things that take a working server off the internet,
+# and it did both to THIS box: it always created/selected a tunnel named
+# hub-<node> regardless of what cloudflared was already running, and then the
+# ingress PUT below replaced the ENTIRE ingress array with one hostname.
+#
+# On ksgcohub that meant: make a second tunnel, repoint the host service at it,
+# and drop the nine hostnames the live tunnel was serving -- including every
+# fksinv production name. It is also how /etc/cloudflared/token got destroyed.
+#
+# ONE BOX, ONE TUNNEL, MANY HOSTNAMES. If this host already runs a tunnel, that
+# is the tunnel. We add a hostname to it. We never make a second one and never
+# repoint the service.
 step "4. Tunnel"
-TUNNEL_NAME="hub-${NODE_NAME}"
-TUNNEL_ID=$(cf GET "/accounts/${ACCOUNT_ID}/cfd_tunnel?name=${TUNNEL_NAME}&is_deleted=false" \
-  | jq_py 'r=d.get("result") or [];print(r[0]["id"] if r else "")')
 
-if [ -n "$TUNNEL_ID" ]; then
-  warn "tunnel '${TUNNEL_NAME}' already exists — reusing (${TUNNEL_ID:0:8}…)"
-else
-  RESP=$(cf POST "/accounts/${ACCOUNT_ID}/cfd_tunnel" \
-    "{\"name\":\"${TUNNEL_NAME}\",\"config_src\":\"cloudflare\"}")
-  TUNNEL_ID=$(echo "$RESP" | jq_py 'print((d.get("result") or {}).get("id",""))')
-  [ -n "$TUNNEL_ID" ] || die "tunnel create failed: $(echo "$RESP" | head -c 300)"
-  ok "tunnel     : created ${TUNNEL_ID:0:8}…"
+# What is this host already running? The service token carries the tunnel id.
+RUNNING_TUNNEL_ID=""
+if [ -f /etc/cloudflared/token ]; then
+  RUNNING_TUNNEL_ID=$(sudo -n cat /etc/cloudflared/token 2>/dev/null | python3 -c '
+import sys, json, base64
+t = sys.stdin.read().strip()
+try:
+    print(json.loads(base64.b64decode(t + "=" * (-len(t) % 4))).get("t", ""))
+except Exception:
+    print("")' 2>/dev/null || echo "")
 fi
 
-TUNNEL_TOKEN=$(cf GET "/accounts/${ACCOUNT_ID}/cfd_tunnel/${TUNNEL_ID}/token" | jq_py 'print(d.get("result",""))')
-[ -n "$TUNNEL_TOKEN" ] || die "could not fetch tunnel token"
+if [ -n "$RUNNING_TUNNEL_ID" ]; then
+  TUNNEL_ID="$RUNNING_TUNNEL_ID"
+  TUNNEL_NAME=$(cf GET "/accounts/${ACCOUNT_ID}/cfd_tunnel/${TUNNEL_ID}" \
+    | jq_py 'print((d.get("result") or {}).get("name",""))')
+  ADOPTED=1
+  ok "tunnel     : adopting the one this host already runs — '${TUNNEL_NAME}' (${TUNNEL_ID:0:8}…)"
+else
+  ADOPTED=0
+  TUNNEL_NAME="hub-${NODE_NAME}"
+  TUNNEL_ID=$(cf GET "/accounts/${ACCOUNT_ID}/cfd_tunnel?name=${TUNNEL_NAME}&is_deleted=false" \
+    | jq_py 'r=d.get("result") or [];print(r[0]["id"] if r else "")')
+  if [ -n "$TUNNEL_ID" ]; then
+    warn "tunnel '${TUNNEL_NAME}' exists but nothing runs it here — reusing (${TUNNEL_ID:0:8}…)"
+  else
+    RESP=$(cf POST "/accounts/${ACCOUNT_ID}/cfd_tunnel" \
+      "{\"name\":\"${TUNNEL_NAME}\",\"config_src\":\"cloudflare\"}")
+    TUNNEL_ID=$(echo "$RESP" | jq_py 'print((d.get("result") or {}).get("id",""))')
+    [ -n "$TUNNEL_ID" ] || die "tunnel create failed: $(echo "$RESP" | head -c 300)"
+    ok "tunnel     : created ${TUNNEL_ID:0:8}…"
+  fi
+  TUNNEL_TOKEN=$(cf GET "/accounts/${ACCOUNT_ID}/cfd_tunnel/${TUNNEL_ID}/token" | jq_py 'print(d.get("result",""))')
+  [ -n "$TUNNEL_TOKEN" ] || die "could not fetch tunnel token"
+fi
 
-# ingress: this hostname -> the local hub. catch-all 404 so nothing else leaks.
-cf PUT "/accounts/${ACCOUNT_ID}/cfd_tunnel/${TUNNEL_ID}/configurations" "$(cat <<JSON
-{"config":{"ingress":[
-  {"hostname":"${HOSTNAME_FQDN}","service":"http://localhost:${HUB_PORT}"},
-  {"service":"http_status:404"}
-]}}
-JSON
-)" >/dev/null
-ok "ingress    : ${HOSTNAME_FQDN} -> http://localhost:${HUB_PORT}"
+# ── ingress: MERGE, never replace ────────────────────────────────────────────
+# The API takes the whole array, so a naive PUT deletes every rule it does not
+# mention. Read what is there, upsert this one hostname, keep the catch-all
+# last, and refuse to write if the result would lose a hostname.
+step "4b. Ingress"
+CUR=$(cf GET "/accounts/${ACCOUNT_ID}/cfd_tunnel/${TUNNEL_ID}/configurations")
+NEW_INGRESS=$(echo "$CUR" | HOSTNAME_FQDN="$HOSTNAME_FQDN" ALIAS_FQDN="$ALIAS_FQDN" \
+                            HUB_PORT="$HUB_PORT" python3 -c '
+import json, os, sys
+svc   = "http://localhost:" + os.environ["HUB_PORT"]
+mine  = [h for h in (os.environ["HOSTNAME_FQDN"], os.environ.get("ALIAS_FQDN","")) if h]
+try:
+    cur = ((json.load(sys.stdin).get("result") or {}).get("config") or {}).get("ingress") or []
+except Exception:
+    cur = []
+named   = [r for r in cur if r.get("hostname")]
+before  = {r["hostname"] for r in named}
+named   = [r for r in named if r["hostname"] not in mine]
+for h in mine:
+    named.append({"hostname": h, "service": svc})
+after   = {r["hostname"] for r in named}
+lost    = before - after
+if lost:
+    sys.stderr.write("REFUSING: would drop " + ", ".join(sorted(lost)) + "\n")
+    sys.exit(1)
+named.append({"service": "http_status:404"})
+print(json.dumps({"config": {"ingress": named}}))
+') || die "ingress merge refused — existing hostnames would have been lost"
+
+KEPT=$(echo "$CUR" | jq_py 'print(len([r for r in (((d.get("result") or {}).get("config") or {}).get("ingress") or []) if r.get("hostname")]))')
+cf PUT "/accounts/${ACCOUNT_ID}/cfd_tunnel/${TUNNEL_ID}/configurations" "$NEW_INGRESS" >/dev/null
+ok "ingress    : ${HOSTNAME_FQDN} -> http://localhost:${HUB_PORT}  (${KEPT} existing hostname(s) preserved)"
 
 # ── 5. DNS (idempotent) ──────────────────────────────────────────────────────
 step "5. DNS"
 CNAME_TARGET="${TUNNEL_ID}.cfargotunnel.com"
-REC_ID=$(cf GET "/zones/${ZONE_ID}/dns_records?name=${HOSTNAME_FQDN}" \
-  | jq_py 'r=d.get("result") or [];print(r[0]["id"] if r else "")')
-BODY="{\"type\":\"CNAME\",\"name\":\"${HOSTNAME_FQDN}\",\"content\":\"${CNAME_TARGET}\",\"proxied\":true}"
-if [ -n "$REC_ID" ]; then
-  cf PUT "/zones/${ZONE_ID}/dns_records/${REC_ID}" "$BODY" >/dev/null
-  warn "dns        : record existed — updated to ${CNAME_TARGET:0:16}…"
-else
-  cf POST "/zones/${ZONE_ID}/dns_records" "$BODY" >/dev/null
-  ok "dns        : ${HOSTNAME_FQDN} -> ${CNAME_TARGET:0:16}…"
-fi
+
+# Both names, same tunnel. A record that already exists is REPOINTED at the
+# tunnel this host actually runs -- which is the repair for the state this zone
+# is in now, where hub-ksgco.flarevault.dev points at a tunnel with zero
+# connections and has never served anything.
+for FQDN in "$HOSTNAME_FQDN" "$ALIAS_FQDN"; do
+  [ -n "$FQDN" ] || continue
+  REC_ID=$(cf GET "/zones/${ZONE_ID}/dns_records?name=${FQDN}" \
+    | jq_py 'r=d.get("result") or [];print(r[0]["id"] if r else "")')
+  BODY="{\"type\":\"CNAME\",\"name\":\"${FQDN}\",\"content\":\"${CNAME_TARGET}\",\"proxied\":true}"
+  if [ -n "$REC_ID" ]; then
+    cf PUT "/zones/${ZONE_ID}/dns_records/${REC_ID}" "$BODY" >/dev/null
+    warn "dns        : ${FQDN} existed — repointed to ${CNAME_TARGET:0:16}…"
+  else
+    cf POST "/zones/${ZONE_ID}/dns_records" "$BODY" >/dev/null
+    ok "dns        : ${FQDN} -> ${CNAME_TARGET:0:16}…"
+  fi
+done
 
 # ── 6. Access (idempotent) ───────────────────────────────────────────────────
 # Nothing public is created without a gate in front of it.
@@ -169,8 +357,40 @@ JSON
 )" | jq_py 'print((d.get("result") or {}).get("id",""))')
   [ -n "$APP_ID" ] || die "Access app create failed — check the token has Access>Apps>Edit"
   ok "access     : app created"
-  warn "no policy attached yet — add an allow policy for your Google address in"
-  warn "Zero Trust > Access > Applications, or the app denies everyone by default"
+fi
+
+# THE POLICY. An Access app with no policy denies EVERY identity after login,
+# so the hostname 302s to a Google sign-in that can never succeed. This step
+# used to print a warning telling you to go add one in the dashboard by hand --
+# and on this account that warning was not acted on, so app 0f070dc3 has sat
+# with "policies": [] since it was created. A warning is not a step.
+#
+# Checked and created idempotently, because an app that already has a policy
+# must not get a second, looser one bolted on.
+POL_COUNT=$(cf GET "/accounts/${ACCOUNT_ID}/access/apps/${APP_ID}/policies" \
+  | jq_py 'print(len(d.get("result") or []))')
+if [ "${POL_COUNT:-0}" != "0" ]; then
+  ok "access     : ${POL_COUNT} policy(ies) already attached"
+else
+  # SERVICE TOKEN ONLY. Spec rule 6: node endpoints "refuse humans entirely".
+  #
+  # This used to attach an allow policy for --email, which made every node a
+  # human-facing door. That is backwards: the ONLY human gate is
+  # login.<zone>, and the lobby at dashboard.<zone> reaches nodes internally
+  # with a service token. A person who finds this hostname gets nothing.
+  #
+  # any_valid_service_token rather than a specific token id, so rotating the
+  # lobby's credential does not require re-running enrolment on every node.
+  cf POST "/accounts/${ACCOUNT_ID}/access/apps/${APP_ID}/policies" "$(cat <<'JSON'
+{"name":"FlareSHub service token only","decision":"non_identity","precedence":1,
+ "include":[{"any_valid_service_token":{}}]}
+JSON
+)" >/dev/null
+  RECHECK=$(cf GET "/accounts/${ACCOUNT_ID}/access/apps/${APP_ID}/policies" \
+    | jq_py 'print(len(d.get("result") or []))')
+  [ "${RECHECK:-0}" != "0" ] \
+    && ok "access     : service-token-only (humans refused)" \
+    || die "policy create reported success but the app still has none — check Access>Apps>Edit"
 fi
 
 # ── 7. cloudflared as a HOST service ─────────────────────────────────────────
@@ -187,8 +407,30 @@ if ! command -v cloudflared >/dev/null; then
 else
   ok "cloudflared: already present ($(cloudflared --version 2>&1 | head -1))"
 fi
-sudo cloudflared service install "$TUNNEL_TOKEN" >/dev/null 2>&1 \
-  || warn "service install returned non-zero — may already be installed"
+# THE LINE THAT TOOK THIS BOX DOWN.
+#
+# `cloudflared service install <token>` OVERWRITES /etc/cloudflared/token and
+# repoints the host service at whatever tunnel that token belongs to. It ran
+# unconditionally. On a host already running a tunnel with other hostnames on
+# it, that silently moves the machine to a different tunnel and every existing
+# hostname stops resolving to anything. It is also how this box lost its token
+# while the live tunnel kept serving nine hostnames from memory alone -- one
+# restart away from an outage nobody would have connected to this script.
+#
+# If we adopted the running tunnel, the service is already correct. Touching it
+# can only break it.
+if [ "$ADOPTED" = "1" ]; then
+  ok "cloudflared: already serving this tunnel — service left alone"
+else
+  [ -n "${TUNNEL_TOKEN:-}" ] || die "no tunnel token and no running tunnel to adopt"
+  if [ -f /etc/cloudflared/token ]; then
+    BK="/etc/cloudflared/token.bak.$(date +%Y%m%d-%H%M%S)"
+    sudo -n cp -p /etc/cloudflared/token "$BK" 2>/dev/null \
+      && warn "existing token backed up to ${BK}"
+  fi
+  sudo cloudflared service install "$TUNNEL_TOKEN" >/dev/null 2>&1 \
+    || warn "service install returned non-zero — may already be installed"
+fi
 sudo systemctl enable --now cloudflared >/dev/null 2>&1 || true
 sleep 3
 systemctl is-active --quiet cloudflared && ok "cloudflared: running" || warn "cloudflared not active — check: journalctl -u cloudflared -n 40"

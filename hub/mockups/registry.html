@@ -1,0 +1,512 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Exchange — Registry (mockup)</title>
+<!--
+  MOCKUP. STATIC. NOTHING HERE IS WIRED. The only JavaScript toggles states.
+
+  THE REGISTRY — projects across BOTH servers, PROJECT-FIRST rather than
+  server-first. Doctrine §4: the topography console "manages projects from the
+  reverse of all servers". A server-first list is the per-server console's job
+  and already exists there.
+
+  Every row is two columns of the same fact: what the project CLAIMED, and what
+  the server OBSERVED. Neither is corrected to match the other. The distance
+  between them is the product.
+
+  ROUTES THAT WOULD FEED THIS
+    GET  /api/mesh/registry                20312709  every node: ref + stale list
+    GET  /api/registry                     20313701  one server's projects
+    GET  /api/registry/<p>                 20313702  one standing record
+    GET  /api/registry/<p>/diffs           20313710  differences + dispositions
+    GET  /api/node                         20311701  what the machine RUNS, live
+    POST /api/registry/<p>/verify          20313709  re-read the machine
+    POST /api/registry/<p>/dispose         20313711  fix|accept|defer|hub-wrong
+    POST /api/ack/<p>                      20313704  acknowledge the master
+
+  DERIVED, NOT STORED
+    stale            last ack ref != this server's master. Computed per read.
+    stale_count      counted in the handler, not a column
+    diffs_open       COUNT(*) WHERE disposition=''
+    state            'reconciled' is set when diffs_open hits 0 — reconciled
+                     means every difference has a DISPOSITION, not that every
+                     difference was FIXED. Four accepted deviations is fully
+                     reconciled.
+    everything under OBSERVED — containers, ports, labels, mounts, images.
+                     Read from `docker ps` / `docker inspect` on every call.
+                     Law I: if docker can tell you, the database must not.
+    congruence       same code ref + same console sha, per node
+    the `via` badge  which of three channels matched the container:
+                     label (com.ksg.project), name, or compose project
+
+  STORED
+    claim (verbatim, never edited), claimed_at, verified_at, owner, status,
+    purpose, home, acks (append-only), diffs + their disposition.
+
+  REAL VALUES read from fks-services 127.0.0.1:8765 on 2026-09-27:
+    GET /api/registry  -> {"master":"fb09de8","projects":[],"stale_count":0}
+    GET /api/node      -> 16 observed groups, every one claimed:false;
+                          15 carry no com.ksg.project label;
+                          3 containers match nothing at all.
+    keynox's ports, images and container names are that machine's, verbatim.
+  Anything tinted .synth is illustrative — no claim exists on either box.
+-->
+<style>
+  :root{
+    --bg:#0b0f14; --panel:#111823; --panel2:#0e141d; --border:#1e2936;
+    --text:#dbe5f0; --muted:#7d8da0; --muted2:#55697e;
+    --accent:#4ec9e0; --green:#3fb950; --amber:#d29922; --red:#f85149;
+    --mono:ui-monospace,SFMono-Regular,"SF Mono",Menlo,monospace;
+  }
+  @media (prefers-color-scheme:light){
+    :root:not([data-theme="dark"]){
+      --bg:#f6f8fa; --panel:#fff; --panel2:#f0f3f6; --border:#d5dde5;
+      --text:#1f2328; --muted:#5b6570; --muted2:#8593a3; --accent:#0d7d94;
+    }
+  }
+  *{box-sizing:border-box}
+  body{margin:0;min-height:100vh;background:var(--bg);color:var(--text);
+       font:14px/1.55 ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif}
+  .wrap{max-width:960px;margin:0 auto;padding:22px 16px 60px}
+  @media(min-width:700px){.wrap{padding:26px 24px 60px}}
+
+  .top{display:flex;align-items:baseline;gap:10px;flex-wrap:wrap;
+       padding-bottom:12px;border-bottom:1px solid var(--border)}
+  .brand{font-size:15px;font-weight:600;letter-spacing:.3px}
+  .brand .dot{color:var(--accent)}
+  .who{margin-left:auto;font-size:11px;color:var(--muted);font-family:var(--mono)}
+  .who b{color:var(--text);font-weight:500}
+
+  .states{display:flex;gap:6px;flex-wrap:wrap;margin:14px 0 4px}
+  .states button{font:10px/1 var(--mono);text-transform:uppercase;
+    letter-spacing:.6px;padding:6px 10px;border-radius:3px;cursor:pointer;
+    border:1px solid var(--border);background:var(--panel2);color:var(--muted)}
+  .states button[aria-pressed="true"]{color:var(--accent);
+    border-color:color-mix(in srgb,var(--accent) 45%,transparent)}
+  .mocknote{font-size:10px;color:var(--muted2);font-family:var(--mono);margin:8px 0 18px}
+
+  h2{font-size:12px;font-weight:600;letter-spacing:.5px;text-transform:uppercase;
+     color:var(--muted);margin:26px 0 9px}
+
+  .sources{display:flex;flex-direction:column;gap:1px;background:var(--border);
+    border:1px solid var(--border);border-radius:6px;overflow:hidden}
+  .src{display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:9px 12px;
+    background:var(--panel);font-family:var(--mono);font-size:11px;color:var(--muted)}
+  .src .nm{color:var(--text);font-weight:500}
+  .src .via{margin-left:auto}
+  .src .ok{color:var(--green)} .src .no{color:var(--red)}
+
+  .rows{display:flex;flex-direction:column;gap:1px;background:var(--border);
+    border:1px solid var(--border);border-radius:6px;overflow:hidden}
+  .row{padding:14px;background:var(--panel);border-left:3px solid var(--border)}
+  .row.clean{border-left-color:var(--green)}
+  .row.open{border-left-color:var(--amber)}
+  .row.unclaimed{border-left-color:var(--red)}
+  .row.never{border-left-color:var(--muted2);background:var(--panel2)}
+
+  .rtop{display:flex;align-items:center;gap:9px;flex-wrap:wrap}
+  .pname{font-size:15px;font-weight:600}
+  .badge{font:9px/1 var(--mono);text-transform:uppercase;letter-spacing:.6px;
+    padding:3px 7px;border-radius:20px;border:1px solid var(--border);color:var(--muted)}
+  .badge.prod{color:var(--accent);border-color:color-mix(in srgb,var(--accent) 45%,transparent)}
+  .badge.stale{color:var(--amber);border-color:color-mix(in srgb,var(--amber) 45%,transparent)}
+  .badge.ok{color:var(--green);border-color:color-mix(in srgb,var(--green) 45%,transparent)}
+  .badge.bad{color:var(--red);border-color:color-mix(in srgb,var(--red) 45%,transparent)}
+  .home{margin-left:auto;font-family:var(--mono);font-size:10px;color:var(--muted2)}
+
+  /* CLAIMED | OBSERVED. Stacks on a phone, sits side by side above 640px.
+     The two columns are never merged, at any width. */
+  .vs{display:grid;grid-template-columns:1fr;gap:1px;margin-top:11px;
+    background:var(--border);border:1px solid var(--border);border-radius:5px;
+    overflow:hidden}
+  @media(min-width:640px){.vs{grid-template-columns:1fr 1fr}}
+  .col{background:var(--panel2);padding:10px 12px}
+  .col h4{margin:0 0 7px;font:9px/1 var(--mono);text-transform:uppercase;
+    letter-spacing:.7px;color:var(--muted2);font-weight:400}
+  .col.claimed h4::after{content:" \00b7 stored verbatim"}
+  .col.observed h4::after{content:" \00b7 read just now"}
+  .col dl{margin:0;font-family:var(--mono);font-size:11px}
+  .col dt{color:var(--muted2);float:left;clear:left;width:78px}
+  .col dd{margin:0 0 4px 82px;color:var(--text);word-break:break-word}
+  .col dd.gap{color:var(--amber)}
+  .col dd.bad{color:var(--red)}
+  .col dd.none{color:var(--muted2)}
+
+  .diffs{margin-top:11px;display:flex;flex-direction:column;gap:8px}
+  .diff{border:1px solid var(--border);border-radius:5px;padding:10px 12px;
+    background:var(--panel2);font-size:12px}
+  .diff .head{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+  .diff .did{font-family:var(--mono);font-size:10px;color:var(--muted2)}
+  .diff .disp{margin-left:auto;font:9px/1 var(--mono);text-transform:uppercase;
+    letter-spacing:.6px;padding:3px 7px;border-radius:20px;border:1px solid var(--border)}
+  .diff .disp.undecided{color:var(--amber);
+    border-color:color-mix(in srgb,var(--amber) 45%,transparent)}
+  .diff .disp.accept{color:var(--green);
+    border-color:color-mix(in srgb,var(--green) 45%,transparent)}
+  .diff .disp.hubwrong{color:var(--accent);
+    border-color:color-mix(in srgb,var(--accent) 45%,transparent)}
+  .diff .cm{margin-top:7px;font-family:var(--mono);font-size:11px;line-height:1.6}
+  .diff .cm .c{color:var(--muted)} .diff .cm .m{color:var(--amber)}
+  .diff .why{margin-top:7px;color:var(--muted);line-height:1.55}
+  .diff .fix{margin-top:7px;font-family:var(--mono);font-size:11px;
+    color:var(--accent);word-break:break-all}
+
+  .msg{border:1px solid var(--border);background:var(--panel);border-radius:8px;
+    padding:16px 18px;font-size:13px;color:var(--muted)}
+  .msg h3{font-size:14px;font-weight:600;color:var(--text);margin:0 0 7px}
+  .msg p{margin:0 0 9px} .msg p:last-child{margin:0}
+  .msg code{font-family:var(--mono);font-size:12px;color:var(--accent);overflow-wrap:anywhere}
+  .msg.bad{border-color:color-mix(in srgb,var(--red) 45%,transparent)}
+  .msg.bad h3{color:var(--red)}
+  .msg.warn{border-color:color-mix(in srgb,var(--amber) 45%,transparent)}
+  .msg ul{margin:0 0 9px;padding-left:18px} .msg li{margin:3px 0}
+
+  .synth{border-bottom:1px dotted color-mix(in srgb,var(--accent) 55%,transparent)}
+  .foot{margin-top:28px;padding-top:14px;border-top:1px solid var(--border);
+    color:var(--muted2);font-size:11px;line-height:1.7}
+
+  body[data-state="populated"] .s-empty,
+  body[data-state="populated"] .s-refused,
+  body[data-state="empty"] .s-populated,
+  body[data-state="empty"] .s-refused,
+  body[data-state="refused"] .s-populated,
+  body[data-state="refused"] .s-empty{display:none}
+</style>
+</head>
+<body data-state="populated">
+<div class="wrap">
+
+  <div class="top">
+    <div class="brand"><span class="dot">&#9670;</span> Exchange &middot; Registry</div>
+    <div class="who">topography console &middot; project-first &middot; <b>2 servers</b></div>
+  </div>
+
+  <div class="states" role="group" aria-label="Mockup state">
+    <button type="button" data-go="populated" aria-pressed="true">Populated</button>
+    <button type="button" data-go="empty">Empty (as it is today)</button>
+    <button type="button" data-go="refused">Refused</button>
+  </div>
+  <p class="mocknote">
+    MOCKUP &mdash; static, nothing wired. Container names, images and ports are
+    verbatim from fks-services 2026-09-27; <span class="synth">dotted</span>
+    values are illustrative, because no project has filed a claim on either box.
+  </p>
+
+  <!-- ============================================================ POPULATED -->
+  <section class="s-populated">
+    <h2>Sources</h2>
+    <div class="sources">
+      <div class="src"><span class="nm">fks-services</span><span>fvn_3b8c1b</span>
+        <span>ref fb09de8</span><span class="via ok">self &middot; live &middot; congruent</span></div>
+      <div class="src"><span class="nm">ksgcohub</span><span class="synth">ksg_9f21ac</span>
+        <span class="synth">ref fb09de8</span><span class="via synth">heartbeat &middot; 41s ago</span></div>
+    </div>
+
+    <h2>Projects &mdash; across both servers</h2>
+    <div class="rows">
+
+      <article class="row open">
+        <div class="rtop">
+          <span class="pname">keynox</span>
+          <span class="badge prod synth">production</span>
+          <span class="badge stale synth">stale</span>
+          <span class="badge bad">4 open diffs</span>
+          <span class="home">home fvn_3b8c1b &middot; fks-services</span>
+        </div>
+        <div class="vs">
+          <div class="col claimed">
+            <h4>Claimed</h4>
+            <dl>
+              <dt>owner</dt><dd class="synth">kyle</dd>
+              <dt>status</dt><dd class="synth">production</dd>
+              <dt>ports</dt><dd class="synth">10004, 10012</dd>
+              <dt>containers</dt><dd class="synth">17 named</dd>
+              <dt>claimed_at</dt><dd class="synth">2026-09-20T14:02:10</dd>
+              <dt>ack ref</dt><dd class="gap synth">eca638c</dd>
+            </dl>
+          </div>
+          <div class="col observed">
+            <h4>Observed</h4>
+            <dl>
+              <dt>containers</dt><dd>17</dd>
+              <dt>via</dt><dd class="gap">name, compose &mdash; 0 by label</dd>
+              <dt>ports</dt><dd class="gap">10004, 10012, 10016, &hellip;</dd>
+              <dt>images</dt><dd>surrealdb/surrealdb:latest, n8nio/n8n:latest, supabase/studio:latest</dd>
+              <dt>state</dt><dd class="gap">1 unhealthy (keynox-16-studio-1)</dd>
+              <dt>master</dt><dd class="gap">fb09de8 &mdash; not what it acked</dd>
+            </dl>
+          </div>
+        </div>
+
+        <div class="diffs">
+          <div class="diff">
+            <div class="head">
+              <span class="did">diff 41</span>
+              <strong>Label</strong>
+              <span class="disp undecided">undecided</span>
+            </div>
+            <div class="cm">
+              <div><span class="c">claimed &nbsp;</span> com.ksg.project=keynox on every container</div>
+              <div><span class="m">machine &nbsp;</span> 17 container(s) match by name or compose project, 0 carry the label</div>
+            </div>
+            <p class="why">
+              Constitution VI: <code>docker ps --filter label=com.ksg.project=keynox</code>
+              is the isolation test, and it returns 0 of 17. The project is
+              invisible to every tool that asks the host what belongs to whom,
+              so backup, reclaim and delete all become a human reading names.
+            </p>
+            <div class="fix">add `labels: ["com.ksg.project=keynox"]` to each service, then `docker compose up -d`</div>
+          </div>
+
+          <div class="diff">
+            <div class="head">
+              <span class="did">diff 42</span>
+              <strong>Ports</strong>
+              <span class="disp accept">accept</span>
+            </div>
+            <div class="cm">
+              <div><span class="c">claimed &nbsp;</span> ports 10004, 10012</div>
+              <div><span class="m">machine &nbsp;</span> also publishes 10016</div>
+            </div>
+            <p class="why">
+              A port bound but not claimed is invisible to admission: the band
+              arithmetic is computed from what is claimed, so the next project is
+              offered a lane already in use.
+            </p>
+            <p class="why">
+              Disposed <span class="synth">accept</span> &mdash; recorded, not
+              applied. The fix in the finding is still yours to run.
+            </p>
+          </div>
+
+          <div class="diff">
+            <div class="head">
+              <span class="did">diff 43</span>
+              <strong>Tenancy</strong>
+              <span class="disp hubwrong">hub-wrong</span>
+            </div>
+            <div class="cm">
+              <div><span class="c">claimed &nbsp;</span> containers: keynox-10-meilisearch-1</div>
+              <div><span class="m">machine &nbsp;</span> not present</div>
+            </div>
+            <p class="why">
+              It is present &mdash; the host groups it under
+              <code>unassigned</code> because nothing names it.
+              <code>hub-wrong</code> is the disposition that keeps verification
+              an exchange rather than an interrogation, and the hub has been
+              wrong in exactly this way before.
+            </p>
+          </div>
+        </div>
+      </article>
+
+      <article class="row unclaimed">
+        <div class="rtop">
+          <span class="pname">flarevault</span>
+          <span class="badge bad">never claimed</span>
+          <span class="home">observed on fks-services</span>
+        </div>
+        <div class="vs">
+          <div class="col claimed">
+            <h4>Claimed</h4>
+            <dl>
+              <dt>&mdash;</dt><dd class="none">nothing filed</dd>
+              <dt>ack ref</dt><dd class="bad">has never acknowledged anything</dd>
+            </dl>
+          </div>
+          <div class="col observed">
+            <h4>Observed</h4>
+            <dl>
+              <dt>containers</dt><dd>flarevault-node, flarevault-monitor</dd>
+              <dt>via</dt><dd class="bad">nothing &mdash; grouped "unassigned"</dd>
+              <dt>ports</dt><dd>7777</dd>
+              <dt>images</dt><dd>flarevault-node:0.2.0, flarevault-monitor:0.1.0</dd>
+              <dt>uptime</dt><dd>Up 2 months</dd>
+            </dl>
+          </div>
+        </div>
+        <div class="diff" style="margin-top:11px">
+          <div class="head"><span class="did">not a diff</span><strong>Not in the registry</strong></div>
+          <p class="why">
+            Two containers have been running for two months that no claim
+            mentions and no label names. A container nothing names cannot be
+            backed up, moved or safely deleted &mdash; and a bulletin addressed
+            to <code>flarevault</code> would be refused, because
+            <code>read_bulletin</code> will not record a reader the registry does
+            not know.
+          </p>
+          <div class="fix">POST /api/registry/flarevault</div>
+        </div>
+      </article>
+
+      <article class="row clean">
+        <div class="rtop">
+          <span class="pname synth">babyhelp</span>
+          <span class="badge synth">dev</span>
+          <span class="badge ok">reconciled</span>
+          <span class="home synth">home ksg_9f21ac &middot; ksgcohub</span>
+        </div>
+        <div class="vs">
+          <div class="col claimed">
+            <h4>Claimed</h4>
+            <dl>
+              <dt>owner</dt><dd class="synth">kyle</dd>
+              <dt>status</dt><dd class="synth">dev</dd>
+              <dt>ports</dt><dd class="synth">7241</dd>
+              <dt>data</dt><dd class="synth">/srv/data/babyhelp</dd>
+              <dt>ack ref</dt><dd class="synth">fb09de8 &mdash; current</dd>
+            </dl>
+          </div>
+          <div class="col observed">
+            <h4>Observed</h4>
+            <dl>
+              <dt>containers</dt><dd class="synth">babyhelp-api, babyhelp-db</dd>
+              <dt>via</dt><dd class="synth">label</dd>
+              <dt>ports</dt><dd class="synth">7241</dd>
+              <dt>data</dt><dd class="synth">/srv/data/babyhelp</dd>
+              <dt>verified</dt><dd class="synth">2026-09-26T18:40:02</dd>
+            </dl>
+          </div>
+        </div>
+        <p class="why" style="margin-top:9px;font-size:12px;color:var(--muted)">
+          <strong>Reconciled</strong> means every difference has a disposition,
+          not that every difference was fixed. Two of these were accepted.
+        </p>
+      </article>
+
+    </div>
+  </section>
+
+  <!-- ================================================================ EMPTY -->
+  <section class="s-empty">
+    <h2>Sources</h2>
+    <div class="sources">
+      <div class="src"><span class="nm">fks-services</span><span>fvn_3b8c1b</span>
+        <span>ref fb09de8</span><span class="via ok">self &middot; live</span></div>
+      <div class="src"><span class="nm">ksgcohub</span><span>&mdash;</span>
+        <span>ref &mdash;</span><span class="via no">not reachable from this console</span></div>
+    </div>
+
+    <div class="msg bad" style="margin-top:16px">
+      <h3>No project has ever filed a claim</h3>
+      <p>
+        <code>GET /api/registry</code> on fks-services, 2026-09-27:
+        <code>{"master": "fb09de8", "projects": [], "stale_count": 0}</code>.
+      </p>
+      <p>
+        <code>stale_count: 0</code> is the trap. It is zero because there is
+        nobody to be stale, not because everybody is current. This screen must
+        never print that number without the row count beside it.
+      </p>
+    </div>
+
+    <h2>What the machine is running anyway</h2>
+    <div class="msg warn">
+      <h3>16 groups observed, 0 claimed</h3>
+      <p>
+        <code>GET /api/node</code> groups the running containers by three
+        channels &mdash; label, name, compose project &mdash; and every group
+        comes back <code>claimed: false</code>:
+      </p>
+      <ul>
+        <li>adminer, dozzle, homepage, keynox (17 containers), mailpit, n8n,
+            netdata, npm, ntfy, portainer, redis, surrealdb, uptime-kuma,
+            watchtower, wikijs</li>
+        <li><strong>unassigned</strong> &mdash; keynox-10-meilisearch-1,
+            flarevault-node, flarevault-monitor: three containers that match
+            nothing at all</li>
+      </ul>
+      <p>
+        <code>attention.projects_without_ksg_label</code> names 15 of the 16.
+        The registry is empty and the machine is full. An empty registry screen
+        that did not say so would be the most misleading page in this system.
+      </p>
+      <p>
+        Filing one is <code>POST /api/registry/&lt;project&gt;</code>, then
+        <code>POST /api/ack/&lt;project&gt;</code> with
+        <code>{"ref": "fb09de8"}</code>.
+      </p>
+    </div>
+  </section>
+
+  <!-- ============================================================== REFUSED -->
+  <section class="s-refused">
+    <h2>Project not registered</h2>
+    <div class="msg bad">
+      <h3>404</h3>
+      <p>
+        <code>GET /api/registry/fksinv</code> on fks-services, 2026-09-27,
+        verbatim:<br>
+        <code>{"ok": false, "error": "not registered",
+        "how_to_register": "POST /api/registry/fksinv"}</code>
+      </p>
+      <p>
+        The refusal carries the way out of itself. Every refusal on this
+        surface does.
+      </p>
+    </div>
+
+    <h2 style="margin-top:22px">Verify could not read the machine</h2>
+    <div class="msg bad">
+      <h3>503 &mdash; and nothing was recorded</h3>
+      <p>
+        <code>POST /api/registry/keynox/verify</code> &rarr;
+        <code>docker_unreadable</code><br>
+        <code>docker ps did not answer; nothing was recorded and the previous
+        verification still stands</code>
+      </p>
+      <p>
+        This is the important refusal. Recording zero differences against a
+        machine that was never read would mark the project verified and clean
+        &mdash; an all-clear derived from nothing. A blind spot is not a pass.
+      </p>
+    </div>
+
+    <h2 style="margin-top:22px">Disposition refused</h2>
+    <div class="msg bad">
+      <h3>404 &mdash; that decision was not stored</h3>
+      <p>
+        <code>POST /api/registry/keynox/dispose {"diff_id": 41}</code> &rarr;
+        <code>no such diff for keynox</code><br>
+        <code>hint: GET /api/registry/keynox/diffs &mdash; ids change when a
+        verify replaces the findings</code>
+      </p>
+      <p>
+        A decision nobody stored must not read as a decision made. The
+        underlying UPDATE cannot tell a decision from a no-op, so the handler
+        checks first.
+      </p>
+      <p>
+        And the other one: <code>disposition must be
+        fix|accept|defer|hub-wrong</code>.
+      </p>
+    </div>
+  </section>
+
+  <div class="foot">
+    Nothing on this page is wired. Everything in the OBSERVED column is read
+    live on every request and is deliberately absent from the database; a stored
+    copy would be a second source of truth. Nothing here is ever corrected to
+    match anything else &mdash; verify reports, and never repairs.
+  </div>
+</div>
+
+<script>
+(function(){
+  'use strict';
+  var bs = document.querySelectorAll('.states button');
+  function go(s){
+    document.body.setAttribute('data-state', s);
+    for (var i=0;i<bs.length;i++){
+      bs[i].setAttribute('aria-pressed', bs[i].dataset.go === s ? 'true' : 'false');
+    }
+  }
+  for (var i=0;i<bs.length;i++){
+    bs[i].addEventListener('click', function(){ go(this.dataset.go); });
+  }
+})();
+</script>
+</body>
+</html>

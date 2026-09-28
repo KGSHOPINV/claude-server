@@ -71,7 +71,13 @@ def post_activity(handler, path, params, body):
     if not action:
         handler.send_json({'ok': False, 'error': 'action required'}, 400)
         return
+    # db_conn is the first positional arg of log_activity(db_conn_fn, action, ...).
+    # It was missing here, so every POST /api/activity raised TypeError before
+    # reaching send_json and the request got no response at all. Every other
+    # caller in the repo passes db_conn first (ai.py:184, federation.py:140,
+    # mesh.py:51/75).
     log_activity(
+        db_conn,
         action   = action,
         source   = body.get('source', 'user'),
         category = body.get('category', 'note'),

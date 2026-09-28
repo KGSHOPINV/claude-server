@@ -4,20 +4,31 @@
 
 ---
 
-## Current state (as of 2026-09-09)
+## Current state — ask, do not read
 
-### server.py — 3,119 lines
-- No kernel class. 5 scattered primitives: `db_conn`, `check_auth`, `gate_check`, `ssh_run`, `log_activity`
-- Route dispatch: flat if/elif chain. ~35 GET branches, ~25 POST branches
-- Auth is opt-in per route — not enforced globally
-- DB layer: ~60% extracted into helpers, ~40% inline SQL inside handlers
-- Modularity scores: Add API endpoint **2/10**, Add UI view **4/10**, Swap DB **2/10**
+Two blocks have stood in this spot giving line counts and per-file modularity
+scores. Both were false within days, for the same reason both times: **a line
+count written into a document is wrong the day after it is written.**
 
-### app.html — 6,518 lines (5,250 JS)
-- View system: `mountPaneContent()` is a ~300-line `switch(viewType)` block
-- Global state: `const S = {}` mutated directly everywhere
-- Adding a new view requires touching 4 separate places
-- What IS modular: workspace system, pane system, individual view loaders
+```bash
+wc -l hub/server.py hub/app.html      the two numbers this plan is about
+python3 hub/tools/atlas.py --parts    every module, classified by what it does
+curl -s <hub>/api/sitemap             the live route list, generated from the table
+```
+
+The **shape** is the durable part:
+
+- `hub/server.py` is a bootstrap. Not a monolith, and not "the entire backend".
+- Routes: one dispatch table in `hub/kernel/router.py`. No if/elif chain.
+- Handlers: `hub/handlers/`, one file per domain, importing `kernel/` only.
+- Shared machinery: `hub/kernel/`.
+- `hub/app.html` is still one file. That is the Phase 3 target, and the only
+  part of the original plan still outstanding.
+
+Auth caveat that survives both phases: gates are declared per route and
+evaluated at dispatch but **not applied** unless `HUB_ENFORCE_GATES` is set.
+`router.shadow_report()` records what it *would* have refused — and no route
+exposes it, so the diagnostic is unreachable over HTTP.
 
 ---
 
@@ -146,30 +157,44 @@ Migrate one domain at a time, ship each separately:
 
 ## What the registry covers
 
-The registry (`knowledge/registry.json`) is NOT just the hub kernel.
-It covers everything:
-- **servers** — UUID as primary key (survives hostname/IP change)
-- **files** — every significant file, its purpose, phase, and refactor status
-- **services** — all Docker containers on all servers, desired vs actual state
+`knowledge/registry.json` was the hand-written manifest this plan assumed. It is
+now a SUPERSEDED stamp: it described the 3,119-line monolith and was read by no
+code. The machine-derived replacements are:
 
-The kernel reads and writes the registry. FV is the authority that keeps it current.
+- **what this node is** — `GET /api/receipt` (the BOM; `hub/CONSTITUTION.md` §4)
+- **what code exists** — `python hub/tools/registry_gen.py`, which scans
+  `hub/server.py`, `hub/kernel/*.py`, `hub/handlers/*.py` for telescope codes and
+  writes `knowledge/registry-live.json`. Regenerate it; never hand-edit it.
+- **servers and UUIDs** — `knowledge/servers.json`
+- **why things are shaped this way** — `knowledge/decisions.sql`
 
----
-
-## Phase 2 as actually built
-
-The plan assumed handlers would be self-contained once split. They were not:
-`status.py` imported server.py back 19 times, `identity.py` twice, `ai.py` once —
-22 lazy `import server as _srv` calls into 22 module-level helpers, making
-server.py a dependency of its own handlers.
-
-Fixed by adding `kernel/collect.py` (not in the original plan): the 1,888-line
-collector region moved out of server.py. Handlers now import `kernel.collect`.
-server.py went 2,890 -> 122 lines.
-
-Verified against production on fks-services: 41 GET routes status-identical,
-14 endpoints byte-identical against a copy of the live DB.
+Migration rule 4 above ("registry.json updates with every structural change")
+therefore means: **re-run `registry_gen.py`**, not "edit a JSON file by hand".
 
 ---
 
-*Last updated: 2026-09-10*
+## Phase 2 as actually built — 2026-09-10
+
+**The lesson, which is why this section exists:** the plan assumed handlers
+would be self-contained once split. They were not. Handlers imported
+`server.py` back, through lazy `import server as _srv` calls, making
+`server.py` a dependency of its own handlers — so the graph was
+`server -> router -> handlers -> server`, a cycle, and **the split was
+cosmetic**: nothing could be moved or deleted independently.
+
+Fixed by adding `kernel/collect.py`, which was not in the original plan: the
+collector region moved out of `server.py` and handlers import `kernel.collect`.
+`server.py` collapsed to a bootstrap at that commit.
+
+**Verified against production before merging** — GET routes status-identical,
+and a set of endpoints byte-identical against a *copy* of the live DB. A
+refactor that was not diffed against the running thing is a belief.
+
+---
+
+*Phases 0-2 are history and are dated by their commits. Phases 3 and 4 are
+intent. Nothing on this page is a status board -- `python3 hub/tools/step.py`
+and `python3 hub/tools/tracks.py` are.*
+
+*Current-state and registry sections corrected 2026-09-23; drained of counts
+2026-09-27.*

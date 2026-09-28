@@ -3,8 +3,9 @@
 **The gain:** one address, one login, any server, on desktop or phone — and it
 can tell you when something happens.
 
-Status as of 2026-09-21. Verified facts, not aspirations. Anything not built is
-marked as such.
+**This is a blueprint: why FlareSHub is shaped the way it is.** It carries no
+counts, no status marks and no hostnames. Every question of fact is answered by
+a command — see §6, and `docs/flareshub-doctrine.md` §0 for the full table.
 
 ---
 
@@ -24,10 +25,14 @@ node — the same build talks to whichever node.
 having a live domain name. Not "installed, now go configure Cloudflare."
 `install → hostname → reachable` is one operation from the user's point of view.
 
-**Where the current build fails this:** `enroll.sh` takes `--zone` on every run
-(violates one-entry) and is a separate step from `bootstrap.sh` (violates
-installer-finishes). Target: one flow, zone from fleet config, node name derived
-from machine-id/hostname.
+**How a build fails these**, so the failure is recognisable rather than
+argued: the enrolment step asking for the zone on every run violates one-entry;
+enrolment being a separate step a human must remember violates
+installer-finishes; a UI built per node violates bilateral. Target: one flow,
+zone from fleet config, node name derived from machine-id.
+
+Whether today's build clears all three is a question for
+`bash bootstrap.sh --check` and `python3 hub/tools/step.py`, not for this page.
 
 ---
 
@@ -54,26 +59,143 @@ tunnels point to."* The node never holds a key and never creates a hostname.
   bootstrap.sh              hub running on :8765, admin seeded
        │
        ▼
-  enroll.sh --node X --zone Z
-       │  reads /etc/machine-id            → the stable key
+  enroll.sh --zone Z
+       │  reads /etc/machine-id            → the stable key, AND the node's name
        │  verifies CF token                → refuses if invalid
        │  refuses if hub not answering     → never publish a dead endpoint
        ├─ create/reuse tunnel  (idempotent)
-       ├─ DNS  hub-X.Z → <tunnel>.cfargotunnel.com
+       ├─ DNS  <derived name>.Z → <tunnel>.cfargotunnel.com
        ├─ Access app on that hostname      → nothing public without a gate
+       ├─ attach the policy                → a warning is not a step
        ├─ cloudflared as a HOST service    → survives Docker dying
        └─ ~/.flare/node.json               → facts only, no credentials
        │
        ▼
-  node is addressable at https://hub-X.Z and describes itself at /api/node
+  node is addressable by that name and describes itself at /api/node
 ```
+
+The name is **derived, never supplied.** A label a human types is a label a
+human gets wrong, and the wrong one becomes permanent DNS.
 
 The API token is used during the run and discarded. The only persisted
 credential is cloudflared's, scoped to that one tunnel.
 
-**Changing domain = changing `--zone`.** Adding a server = the same command with
-a different `--node`. That is the whole turnkey property, and it holds only
-because no hostname is hardcoded anywhere.
+**Changing domain = changing the zone, once, fleet-wide.** Adding a server is
+the same command on a different box. That is the whole turnkey property, and it
+holds only because no hostname is hardcoded anywhere — including in this file.
+
+---
+
+## 2b. What a node must be true about itself
+
+Enrolment publishes a hostname. It should not publish a machine that cannot
+hold what gets put on it — so the same run that creates DNS has to settle the
+storage question first.
+
+This section exists because it was missing. **Recorded 2026-09-22, as the
+evidence for the rule and not as a current reading** — a node had run for weeks
+with tens of gigabytes of reclaimable Docker build cache on a nearly full OS
+disk, a second disk of several hundred gigabytes sitting 99% empty, no backups
+of any kind, and a hub reporting the root filesystem's size as the machine's
+total disk.
+
+None of that was broken code. `MASTER.md` listed *"7. Backup — set up before
+adding data"* as a step; the installer implemented no storage or backup step at
+all. The intention was recorded and never executed, and nothing compared the
+two.
+
+For today's reading: `python3 hub/tools/storage-preflight.py` and
+`python3 hub/tools/install-preflight.py`.
+
+### Storage is derived, never assumed
+
+`kernel/storage.py` (module `20200013`) reads the machine:
+
+| | |
+|---|---|
+| `mounts()` | real filesystems only — squashfs/tmpfs/overlay excluded, or the largest "mount" is a read-only snap image |
+| `docker_storage()` | images **and** build cache, which live in different places: 40GB hid in `/var/lib/containerd` while `/var/lib/docker` showed 1.6GB |
+| `data_root()` | largest non-OS mount ≥50GB, else the OS disk labelled honestly as the fallback |
+| `findings()` | each carries the command that fixes it — and never runs it |
+
+Read-only by design. An installer that silently repartitions a server is a
+worse outcome than a full disk.
+
+### Storage profile — hardware decides, not convention
+
+| Drives | Data | Backups |
+|--------|------|---------|
+| 1 | `/srv/docker` | same disk, flagged: *a backup on the same disk is not a backup* |
+| 2 | the large one | **must be a different physical device** |
+| 3+ | largest non-OS | second-largest non-OS |
+
+Convention is exactly what failed here: fks-services uses `/mnt/storage`,
+ksgcohub uses `/srv/data`, the docs say `/srv/backups`. Three names for one
+idea, and no single constant is correct on both machines.
+
+### Three data classes, one location
+
+A project gets one directory so isolation holds — `rm -rf` takes everything and
+disturbs nothing else, which is the acceptance test `/api/admit` already
+publishes. Inside it, three classes, because value differs:
+
+```
+/srv/data/<project>/
+  db/       small · changes constantly · irreplaceable   → nightly, keep 30
+  media/    large · write-once-read-many                 → weekly,  keep 4
+  cache/    disposable · regenerable                     → never backed up
+```
+
+The evidence for classifying rather than lumping, from ksgcohub's volumes:
+
+```
+netdata_netdata-cache   1.606GB    worth backing up: zero
+babyhelp-data           1.024MB    irreplaceable
+```
+
+A naive "back up every volume" job copies 1.6GB of cache nightly and 1MB of the
+thing you would actually mourn.
+
+**No shared media pool.** It breaks the acceptance test, it makes orphans
+nobody owns, and the contract already answers it: *cross-project data moves
+over HTTP.* Media is not an exception. If two projects need one asset, one owns
+it and serves it.
+
+### Why this belongs to the mesh, not beside it
+
+Storage is not a side quest. `attention.storage` rides in `/api/node`, which is
+the payload every node heartbeats to central and the payload FlareSHub
+aggregates. So the same one address that shows you which nodes are up shows you
+which nodes are quietly filling their disks — **fleet-wide, without visiting
+one of them.**
+
+That is the point of one entry for many: the node reports what is true about
+itself, and the entry point makes N nodes answerable in one look. A disk
+silently filling on server seven is exactly the class of thing that is
+invisible until you have one place to see it from.
+
+### One receipt, four depths
+
+Several endpoints answer *"what is true about this machine"* — `/api/status`,
+`/api/storage`, `/api/receipt`, `/api/context`, `/api/node`, `/api/admit` and
+more — in as many shapes, across two modules, overlapping, with no shared
+source. Same disease as `VIEW_DEFS` vs the render switch, larger organ.
+`python3 hub/tools/atlas.py` counts the overlapping shapes; do not count them
+here.
+
+Target: one builder, four projections.
+
+```
+GET /api/receipt                  the machine: disks, ports, containers, health
+GET /api/receipt?for=project      + your band, your data paths, the contract
+GET /api/receipt?for=fleet        + identity, mode, peers
+GET /api/receipt?for=authority    + what FlareVault needs to provision
+```
+
+A project asks one URL and is told where to bind, where data goes, where media
+goes, and how to prove it complied. That is what should have happened with
+babyhelp, which was built by someone who knew nothing about this server and had
+no way to ask.
 
 ---
 
@@ -81,20 +203,25 @@ because no hostname is hardcoded anywhere.
 
 ```
 phone / desktop
-   │  https://flareshub.<zone>          ONE address. PWA installs from here.
+   │  the apex, path-scoped        ONE address. PWA installs from here.
    ▼
 Cloudflare Access ── Google ──► one login covers every node in the same Access org
    │
    ▼
-FlareSHub  ─── service tokens ───┬──► https://hub-fks.<zone>   → fks-services :8765
-   aggregates /api/node          └──► https://hub-ksgco.<zone> → ksgcohub    :8765
+FlareSHub  ─── service tokens ───┬──► a node's derived hostname → that node's hub
+   aggregates /api/node          └──► another node's derived hostname → its hub
    from every node
 ```
 
-**Node hostnames are never typed by a human.** Their Access policies should be
-service-token only, so a person browsing to one is refused outright and only
-FlareSHub can reach them. Add a tenth server and the human-facing surface does
-not grow.
+**Node hostnames are never typed by a human**, and none is written on this page.
+A node's name is derived from its `machine_id` by `enroll.sh` — because a name a
+human types is a name a human gets wrong, and one such typo became permanent DNS
+pointing at a tunnel nothing runs. Print the live names with
+`python3 hub/tools/situation.py` or `python3 hub/tools/cf-check.py`.
+
+Their Access policies are service-token only, so a person browsing to one is
+refused outright and only FlareSHub can reach them. Add a tenth server and the
+human-facing surface does not grow.
 
 **Why server-side aggregation and not browser-side:** one origin means no CORS,
 one Access session, one service worker, one push subscription. The extra hop
@@ -118,29 +245,28 @@ Access grants a user-level session. Gate 2/3 routes — vault, shell, TOTP —
 still demand the stronger proof regardless of which door you came through.
 Google gets you in the building, not into the safe.
 
-Built, off by default: `HUB_CF_TRUST_IP` arms it. The Access header is trusted
-**only** from the tunnel's address, because anything on the tailnet can forge a
-header. The trust is the path, not the header.
+`HUB_CF_TRUST_IP` names which source address may assert the Access header. The
+header is trusted **only** from the tunnel's address, because anything on the
+tailnet can forge a header. **The trust is the path, not the header.**
+
+Note the shape of the trap: the allowlist is tested as `if CF_EMAILS and ...`,
+so an *empty* list admits any address Access approved. Absent is not off. Which
+nodes set which of these is `python3 hub/tools/matrix.py`, sequence A.
 
 ---
 
 ## 5. Notifications
 
-**What exists:** ntfy, working, with real mobile apps. It fires on container
-start/die only.
+**The principle: emit before you transport.** Which events are emitted, and
+whether the push path delivers them, are two separate claims and must be checked
+separately — *built and delivering nothing is not the same as built.*
 
-**What does not:** the hub records **no logins at all** — successful or failed.
-`post_auth_login` never calls `log_activity`. So the interesting events are not
-being emitted, which matters more than the transport.
-
-**The PWA today is a shell.** `manifest.json` is real and the install prompt
-works. `sw.js` is one line:
-
-```js
-self.addEventListener('fetch', () => {});
+```bash
+python3 hub/tools/matrix.py       sequence A rows 6 and 7
+curl -s <hub>/api/events/self     the notification unit's own self-check
 ```
 
-No caching, no offline, **no push handler.**
+`hub/NOTIFY.md` holds the design of the events stream and its known limits.
 
 **Order that respects reality:**
 
@@ -155,63 +281,44 @@ polish step, not the win. The win is step 1.
 
 ---
 
-## 6. Where it stands
+## 6. Where it stands — not written here
 
-**Built and deployed**
+This section used to be a two-page status inventory: built, built-not-deployed,
+built-never-executed, not built, known wrong. Every category rotted at a
+different speed and several rows were false within days of being written — rows
+marked "never executed against the live API" that had since been proven against
+the edge, and rows marked broken that had been fixed.
 
-- Hub refactored: `server.py` 2,890 → 122 lines, 11 handlers, 7 kernel modules, 68 routes
-- Both nodes ran identical code and verified 41/41 routes
-- `/api/node` — live on ksgcohub. machine-id, reachability, projects grouped by
-  label, and an `attention` block listing what is wrong with the node
-- `machine_id` on `/api/identity` — peers can key on identity instead of address
-- Two-door auth — written, trust boundary tested, off by default
-- Phase 3 UI — `/ui/` static route, `registry.js`, 2 of 19 views migrated
+A design document does not get to hold a status board. Ask:
 
-**Built, never executed**
+```bash
+python3 hub/tools/atlas.py        which planes exist, and which were typed rather than installed
+python3 hub/tools/step.py         which step of the build order we are on
+python3 hub/tools/matrix.py       all five checklists, asserted against the machines
+python3 hub/tools/situation.py    what is serving, what is exposed, what could not be seen
+python3 hub/tools/tracks.py       which track is next, and what gates it
+bash bootstrap.sh --check         is this node at the installer's standard
+```
 
-- `enroll.sh` — untested against the live Cloudflare API, because the token in
-  fksinv's `.env` is revoked. `--dry-run` verifies token, zone and account and
-  stops before mutating.
-
-**Not built**
-
-- FlareSHub itself — the aggregating entry point
-- Service tokens, and service-token-only policies on node hostnames
-- Login events → activity log → ntfy
-- Real service worker; Web Push
-- Phase 3 — 17 views remaining
-- Session persistence — sessions are an in-memory dict, so every restart logs
-  everyone out
-
-**Known wrong**
-
-- `_users_list()` returns `[]` on any exception, so `/api/users` lies
-- Gate enforcement off: 52 of 66 routes gated in the table, `app.html` sends a
-  token on 16 calls. Arming it locks the UI out
-- 12 projects on ksgcohub carry no `com.ksg.project` label
-- fks-services has an unlabelled Meilisearch on port 7700 that nobody can identify
-- The sudo password is in public git history and needs rotating
+Each of those ends by naming **what it could not see**. A clean report with a
+hole in it is more dangerous than a failure, because nobody investigates a pass.
 
 ---
 
-## 7. Build order
+## 7. Build order — delegated, not restated
 
-| # | Step | Owner | Blocked by |
-|---|------|-------|-----------|
-| 1 | Valid scoped CF token at `~/.cf-token` | you | — |
-| 2 | `enroll.sh --dry-run` on ksgcohub, then real | me | 1 |
-| 3 | Same on fks-services | me | 1, box back online |
-| 4 | Service tokens; node policies to token-only | you + me | 2, 3 |
-| 5 | FlareSHub: poll every `/api/node`, one page | me | 4 |
-| 6 | Login/deploy/drift events → activity log → ntfy | me | — |
-| 7 | Real service worker, offline shell | me | 5 |
-| 8 | Web Push | me | 7 |
-| 9 | Phase 3 — remaining 17 views | me | — |
+The ordering *rules* are doctrine and are stated where they belong:
 
-6 and 9 need nothing and can run in parallel with everything else.
-
----
-
+- **`hub/tools/tracks.py` enforces the order**: unison, then mockups, then UI.
+  Mockups before any build.
+- **`hub/tools/step.py` names the current step.** It is the authority on this,
+  not a table in a document.
+- Work that needs nothing from anyone runs in parallel with everything else;
+  work that needs a credential or a decision from the operator is an operator
+  decision, not a task, and `atlas.py` lists those separately.
+- **The storage track is additive and disrupts nothing.** Anything that would
+  recreate a container or restart every container is parked, by choice, and
+  stays parked until it is the cheapest remaining move.
 ## 8. The standing rule
 
 Every failure found in the week of 2026-09-10 was a **record disagreeing with
@@ -220,7 +327,18 @@ imports failed, a service unit pointing at a deleted file, docs describing an
 already-split monolith, a memory declaring a live server dead, a compose
 fallback to a domain that does not exist.
 
-So: **derive, do not maintain.** `/api/node` reads the machine every call and
+The week of 2026-09-22 added a second rule, learned the same way. `MASTER.md`
+listed *"7. Backup — set up before adding data"*; `bootstrap.sh` never
+implemented it, and nobody noticed for months. A checklist item cannot fail,
+because nothing executes it.
+
+So: **assert, do not describe.** `tools/check-views.py` and
+`tools/install-preflight.py` exist because they can *fail*. Every other page in
+this repo, including this one, is prose that can quietly stop being true — and
+the only defence is keeping the number of such pages small and the number of
+executable assertions growing.
+
+And: **derive, do not maintain.** `/api/node` reads the machine every call and
 holds no opinion about what should be there. Intent lives with the authority;
 the node reports only what is. When those two disagree, that is drift — and
 drift you can see is the entire point.

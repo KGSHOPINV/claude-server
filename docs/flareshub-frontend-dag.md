@@ -2,7 +2,21 @@
 
 How one app reaches any server, on any device, without a monolith.
 
-Companion to `flareshub-blueprint.md`. Diagrams render on GitHub.
+Companion to `flareshub-blueprint.md` and `flareshub-doctrine.md`. Diagrams
+render on GitHub.
+
+> **No status marks here.** This page previously carried a "where this actually
+> is" table. It claimed the FlareSHub shell and the fleet page were *not built*
+> while both were live and load-bearing, and it named two hostnames that are not
+> ours — one of them `hub-ksgco`, the typo that became permanent DNS pointing at
+> a tunnel nothing runs. Ask instead:
+>
+> ```bash
+> python3 hub/tools/atlas.py        # which planes exist, and which were typed
+> python3 hub/tools/check-views.py  # registry and renderer, both directions
+> python3 hub/tools/situation.py    # what is serving and what is exposed
+> curl -s <hub>/api/sitemap         # the route table, generated from itself
+> ```
 
 ---
 
@@ -12,40 +26,54 @@ Companion to `flareshub-blueprint.md`. Diagrams render on GitHub.
 flowchart TD
     M[Phone · PWA installed] --> E
     D[Desktop · browser or PWA] --> E
-    E["flareshub.&lt;zone&gt;<br/>ONE address"] --> A{Cloudflare Access}
+    E["the apex, path-scoped<br/>ONE address"] --> A{Cloudflare Access}
     A -->|Google SSO| S
     A -->|denied| X[refused at the edge]
     S["FlareSHub shell<br/>served by whichever connector is healthy"] --> F[Fleet page<br/>every node, live status]
-    F --> N1["hub-ksgco.&lt;zone&gt;"]
-    F --> N2["hub-fks.&lt;zone&gt;"]
+    F --> N1["a node's derived hostname"]
+    F --> N2["another node's derived hostname"]
     N1 --> API1["/api/node"]
     N2 --> API2["/api/node"]
 ```
 
 **One address, not one machine.** The same tunnel runs a connector on every
 node, so Cloudflare serves the app from whichever is healthy. Lose a server and
-the entry point survives — which is exactly what did not happen when
-fks-services went down.
+the entry point survives — which is exactly what did not happen when a node went
+down.
 
 **Mobile and desktop enter identically.** No separate mobile URL, no separate
 app. The device changes the layout, never the entry.
 
+**No hostname is written on this page, deliberately.** A node's hostname is
+derived from its `machine_id`, never typed — *"a name a human types is a name a
+human gets wrong."* Print the real ones:
+
+```bash
+python3 hub/tools/situation.py
+python3 hub/tools/cf-check.py     # the zone's records, read-only
+```
+
+Names that are **not ours** and must never be altered or tidied:
+`dashboard.flarevault.dev` and the apex landing page, which belong to
+FlareVault; anything under another project's zone.
+
 ---
 
-## 2. Why the current frontend is a monolith
+## 2. Why the first frontend was a monolith
 
-```
-app.html      6,518 lines   ← desktop, one file, 5,234 lines of inline JS
-mobile.html     771 lines   ← a SECOND frontend, separately maintained
-```
-
-Two codebases for one product. A fix applied to one silently misses the other.
-That is the duplication to delete, not tidy.
+Two frontends, separately maintained, for one product: a large single-file
+desktop app and a second, smaller mobile file sharing none of its CSS, registry
+or JS. A fix applied to one silently missed the other. That is the duplication
+to delete, not tidy.
 
 Changing one view used to mean editing four places — `VIEW_DEFS`, the
 `mountPaneContent` switch, `openView`, `buildCmdIndex` — and they had already
-drifted: `survey` has a render case and no metadata entry, `_browser_old` is
-dead code nothing routes to.
+drifted: a view with a render case and no metadata entry, and dead code nothing
+routed to. `hub/tools/check-views.py` exists to fail on exactly that, in both
+directions.
+
+Line counts are not recorded here. `wc -l hub/app.html hub/mobile.html` if you
+need them; they were wrong in this file twice.
 
 ---
 
@@ -67,7 +95,8 @@ flowchart TD
 ```
 
 **Adding a view = one file + one registry entry.** `app.html` is never touched
-again — the loader injects the script tag. That rule is already enforced.
+again — the loader injects the script tag. That rule is enforced by
+`check-views.py`, not by anyone remembering it.
 
 **Each view is independently reversible.** `mount: null` and it renders from the
 legacy switch exactly as before. Which is why the switch stays until every view
@@ -80,16 +109,16 @@ has moved, and not one commit longer.
 ```mermaid
 flowchart LR
     REG["registry entry<br/>{icon, title, mount, file}"] --> Q{viewport}
-    Q -->|">= 900px"| DV["mount(...)<br/>full pane"]
-    Q -->|"< 900px"| MV["mountMobile(...) if defined<br/>else mount(...) responsive"]
+    Q -->|"wide"| DV["mount(...)<br/>full pane"]
+    Q -->|"narrow"| MV["mountMobile(...) if defined<br/>else mount(...) responsive"]
 ```
 
 A view declares one mount. If it genuinely needs a different shape on a phone —
 a table becoming cards — it declares `mountMobile` **in the same file**. Layout
 differences live beside the view they belong to, never in a parallel frontend.
 
-That is what kills `mobile.html`: nothing is duplicated, so there is nothing to
-keep in sync.
+That is what kills the second frontend: nothing is duplicated, so there is
+nothing to keep in sync.
 
 ---
 
@@ -99,8 +128,7 @@ keep in sync.
 2. **One file per view** in `ui/views/`, named for its registry key.
 3. **The registry is the only registration point.** Not four places. One.
 4. **Views never call `fetch` directly** — they go through `ui/data.js`, so auth
-   headers and 401 handling exist once. (fksinv has this right already:
-   `lib/services.js` injects the session header; its dashboard uses it.)
+   headers and 401 handling exist once.
 5. **Views never import each other.** Same rule that fixed the backend, where
    handlers importing `server.py` back made the split cosmetic.
 6. **No second frontend.** Device differences are layout, declared in the view.
@@ -110,49 +138,35 @@ something else does, it was not modular.
 
 ---
 
-## 6. Where this actually is
-
-| | |
-|---|---|
-| `/ui/` static route, traversal-guarded | ✅ built |
-| `ui/registry.js` — 19 views, loader | ✅ built |
-| Flip switch in `mountPaneContent` | ✅ built |
-| Views migrated | **2 of 19** (`issues`, `browser`) |
-| `ui/data.js` fetch layer | ❌ not built |
-| Mobile resolution in registry | ❌ not built |
-| `mobile.html` retired | ❌ still a second frontend |
-| FlareSHub shell + fleet page | ❌ not built |
-
-Verified live on ksgcohub: registry loads, 19 views, 2 with mounts, 17 falling
-through to the legacy switch, no console errors.
-
----
-
-## 7. Order
+## 6. Order, and why it is this order
 
 ```mermaid
 flowchart LR
-    A["ui/data.js<br/>fetch layer"] --> B[migrate remaining 17 views]
+    A["ui/data.js<br/>fetch layer"] --> B[migrate the remaining views]
     B --> C[mobile resolution<br/>in registry]
-    C --> D[delete mobile.html]
-    B --> E[delete legacy switch]
+    C --> D[delete the second frontend]
+    B --> E[delete the legacy switch]
     A --> F[FlareSHub shell<br/>+ fleet page]
     F --> G[service worker<br/>+ Web Push]
 ```
 
 `ui/data.js` comes first because every migrated view should be written against
-it rather than retrofitted. `mobile.html` cannot be deleted until mobile
-resolution exists, and the legacy switch cannot go until all 17 views have
-moved — both are load-bearing until then.
+it rather than retrofitted. The second frontend cannot be deleted until mobile
+resolution exists, and the legacy switch cannot go until every view has moved —
+both are load-bearing until then.
+
+Which of these has landed is not written here. `python3 hub/tools/tracks.py`
+enforces the order and names what is next; `python3 hub/tools/step.py` names the
+current step.
 
 ---
 
-## 8. Why this shape
+## 7. Why this shape
 
-The backend went through exactly this. `server.py` was 2,890 lines and the
-handler split was cosmetic until the dependency cycle was broken — handlers were
-importing `server.py` back 22 times, so nothing could actually be moved or
-deleted independently. Once the flow went one way, `server.py` fell to 122 lines.
+The backend went through exactly this. The handler split was cosmetic until the
+dependency cycle was broken — handlers were importing `server.py` back, so
+nothing could actually be moved or deleted independently. Once the flow went one
+way, `server.py` collapsed to a bootstrap.
 
 The frontend is at the same stage the backend was: files created, structure
 announced, dependencies still tangled. Rules 4 and 5 are what stop it landing in
