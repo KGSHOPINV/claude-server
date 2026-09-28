@@ -4,26 +4,31 @@
 
 ---
 
-## Current state (as of 2026-09-23)
+## Current state — ask, do not read
 
-> The 2026-09-09 block that stood here described `server.py` as a 3,119-line
-> monolith and listed per-file modularity scores. Phases 1 and 2 shipped; every
-> number in it was false. It is replaced by pointers, because a line count
-> written into a document is wrong the day after it is written.
+Two blocks have stood in this spot giving line counts and per-file modularity
+scores. Both were false within days, for the same reason both times: **a line
+count written into a document is wrong the day after it is written.**
 
-- `hub/server.py` — **152 lines**, bootstrap only. Not a monolith. Count it:
-  `wc -l hub/server.py`.
+```bash
+wc -l hub/server.py hub/app.html      the two numbers this plan is about
+python3 hub/tools/atlas.py --parts    every module, classified by what it does
+curl -s <hub>/api/sitemap             the live route list, generated from the table
+```
+
+The **shape** is the durable part:
+
+- `hub/server.py` is a bootstrap. Not a monolith, and not "the entire backend".
 - Routes: one dispatch table in `hub/kernel/router.py`. No if/elif chain.
-  Live route list is `GET /api/sitemap` — self-documenting, never hand-maintained.
 - Handlers: `hub/handlers/`, one file per domain, importing `kernel/` only.
-- Shared machinery: `hub/kernel/` (`db`, `auth`, `ssh`, `log`, `router`,
-  `collect`, `fleet`, `heartbeat`, `identity`, `storage`).
-- `hub/app.html` — still one file, **6,176 lines**. This is the Phase 3 target
-  and the only part of the original plan still outstanding.
+- Shared machinery: `hub/kernel/`.
+- `hub/app.html` is still one file. That is the Phase 3 target, and the only
+  part of the original plan still outstanding.
 
-Auth caveat that survives both phases: gates are declared per route in the
-table and evaluated at dispatch but **not enforced** unless `HUB_ENFORCE_GATES=1`.
-`router.shadow_report()` shows what would break first. See `AGENTS.md`.
+Auth caveat that survives both phases: gates are declared per route and
+evaluated at dispatch but **not applied** unless `HUB_ENFORCE_GATES` is set.
+`router.shadow_report()` records what it *would* have refused — and no route
+exposes it, so the diagnostic is unreachable over HTTP.
 
 ---
 
@@ -168,20 +173,28 @@ therefore means: **re-run `registry_gen.py`**, not "edit a JSON file by hand".
 
 ---
 
-## Phase 2 as actually built
+## Phase 2 as actually built — 2026-09-10
 
-The plan assumed handlers would be self-contained once split. They were not:
-`status.py` imported server.py back 19 times, `identity.py` twice, `ai.py` once —
-22 lazy `import server as _srv` calls into 22 module-level helpers, making
-server.py a dependency of its own handlers.
+**The lesson, which is why this section exists:** the plan assumed handlers
+would be self-contained once split. They were not. Handlers imported
+`server.py` back, through lazy `import server as _srv` calls, making
+`server.py` a dependency of its own handlers — so the graph was
+`server -> router -> handlers -> server`, a cycle, and **the split was
+cosmetic**: nothing could be moved or deleted independently.
 
-Fixed by adding `kernel/collect.py` (not in the original plan): the 1,888-line
-collector region moved out of server.py. Handlers now import `kernel.collect`.
-server.py went 2,890 -> 122 lines at that commit (152 today — see Current state).
+Fixed by adding `kernel/collect.py`, which was not in the original plan: the
+collector region moved out of `server.py` and handlers import `kernel.collect`.
+`server.py` collapsed to a bootstrap at that commit.
 
-Verified against production on fks-services: 41 GET routes status-identical,
-14 endpoints byte-identical against a copy of the live DB.
+**Verified against production before merging** — GET routes status-identical,
+and a set of endpoints byte-identical against a *copy* of the live DB. A
+refactor that was not diffed against the running thing is a belief.
 
 ---
 
-*Last updated: 2026-09-23 — current-state block and registry section corrected; phases left intact.*
+*Phases 0-2 are history and are dated by their commits. Phases 3 and 4 are
+intent. Nothing on this page is a status board -- `python3 hub/tools/step.py`
+and `python3 hub/tools/tracks.py` are.*
+
+*Current-state and registry sections corrected 2026-09-23; drained of counts
+2026-09-27.*

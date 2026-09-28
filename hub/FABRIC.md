@@ -128,8 +128,8 @@ recognised  →  enrichment, when the image matches something known
                  what its data directory means · how to back it up safely
 ```
 
-The current build has this inverted. `kernel/collect.py:338` carries **18
-hardcoded services** with real metadata, and everything else falls through to:
+The current build has this inverted. `kernel/collect.py` carries a hardcoded
+roster of services with real metadata, and everything else falls through to:
 
 ```python
 'name': cname,
@@ -154,22 +154,32 @@ the right specific thing, without a list of every database anyone might install.
 
 ---
 
-## Where the current build violates this
+## Where the build violated this — the defect classes, not today's tally
 
-Every row was verified against a running machine in September 2026.
+**These are named defect classes, recorded because each one cost something.
+Whether a given one is still open is a question for a command, not for this
+table** — several below have since been closed, and a status column here would
+have gone on asserting them.
 
-| Dimension | The violation | Evidence |
+```
+python3 hub/tools/atlas.py        which planes are installed vs hand-built
+python3 hub/tools/matrix.py       every checklist row, against the machines
+python3 hub/tools/situation.py    what is serving, exposed, and unseen
+python3 hub/tools/edges.py        the route surface and every external joint
+```
+
+| Dimension | The defect class | Where it showed |
 |---|---|---|
-| **Identity** | no `mesh`/`zone` field, so two meshes look like one fleet with unreachable members | `kernel/identity.py`; ksgcohub reports `"nodes": 0` with no central and no explanation |
-| **Substrate** | **six** sources for one question; reported `98G` on a machine carrying `557G` | `/api/status`, `/storage`, `/receipt`, `/context`, `/node`, `/admit`; fixed in `b704e97` |
-| **Tenancy** | 12 projects carry no label; babyhelp's acceptance test returns **0 of its 3** containers | `docker ps --filter label=com.ksg.project=babyhelp` |
-| **Admission** | handed out ports inside Supabase's reserved lane, and named a data path on the wrong disk | two contradicting bands, `collect.py` vs `node.py`; fixed in `09f3a6a`, `dfe4d67` |
-| **Continuity** | did not exist. Then existed on the same device as the data. On the other machine, a backup script deletes old dumps even when the dump failed | `fdc4276`, `c7042a7`; `/srv/backups/metaforge/backup.sh` has no `set -e` and an unconditional `find -delete` |
-| **Authority** | 52 of 73 routes declare a gate, **none are enforced**; sessions are an in-memory dict; logins are never recorded | `HUB_ENFORCE_GATES`; `post_auth_login` never calls `log_activity` |
-| **Account** | **five** severity vocabularies, no shared scale, so nothing composes | `storage.py` high/warn/info · `fleet.py` five states · `users.py` a failure counter · `log.py` a level · container events |
-| **(Law C)** | 18 services hardcoded; everything else is a `'Discovered'` stub on its own machine | `kernel/collect.py:338`, plus 8 hardcoded port→name lines |
+| **Identity** | no `mesh`/`zone` field, so two meshes look like one fleet with unreachable members | `kernel/identity.py`; a node reporting `"nodes": 0` with no central and no explanation |
+| **Substrate** | **many** sources for one question — a machine's total disk reported as its root filesystem alone | `/api/status`, `/storage`, `/receipt`, `/context`, `/node`, `/admit` all answering "what is true about this machine" |
+| **Tenancy** | projects carrying no `com.ksg.*` label, so the acceptance test returns none of their containers | `docker ps --filter label=com.ksg.project=<name>` |
+| **Admission** | ports handed out inside another stack's reserved lane, and a data path named on the wrong disk | two contradicting bands, `collect.py` vs `node.py` |
+| **Continuity** | did not exist; then existed on the same device as the data; and a retention step that deletes old dumps even when the dump failed | a backup script with no `set -e` and an unconditional `find -delete` |
+| **Authority** | routes declare a gate and **nothing applies it**; a TOTP check that returns true when no secret is configured opens every gate-2 and gate-3 route | `HUB_ENFORCE_GATES`, unset on both nodes |
+| **Account** | several severity vocabularies, no shared scale, so nothing composes | `storage.py` high/warn/info · `fleet.py` five states · `users.py` a failure counter · `log.py` a level · container events |
+| **(Law C)** | a hardcoded service roster; everything else a `'Discovered'` stub on its own machine | `kernel/collect.py`, plus hardcoded port→name lines |
 
-Read down the *violation* column: it is the same sentence seven times.
+Read down the *defect* column: it is the same sentence seven times.
 
 ---
 
@@ -225,18 +235,17 @@ disagreement is the cheapest reviewer available.
 ## The test this document must pass
 
 If a dimension in this file has no assertion in `hub/tools/`, this file is
-describing an intention rather than a system — and by its own second law, that is
-the failure mode. Today:
+describing an intention rather than a system — and by its own second law, that
+is the failure mode.
+
+**How many of the seven are asserted is the honest measure of this project, and
+it is the number to move. It is not written here**, because a score typed into a
+page stops moving the moment it is typed. Ask:
 
 ```
-Identity      partial   install-preflight: identity
-Substrate     yes       storage-preflight, check-views
-Tenancy       no
-Admission     partial   asserted by hand, not by a tool
-Continuity    partial   backup target checked; a restore never is
-Authority     no
-Account       no
+python3 hub/tools/atlas.py --parts     every instrument, and what it covers
+python3 hub/tools/matrix.py            which rows an assertion can answer today
 ```
 
-**Three of seven.** That number is the honest measure of this project, and it is
-the number to move.
+An instrument that exists but nothing runs is not an assertion either. `atlas.py`
+distinguishes the two; a column in this file could not.

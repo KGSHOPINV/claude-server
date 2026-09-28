@@ -25,84 +25,41 @@
 
 ---
 
-## Example Assignments
+## Assignments are not in this file
 
-The table below shows where common self-hosted services belong by lane.
-Your actual assignments go in your server's own port registry (or fill this in after deploying).
+A lane is a **rule** and belongs in a document. An assignment is a **fact about
+a machine** and does not. A table of assignments stood here; it was one of
+several hand-typed service inventories in this repo that disagreed with each
+other and with the machines.
 
-### System
-| Port | Service | Lane |
-|------|---------|------|
-| 80 | HTTP → Nginx Proxy Manager | System |
-| 81 | NPM Admin UI | System |
-| 443 | HTTPS → Nginx Proxy Manager | System |
+```bash
+curl -s <hub>/api/ports              what is bound right now, with lane and owner per port
+curl -s "<hub>/api/admit?project=X"  the band a project may bind inside, derived live
+python3 hub/tools/situation.py       plus what is exposed beyond the box
+ss -tlnp                             the raw socket view, on the box
+```
 
-### Hub
-| Port | Service | Lane |
-|------|---------|------|
-| 8765 | Server Hub (systemd) | Hub |
+**`/api/ports` is the authority, not the container list.** A service installed
+outside Docker — a snap, an apt package, anything bound by the host — never
+appears in `docker ps` or in the receipt's container list. Only the socket view
+sees it. A port can be occupied by something no container view will ever show.
 
-### Infrastructure
-| Port | Service | Lane |
-|------|---------|------|
-| 3000 | Homepage Dashboard | Infrastructure |
-| 3001 | Uptime Kuma | Infrastructure |
-| 3002 | Wiki.js | Infrastructure |
-| 3004 | Open WebUI (AI chat) | Infrastructure |
-| 3005 | OpenClaw | Infrastructure |
+**Lanes are a declaration, not a policy.** Nothing enforces them. That is how
+admission handed out ports inside another stack's reserved lane for months:
+two places answered *"what may a project bind"* and disagreed, and neither was
+checked against the other. If you want a lane enforced, put the check in code —
+a rule written here cannot fail.
 
-### Monitoring
-| Port | Service | Lane |
-|------|---------|------|
-| 19999 | Netdata | Monitoring |
-| 9090 | Cockpit (HTTPS) | Admin/Management |
-
-### Automation
-| Port | Service | Lane |
-|------|---------|------|
-| 5678 | n8n | Automation |
-
-### Database
-| Port | Service | Lane |
-|------|---------|------|
-| 5432 | PostgreSQL | Database |
-| 6379 | Redis | Database |
-| 8001 | SurrealDB | Database |
-
-### API / Admin Tools
-| Port | Service | Lane |
-|------|---------|------|
-| 8025 | Mailpit UI | API/Services |
-| 8082 | Adminer (DB browser) | API/Services |
-| 8090 | Dozzle (log viewer) | API/Services |
-
-### Notifications
-| Port | Service | Lane |
-|------|---------|------|
-| 8085 | ntfy | Notifications |
-
-### Storage
-| Port | Service | Lane |
-|------|---------|------|
-| 9000 | MinIO API | Storage |
-| 9001 | MinIO Console | Storage |
-
-### Admin / Management
-| Port | Service | Lane |
-|------|---------|------|
-| 9443 | Portainer (HTTPS) | Admin/Management |
-
-### AI
-| Port | Service | Lane |
-|------|---------|------|
-| 11434 | Ollama | AI |
-
----
+**Project bands are allocated fleet-wide**, not per box, so a project can move
+machines without renumbering. A band is the boundary; how a project arranges
+ports inside its own band is the project's business, and outgrowing one is a
+ticket, not a violation.
 
 ## Rules
 
 1. **Pick the next free port in the lane** — don't use random ports
-2. **Document here first** — before adding a service, claim its port here
+2. **Ask the machine, don't consult a list** — `curl -s <hub>/api/ports` before
+   you claim anything. A document cannot tell you a port was taken yesterday
 3. **NPM routes public traffic** — LAN services stay on their lane port; NPM handles public domain routing
 4. **No two services on the same port** — run `ss -tlnp` or `port-scan` to check for conflicts
 5. **8765 is reserved for Hub** — never assign to a container
@@ -112,10 +69,16 @@ Your actual assignments go in your server's own port registry (or fill this in a
 ## Adding a New Service
 
 1. Identify the lane (what category is this service?)
-2. Find the next free port in that lane range
-3. Add it to this file under the correct section
-4. Update the docker-compose file to use that port
-5. Verify no conflicts: `ss -tlnp | grep <port>`
+2. Ask for the next free port in that lane — `curl -s <hub>/api/ports`, or for a
+   project, `curl -s "<hub>/api/admit?project=X"`, which derives a whole band
+3. Update the compose file to use it, and **carry the labels** — `com.ksg.project`,
+   `owner`, `role`, `data`. Ownership is declared by the thing itself, because a
+   label travels with the container and a registry beside it drifts
+4. Verify no conflicts: `ss -tlnp | grep <port>`
+5. Prove isolation: `docker ps --filter label=com.ksg.project=X` must return that
+   project's containers and nothing else. No reviewer required
+
+**Do not add it to this file.** That step is what made the old table wrong.
 
 ---
 

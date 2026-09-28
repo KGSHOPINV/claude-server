@@ -2,6 +2,24 @@
 """
 # 20200012  kernel.heartbeat — the node-side emitter and its fallback chain
 
+HEARTBEATS ARE ENRICHMENT, NOT THE SOURCE OF TRUTH. Corrected 2026-09-26.
+
+Nothing depends on this module for the fleet to be VISIBLE. kernel.fleet
+enumerates the fleet from the zone's `flareshub-*` DNS records, which are
+derived from each node's own server id at enrolment — so who exists is
+answered by the register, with no beat, no election and no box that has to be
+up for the others to be seen.
+
+What a beat carries that DNS cannot: containers, projects, attention, os,
+uptime, and the fact that this node was alive a moment ago. That is worth
+having and it is why this file stays. But a node that never beats, or a
+receiver that is down for a day, costs LIVE DETAIL about a node — never the
+knowledge that the node is there.
+
+Which is also why the emitter is harmless to lose. It was already written that
+way ("A node that cannot reach central on ANY path is not broken"); the
+difference now is that the fleet view is not degraded to nothing while it fails.
+
 Runs only in NODE mode. Every 30s it POSTs this node's /api/node payload to
 central, trying three paths in order:
 
@@ -78,12 +96,22 @@ def _post(url, payload, token):
 
 
 # 20200343  beat — one heartbeat across the fallback chain
-def beat(payload_fn):
+def beat(payload_fn, _retry=True):
     """Returns (path, status) on success, (None, error) on total failure.
 
     A node that cannot reach central on ANY path is not broken — central may
     simply be down. It keeps running and keeps trying; no data is lost because
     the next beat carries current state anyway.
+
+    RE-REGISTERS ONCE IF CENTRAL DOES NOT KNOW THIS NODE. A beat no longer
+    creates a fleet record — central refuses an unknown server_id with 403
+    unknown_server_id (kernel/fleet._bound), which is what closes "invent a
+    node". The honest consequence is that a central which lost db/fleet.json
+    would refuse this node's beats until something registered it again, and
+    registration otherwise only happens at node startup: the fleet would sit
+    blind for as long as this process stayed up. So the refusal is ACTED ON
+    rather than just logged. Bounded to one attempt per beat by _retry, because
+    a node that cannot register must not turn one failure into a loop.
     """
     targets = _targets()
     if not targets:
@@ -100,6 +128,7 @@ def beat(payload_fn):
         pass   # unsigned beat is still better than no beat
 
     last_err = None
+    unknown_here = False
     for label, url in targets:
         try:
             status, _body = _post(f'{url}?path={label}', payload, token)
@@ -112,8 +141,23 @@ def beat(payload_fn):
             last_err = f'{label}: HTTP {status}'
         except urllib.error.HTTPError as e:
             last_err = f'{label}: HTTP {e.code}'
+            if e.code == 403:
+                # The two refusals a node can actually FIX by re-registering.
+                # A machine_id_mismatch is deliberately NOT one of them: that
+                # means another record already owns this server_id, and a node
+                # must not try to take it — an operator has to look.
+                try:
+                    detail = e.read(512).decode('utf-8', 'replace')
+                except Exception:
+                    detail = ''
+                if 'unknown_server_id' in detail or 'record_unbound' in detail:
+                    unknown_here = True
+                    last_err = f'{label}: HTTP 403, central does not know this node'
         except Exception as e:
             last_err = f'{label}: {type(e).__name__}'
+    if unknown_here and _retry:
+        register(payload_fn)
+        return beat(payload_fn, _retry=False)
     with _lock:
         _state.update({'last_error': last_err})
         _state['failures'] += 1

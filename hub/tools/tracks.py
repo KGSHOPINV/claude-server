@@ -1563,8 +1563,14 @@ def decisions(ctx):
     reached, _st, reg = _api(ctx['hub'], '/api/registry', ctx['timeout'])
     mode = ((reg or {}).get('who') or {}).get('mode') if reg else None
     pin_src = _read(ctx['root'], 'hub/kernel/control.py')
-    pin_shape = ('4 digits from a sha256 of the bulletin text, per bulletin '
-                 '(control._pin)' if 'def _pin(' in pin_src else 'not found in control.py')
+    # Was 'def _pin(' -- 4 digits of sha256 over the bulletin TEXT, one code for
+    # every recipient, which is why a project could ack as another: the text is
+    # printed to everybody, so everybody could recompute everybody's code. That
+    # function is gone. The shape to report is the per-recipient one.
+    pin_shape = ('4 digits from an HMAC of a per-bulletin secret keyed by the '
+                 'project, so one code per (bulletin, recipient) '
+                 '(control._recipient_pin)' if 'def _recipient_pin(' in pin_src
+                 else 'not found in control.py')
     notify = _read(ctx['root'], 'hub/ui/notify.js')
     sw = _read(ctx['root'], 'hub/ui/sw.js')
     vapid = 'VAPID' in (notify + sw) or 'vapid' in (notify + sw)
@@ -1582,7 +1588,7 @@ def decisions(ctx):
                   if apps else 'not read from here (%s)' % (why or 'no token')),
                  'path-scoped apps on one hostname, or one app per hostname?'),
         decision('D2', 'HUB_ENFORCE_GATES -- arm it or leave it',
-                 '59 of 77 routes declare a gate and the router records what it '
+                 'Most routes declare a gate -- edges.py prints the count -- and the router records what it '
                  'would have denied and then runs the handler anyway. Arming gate 1 '
                  'does not close gates 2 and 3, because gate_check() returns True '
                  'while TOTP is unconfigured -- and arming it can lock the UI out. '

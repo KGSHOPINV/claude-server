@@ -56,7 +56,21 @@ def _route(handler, method, path, body=None):
 
 
 class Handler(http.server.BaseHTTPRequestHandler):
-    # 20200309  Handler.log_message — access logging, off unless HUB_LOG_REQUESTS=1
+    # THREE CODES MOVED, 2026-09-27: 202003 09, 10 and 12 -> 28, 29, 30.
+    #
+    # They sat on top of kernel/auth.py's _session_load, session_put and
+    # access_identity, so "go to 20200310" had two answers -- auth's
+    # session_put and this file's send_json. A duplicated code is the one
+    # thing the scheme exists to prevent, and the squatter moves, not the
+    # owner. do_OPTIONS keeps 20200311: it was never duplicated, and moving a
+    # code that is not broken only costs the next person a diff to read.
+    #
+    # Allocated with `python3 hub/tools/atlas.py --codes`, which computes the
+    # free run rather than guessing at it, and re-checked immediately before
+    # commit -- three agents picked 20404718 on the same afternoon by grepping,
+    # and this very edit had to be redone once because a code that was free
+    # when it was chosen was taken by the time it was written.
+    # 20200328  Handler.log_message — access logging, off unless HUB_LOG_REQUESTS=1
     def log_message(self, fmt, *args):
         if not LOG_REQUESTS:
             return
@@ -77,7 +91,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
             msg = str(fmt)
         print('REQ src=%s cf_email=%s cf_jwt=%s :: %s' % (src, email, jwt, msg), flush=True)
 
-    # 20200310  Handler.send_json — serialize + write JSON response with CORS
+    # 20200329  Handler.send_json — serialize + write JSON response with CORS
     def send_json(self, data, status=200):
         body = json.dumps(data, default=str).encode()
         self.send_response(status)
@@ -95,7 +109,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
         self.send_header('Access-Control-Allow-Headers', 'Content-Type, X-Hub-Token')
         self.end_headers()
 
-    # 20200312  Handler.get_body — parse JSON request body
+    # 20200330  Handler.get_body — parse JSON request body
     def get_body(self):
         n = int(self.headers.get('Content-Length', 0))
         return json.loads(self.rfile.read(n)) if n else {}

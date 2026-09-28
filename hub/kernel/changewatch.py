@@ -130,9 +130,13 @@ def _facts():
 
     try:
         from kernel import collect as _collect
-        out['band'] = '%d-%d/%d' % (_collect.PROJECT_BAND_FLOOR,
-                                    _collect.PROJECT_BAND_CEIL,
-                                    _collect.PROJECT_BAND_SIZE)
+        # Formatted by control.served_band(), not here. This string and the one
+        # /api/admit carries in `pending` describe the same fact to the same
+        # project, and two formatters for one fact eventually disagree by a
+        # slash -- which reads, on the other end, as two different bands.
+        band = _ctl.served_band()
+        if band:
+            out['band'] = band
         # The lane map is the "ORGINAATION TOOO" half of step 12: a project
         # needs to know the shape of the whole port space, not just its own
         # slice, or it cannot tell a free port from someone else's lane.

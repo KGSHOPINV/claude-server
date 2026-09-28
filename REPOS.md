@@ -1,6 +1,20 @@
 # Two-Repo Architecture
 
-This project exists across two GitHub repositories with a clear split of responsibility.
+This project exists across two GitHub repositories with a clear split of
+responsibility — and the split follows **the layers, not convenience.**
+
+> **The test, from `hub/CONSTITUTION.md` §6:** *could a stranger install this
+> without receiving anything personal?* The installer currently clones the
+> workspace repo onto every node, which ships `CLAUDE.md` — both servers'
+> addresses and SSH usernames — along with session notes and a local database,
+> to every machine that installs. **Today the answer is no**, and closing that
+> is the reason the split exists rather than a tidiness preference.
+>
+> | Repo | Holds | Ships to a node |
+> |---|---|---|
+> | **serverhub** | the product: `hub/`, `tools/`, `bootstrap.sh` | **yes** |
+> | **workspace** (this one) | notes, session logs, `CLAUDE.md`, issues | **never** |
+> | **integrations** | contracts between the three systems | no — read by all |
 
 ---
 
@@ -18,12 +32,11 @@ This project exists across two GitHub repositories with a clear split of respons
 **What it is:** The Server Hub — a Python HTTP server + single-page app that gives you a browser-based control panel over a Linux server.
 
 **What it owns:**
-- `hub/server.py` — API server, SSH proxy, SQLite, all routes
-- `hub/app.html` — full desktop hub application
-- `hub/mobile.html` — mobile-optimized view
-- `guides/` — markdown docs loaded into the hub
-- `notes/` — local scratch (gitignored)
-- `db/` — SQLite data (gitignored)
+- the hub runtime — `hub/server.py` (a bootstrap), `hub/kernel/`, `hub/handlers/`
+- the frontends it serves, and `hub/ui/`
+- `hub/guides/` — markdown docs the hub serves at `/api/docs`
+- `hub/tools/` — the instruments. Report, never repair
+- `notes/`, `db/` — local, gitignored, and they **never ship to a node**
 
 **What it does NOT contain:**
 - Docker compose files for any service (those live in server-kit or directly on the server)
@@ -50,13 +63,14 @@ cd ~/hub && git pull && sudo systemctl restart hub
 **What it is:** A complete, USB-ready bootstrap kit for standing up a fresh Linux server with this full Docker stack.
 
 **What it owns:**
-- Numbered setup scripts (`01-system-setup.sh` → `16-ai-setup.sh`)
-- Docker compose files for every service in `/docker-compose/`
+- the numbered setup script series
+- Docker compose files for the optional services
 - `tools/` — CLI tools deployed to `/usr/local/bin/`
-- `mcp/` — Claude CLI MCP config for server awareness
-- `claude/CLAUDE.md` — full server context for Claude sessions
-- `install.sh` — one-command installer (asks 4 questions, sets everything up)
-- `docs/` and `docs-site/` — documentation
+- `install.sh` — the one-command installer
+- its own documentation
+
+Its exact contents are not listed here; a directory listing cannot go stale and
+this paragraph could.
 
 **What it does NOT contain:**
 - Hub application code (delegates to claude-server via git clone)

@@ -1,0 +1,500 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Exchange — Detail (mockup)</title>
+<!--
+  MOCKUP. STATIC. NOTHING HERE IS WIRED. The only JavaScript toggles states.
+
+  DETAIL — one bulletin as a project actually receives it, and one ticket.
+  These are the two screens where a person reads a whole thing rather than
+  scanning a list, so they are one file: same shape, same rules.
+
+  ROUTES THAT WOULD FEED THIS
+    GET  /api/bulletin/<n>?project=<p>     20315702  the readout. project REQUIRED.
+    POST /api/bulletin/<n>/read            20315703  acknowledge, with proof
+    GET  /api/bulletin-readers/<n>         20315705  who_read for this bulletin
+    GET  /api/tickets?project=<p>          20315706  open tickets
+    POST /api/tickets                      20315707  open | diagnose | close
+    GET  /api/baselines/<p>                20315710  ladder + whether auto is due
+    GET  /api/project-log/<p>              20315708  what the project recorded
+
+  THE PIN — the one rule this screen exists to get right
+    It is NOT a JSON field and NOT a column. It is per (bulletin, project),
+    derived by HMAC from a per-bulletin secret the server never publishes, and
+    it is WOVEN INTO THE READOUT TEXT at the end, where you reach it by reading
+    to the end. So on this screen it appears exactly once: inside the readout
+    block, as text. It is never a header, never a badge, never copyable on its
+    own, and never shown on any list screen.
+
+  DERIVED, NOT STORED
+    readout          assembled in handlers/exchange.get_bulletin from title,
+                     body, action and the recipient's pin. Nothing stores it.
+    pin              HMAC(bulletin.secret, project). Stored nowhere.
+    remaining        len(bulletins_for(project)) after a successful ack
+    ticket state     stored ('open'|'diagnosed'|'closed'), but the CONSEQUENCE
+                     below it is derived: an open ticket blocks auto-baseline.
+    auto_due/why     computed from the newest baseline's age and open tickets
+
+  STORED
+    bulletins (n, scope, rung, title, body, action, secret, published)
+    reads     (project, bulletin, answer, at) — append-only
+    tickets   (project, problem, what_i_see, diagnosis, resolution, state,
+               at, closed_at)
+
+  REAL VALUES: bulletin 10's title, body, action, rung, scope and published
+  timestamp are verbatim from fks-services 127.0.0.1:8765 on 2026-09-27.
+  The readout's confirmation-code LINE is illustrative — the deployed box is
+  still on the older shared-pin build and renders "Confirmation code: 4890";
+  the code in this repo renders "Confirmation code for <project>: <pin>".
+  Dotted values elsewhere are illustrative.
+-->
+<style>
+  :root{
+    --bg:#0b0f14; --panel:#111823; --panel2:#0e141d; --border:#1e2936;
+    --text:#dbe5f0; --muted:#7d8da0; --muted2:#55697e;
+    --accent:#4ec9e0; --green:#3fb950; --amber:#d29922; --red:#f85149;
+    --mono:ui-monospace,SFMono-Regular,"SF Mono",Menlo,monospace;
+  }
+  @media (prefers-color-scheme:light){
+    :root:not([data-theme="dark"]){
+      --bg:#f6f8fa; --panel:#fff; --panel2:#f0f3f6; --border:#d5dde5;
+      --text:#1f2328; --muted:#5b6570; --muted2:#8593a3; --accent:#0d7d94;
+    }
+  }
+  *{box-sizing:border-box}
+  body{margin:0;min-height:100vh;background:var(--bg);color:var(--text);
+       font:14px/1.55 ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif}
+  .wrap{max-width:780px;margin:0 auto;padding:22px 16px 60px}
+  @media(min-width:700px){.wrap{padding:26px 24px 60px}}
+
+  .top{display:flex;align-items:baseline;gap:10px;flex-wrap:wrap;
+       padding-bottom:12px;border-bottom:1px solid var(--border)}
+  .brand{font-size:15px;font-weight:600;letter-spacing:.3px}
+  .brand .dot{color:var(--accent)}
+  .who{margin-left:auto;font-size:11px;color:var(--muted);font-family:var(--mono)}
+  .who b{color:var(--text);font-weight:500}
+  .back{font-size:11px;font-family:var(--mono);color:var(--accent);
+    text-decoration:none;display:inline-block;margin:14px 0 0}
+
+  .states{display:flex;gap:6px;flex-wrap:wrap;margin:14px 0 4px}
+  .states button{font:10px/1 var(--mono);text-transform:uppercase;
+    letter-spacing:.6px;padding:6px 10px;border-radius:3px;cursor:pointer;
+    border:1px solid var(--border);background:var(--panel2);color:var(--muted)}
+  .states button[aria-pressed="true"]{color:var(--accent);
+    border-color:color-mix(in srgb,var(--accent) 45%,transparent)}
+  .mocknote{font-size:10px;color:var(--muted2);font-family:var(--mono);margin:8px 0 18px}
+
+  h2{font-size:12px;font-weight:600;letter-spacing:.5px;text-transform:uppercase;
+     color:var(--muted);margin:26px 0 9px}
+
+  .hdr{display:flex;align-items:center;gap:9px;flex-wrap:wrap;margin-bottom:4px}
+  .n{font-family:var(--mono);font-size:11px;color:var(--muted2)}
+  h1{font-size:19px;font-weight:600;margin:4px 0 8px;line-height:1.3}
+  .badge{font:9px/1 var(--mono);text-transform:uppercase;letter-spacing:.6px;
+    padding:3px 7px;border-radius:20px;border:1px solid var(--border);color:var(--muted)}
+  .badge.you{color:var(--accent);border-color:color-mix(in srgb,var(--accent) 45%,transparent)}
+  .badge.unread{color:var(--amber);border-color:color-mix(in srgb,var(--amber) 45%,transparent)}
+  .badge.done{color:var(--green);border-color:color-mix(in srgb,var(--green) 45%,transparent)}
+  .meta{font-family:var(--mono);font-size:10px;color:var(--muted2);margin-bottom:14px}
+
+  /* THE READOUT, rendered as the server actually assembles it. A <pre>, not a
+     rewrap: the ruled underline, the blank lines and the position of the
+     confirmation line are all part of what makes reading it to the end the
+     cheapest way to acknowledge it. */
+  .readout{background:var(--panel2);border:1px solid var(--border);
+    border-radius:6px;padding:14px;overflow-x:auto}
+  .readout pre{margin:0;font-family:var(--mono);font-size:12px;line-height:1.65;
+    color:var(--text);white-space:pre-wrap;word-break:break-word}
+  .readout .code{color:var(--amber)}
+  .readnote{font-size:11px;color:var(--muted2);margin-top:8px;line-height:1.6}
+
+  .ack{margin-top:16px;border:1px solid var(--border);border-radius:6px;
+    background:var(--panel);padding:14px}
+  .ack h3{margin:0 0 4px;font-size:13px;font-weight:600}
+  .ack p{margin:0 0 11px;font-size:12px;color:var(--muted)}
+  .fields{display:grid;grid-template-columns:1fr;gap:10px}
+  @media(min-width:560px){.fields{grid-template-columns:130px 1fr}}
+  label{display:block;font:9px/1 var(--mono);text-transform:uppercase;
+    letter-spacing:.7px;color:var(--muted2);margin-bottom:5px}
+  input,textarea{width:100%;background:var(--panel2);color:var(--text);
+    border:1px solid var(--border);border-radius:4px;padding:9px 10px;
+    font-family:var(--mono);font-size:13px}
+  textarea{min-height:64px;resize:vertical}
+  .go{margin-top:12px;display:flex;gap:9px;align-items:center;flex-wrap:wrap}
+  .go button{font:11px/1 var(--mono);padding:10px 16px;border-radius:4px;
+    border:1px solid color-mix(in srgb,var(--accent) 45%,transparent);
+    background:color-mix(in srgb,var(--accent) 14%,transparent);
+    color:var(--accent);cursor:pointer}
+  .go .hint{font-size:10px;color:var(--muted2);font-family:var(--mono)}
+
+  .msg{border:1px solid var(--border);background:var(--panel);border-radius:8px;
+    padding:15px 17px;font-size:13px;color:var(--muted);margin-top:14px}
+  .msg h3{font-size:13px;font-weight:600;color:var(--text);margin:0 0 7px}
+  .msg p{margin:0 0 9px} .msg p:last-child{margin:0}
+  .msg code{font-family:var(--mono);font-size:12px;color:var(--accent);overflow-wrap:anywhere}
+  .msg.bad{border-color:color-mix(in srgb,var(--red) 45%,transparent)}
+  .msg.bad h3{color:var(--red)}
+  .msg.ok{border-color:color-mix(in srgb,var(--green) 45%,transparent)}
+  .msg.ok h3{color:var(--green)}
+  .msg.warn{border-color:color-mix(in srgb,var(--amber) 45%,transparent)}
+  .status{font-family:var(--mono);font-size:10px;color:var(--red);
+    text-transform:uppercase;letter-spacing:.7px;margin-bottom:6px}
+
+  .told{display:flex;flex-wrap:wrap;gap:5px;margin-top:9px}
+  .chip{font:10px/1 var(--mono);padding:4px 8px;border-radius:3px;
+    border:1px solid var(--border);color:var(--muted2)}
+  .chip.read{color:var(--green);background:color-mix(in srgb,var(--green) 12%,transparent);
+    border-color:color-mix(in srgb,var(--green) 40%,transparent)}
+  .chip.read::before{content:"\2713\00a0"} .chip.unread::before{content:"\00b7\00a0"}
+  .chip .at{color:var(--muted2);margin-left:5px}
+
+  /* ticket */
+  .tk{border:1px solid var(--border);border-radius:6px;background:var(--panel);
+    padding:14px;border-left:3px solid var(--amber)}
+  .tk.closed{border-left-color:var(--green)}
+  .tk dl{margin:11px 0 0;font-size:13px}
+  .tk dt{font:9px/1 var(--mono);text-transform:uppercase;letter-spacing:.7px;
+    color:var(--muted2);margin-top:11px}
+  .tk dd{margin:5px 0 0;color:var(--text)}
+  .tk dd.none{color:var(--muted2);font-family:var(--mono);font-size:12px}
+  .tk .ttop{display:flex;gap:9px;align-items:center;flex-wrap:wrap}
+  .consequence{margin-top:12px;border-top:1px solid var(--border);padding-top:11px;
+    font-size:12px;color:var(--muted)}
+  .consequence b{color:var(--amber);font-weight:500}
+
+  .synth{border-bottom:1px dotted color-mix(in srgb,var(--accent) 55%,transparent)}
+  .foot{margin-top:28px;padding-top:14px;border-top:1px solid var(--border);
+    color:var(--muted2);font-size:11px;line-height:1.7}
+
+  body[data-state="read"] .s-unread,
+  body[data-state="read"] .s-refused,
+  body[data-state="read"] .s-empty,
+  body[data-state="unread"] .s-read,
+  body[data-state="unread"] .s-refused,
+  body[data-state="unread"] .s-empty,
+  body[data-state="refused"] .s-read,
+  body[data-state="refused"] .s-unread,
+  body[data-state="refused"] .s-empty,
+  body[data-state="empty"] .s-read,
+  body[data-state="empty"] .s-unread,
+  body[data-state="empty"] .s-refused{display:none}
+</style>
+</head>
+<body data-state="unread">
+<div class="wrap">
+
+  <div class="top">
+    <div class="brand"><span class="dot">&#9670;</span> Exchange &middot; Detail</div>
+    <div class="who">fks-services &middot; <b>fvn_3b8c1b</b> &middot; reading as <b>fksinv</b></div>
+  </div>
+  <a class="back" href="board.html">&larr; board</a>
+
+  <div class="states" role="group" aria-label="Mockup state">
+    <button type="button" data-go="unread" aria-pressed="true">Unread</button>
+    <button type="button" data-go="read">Acknowledged</button>
+    <button type="button" data-go="refused">Refused</button>
+    <button type="button" data-go="empty">Empty</button>
+  </div>
+  <p class="mocknote">
+    MOCKUP &mdash; static, nothing wired. Bulletin 10's title, body, action and
+    timestamp are verbatim from fks-services 2026-09-27.
+  </p>
+
+  <!-- =============================================================== UNREAD -->
+  <section class="s-unread">
+    <div class="hdr">
+      <span class="n">bulletin #10</span>
+      <span class="badge">rung 2</span>
+      <span class="badge">scope: all</span>
+      <span class="badge unread">not acknowledged</span>
+    </div>
+    <h1>Port lane retired: Projects (was 12000-18999)</h1>
+    <div class="meta">published 2026-09-26T15:20:28 &middot; fks-services &middot; addressed to every project</div>
+
+    <h2>Readout</h2>
+    <div class="readout">
+<pre>Port lane retired: Projects (was 12000-18999)
+=============================================
+
+The Projects lane is no longer on the port map.
+
+Those ports are not automatically free -- they are
+unclaimed, which is a different thing. Do not take one
+without asking.
+
+--- confirm you read this ---
+The one thing you do: nothing right now -- do not claim the vacated range without filing a ticket first.
+<span class="code">Confirmation code for fksinv: <span class="synth">4890</span></span>
+</pre>
+    </div>
+    <p class="readnote">
+      The confirmation code is not a field. It is rendered into this text, once,
+      at the end, for <strong>this recipient only</strong> &mdash; another
+      project's copy carries a different number and will be refused here. That is
+      why the readout has no links out of it and why the code sits after the
+      action: reaching it means reaching the end.
+    </p>
+
+    <div class="ack">
+      <h3>Acknowledge</h3>
+      <p>
+        <code>POST /api/bulletin/10/read</code> &mdash; nothing is blocked by not
+        doing this. It only records that you were told.
+      </p>
+      <div class="fields">
+        <div>
+          <label for="pin">Confirmation code</label>
+          <input id="pin" inputmode="numeric" maxlength="4" placeholder="4 digits" autocomplete="off">
+        </div>
+        <div>
+          <label for="answer">What you will do</label>
+          <textarea id="answer" placeholder="&quot;none&quot; is a valid answer. Silence is not."></textarea>
+        </div>
+      </div>
+      <div class="go">
+        <button type="button">Acknowledge</button>
+        <span class="hint">mockup &mdash; this button does nothing</span>
+      </div>
+    </div>
+
+    <h2>Who else was told</h2>
+    <div class="told">
+      <span class="chip read synth">keynox<span class="at">09-26 16:02</span></span>
+      <span class="chip unread synth">fksinv</span>
+      <span class="chip unread synth">babyhelp</span>
+      <span class="chip unread synth">flarevault</span>
+    </div>
+  </section>
+
+  <!-- ========================================================= ACKNOWLEDGED -->
+  <section class="s-read">
+    <div class="hdr">
+      <span class="n">bulletin #10</span>
+      <span class="badge">rung 2</span>
+      <span class="badge">scope: all</span>
+      <span class="badge done">acknowledged</span>
+    </div>
+    <h1>Port lane retired: Projects (was 12000-18999)</h1>
+    <div class="meta synth">acknowledged by fksinv 2026-09-27T07:14:02 &middot; 2 bulletins remaining</div>
+
+    <div class="msg ok">
+      <h3>Recorded</h3>
+      <p>
+        <code>{"ok": true, "bulletin": 10, "project": "fksinv", "note": "read",
+        "remaining": <span class="synth">2</span>}</code>
+      </p>
+      <p>
+        Your answer, stored verbatim and never interpreted:
+        <em class="synth">"nothing bound in that range; will not claim it"</em>
+      </p>
+      <p>
+        The row is append-only. A second acknowledgement adds a second row
+        rather than replacing this one &mdash; what a project was told, and when,
+        is evidence, not state to update.
+      </p>
+    </div>
+
+    <h2>Readout</h2>
+    <div class="readout">
+<pre>Port lane retired: Projects (was 12000-18999)
+=============================================
+
+The Projects lane is no longer on the port map.
+
+Those ports are not automatically free -- they are
+unclaimed, which is a different thing. Do not take one
+without asking.
+
+--- confirm you read this ---
+The one thing you do: nothing right now -- do not claim the vacated range without filing a ticket first.
+<span class="code">Confirmation code for fksinv: <span class="synth">4890</span></span>
+</pre>
+    </div>
+
+    <h2>Who else was told</h2>
+    <div class="told">
+      <span class="chip read synth">fksinv<span class="at">09-27 07:14</span></span>
+      <span class="chip read synth">keynox<span class="at">09-26 16:02</span></span>
+      <span class="chip unread synth">babyhelp</span>
+      <span class="chip unread synth">flarevault</span>
+    </div>
+
+    <h2>Ticket &mdash; closed</h2>
+    <div class="tk closed">
+      <div class="ttop">
+        <span class="n synth">ticket #3</span>
+        <span class="badge synth">fksinv</span>
+        <span class="badge done">closed</span>
+      </div>
+      <dl>
+        <dt>Problem</dt>
+        <dd class="synth">admit handed out 10021, which keynox already publishes</dd>
+        <dt>What I see</dt>
+        <dd class="synth">bind: address already in use on container start</dd>
+        <dt>Diagnosis</dt>
+        <dd class="synth">the project band overlapped the Supabase reserved lane</dd>
+        <dt>Resolution &mdash; what was actually done</dt>
+        <dd class="synth">rebound to 7104 and refiled the claim</dd>
+        <dt>Timeline</dt>
+        <dd class="synth">opened 2026-09-25T04:02:11 &middot; closed 2026-09-26T09:40:55</dd>
+      </dl>
+      <div class="consequence">
+        Closed with a resolution, so auto-baseline is no longer blocked for
+        fksinv. An unrecorded self-fix is indistinguishable from drift six
+        weeks later, which is why closing without a resolution is refused.
+      </div>
+    </div>
+  </section>
+
+  <!-- ============================================================== REFUSED -->
+  <section class="s-refused">
+    <h2>An ack can be refused three ways</h2>
+
+    <div class="msg bad">
+      <div class="status">403 &middot; not in the registry</div>
+      <h3>fksinv is not a project this server knows</h3>
+      <p>
+        <code>POST /api/bulletin/10/read</code> &rarr;<br>
+        <code>fksinv is not a project this server knows, so it cannot be
+        recorded as having read bulletin 10</code>
+      </p>
+      <p>
+        <strong>This is the live state of fks-services today.</strong>
+        <code>projects</code> is empty, so every ack on that box is refused here
+        &mdash; and <code>GET /api/bulletin/10?project=fksinv</code> answers 404
+        for the same reason, because a code is never handed out that the ack
+        would then reject.
+      </p>
+      <p>
+        A reader that was never a project cannot be a true row in any matrix.
+        The fix: <code>POST /api/registry/fksinv</code> first.
+      </p>
+    </div>
+
+    <div class="msg bad">
+      <div class="status">403 &middot; not addressed to you</div>
+      <h3>bulletin 11 is addressed to babyhelp, not fksinv</h3>
+      <p>
+        Scope is <code>all</code> or one project name. Reading someone else's
+        scoped bulletin gets the same 404 as a bulletin that does not exist:
+        <code>bulletin 11 has no copy addressed to fksinv</code>.
+      </p>
+      <p>
+        The two are answered identically on purpose &mdash; separating them
+        would let a caller enumerate which projects a scoped bulletin went to.
+      </p>
+    </div>
+
+    <div class="msg bad">
+      <div class="status">403 &middot; code does not match</div>
+      <h3>pin does not match bulletin 10 for fksinv &mdash; read your copy again</h3>
+      <p>
+        Refused, <strong>not recorded</strong>: a recorded wrong pin is a lie in
+        the matrix. Refused, <strong>not locked</strong>: re-reading is the
+        correct response to getting it wrong, and locking would punish the only
+        useful reaction.
+      </p>
+      <p>
+        It does not say what the right code was, and it does not distinguish
+        "wrong code" from "somebody else's code". Both are answered by reading
+        your own copy.
+      </p>
+      <p>
+        <code>reread: GET /api/bulletin/10?project=fksinv</code>
+      </p>
+    </div>
+
+    <div class="msg warn">
+      <div class="status" style="color:var(--amber)">400 &middot; incomplete</div>
+      <h3>answer required &mdash; "none" is valid, silence is not</h3>
+      <p>
+        A 400 rather than a 403: a project retrying in a loop has to be able to
+        tell "I sent the wrong thing" from "this is not mine to acknowledge".
+      </p>
+      <p>
+        And on the read side, before any of this:
+        <code>name yourself: ?project=&lt;you&gt;</code> &mdash; because the
+        confirmation code is per recipient, so there is no copy of any bulletin
+        that is not addressed to somebody.
+      </p>
+    </div>
+  </section>
+
+  <!-- ================================================================ EMPTY -->
+  <section class="s-empty">
+    <h2>Nothing waiting</h2>
+    <div class="msg">
+      <h3>fksinv has read everything addressed to it</h3>
+      <p>
+        <code>GET /api/bulletins/fksinv</code> &rarr;
+        <code>{"unread": 0, "bulletins": [], "next": "nothing waiting"}</code>
+      </p>
+      <p>
+        Distinct from the board's empty state: there, nothing was published.
+        Here, everything published was read. The screen must not print the same
+        sentence for both.
+      </p>
+    </div>
+
+    <h2>No open ticket</h2>
+    <div class="msg">
+      <h3>Nothing is filed against fksinv</h3>
+      <p>
+        <code>GET /api/tickets?project=fksinv</code> &rarr;
+        <code>{"tickets": []}</code> &mdash; the real answer from fks-services,
+        2026-09-27.
+      </p>
+      <p>
+        <strong>An empty ticket list is not evidence that anything works.</strong>
+        <code>GET /api/baselines/fksinv</code> on the same box says
+        <code>auto_due: false, auto_why: "nothing to promote"</code> &mdash; and
+        the other refusal that lands here is
+        <code>"ticket open - silence is not evidence"</code>: a week without
+        complaint could mean it works or that nobody looked, and an open ticket
+        is what tells you which.
+      </p>
+    </div>
+
+    <h2>No project log</h2>
+    <div class="msg">
+      <h3>fksinv has recorded nothing about itself</h3>
+      <p>
+        <code>GET /api/project-log/fksinv</code> &rarr;
+        <code>{"activity": []}</code> &mdash; also real.
+      </p>
+      <p>
+        This table lives outside the container on purpose. When the container is
+        rebuilt or pruned its own logs go with it; anything that must still be
+        true afterwards belongs out here. An empty log means nothing survives a
+        rebuild.
+      </p>
+    </div>
+  </section>
+
+  <div class="foot">
+    Nothing on this page is wired. Acknowledging blocks nothing and is not a
+    gate &mdash; a bulletin that stopped a deploy would make reading it a chore
+    to route around; one that only records who read it makes reading it the
+    cheapest way to avoid a surprise.
+  </div>
+</div>
+
+<script>
+(function(){
+  'use strict';
+  var bs = document.querySelectorAll('.states button');
+  function go(s){
+    document.body.setAttribute('data-state', s);
+    for (var i=0;i<bs.length;i++){
+      bs[i].setAttribute('aria-pressed', bs[i].dataset.go === s ? 'true' : 'false');
+    }
+  }
+  for (var i=0;i<bs.length;i++){
+    bs[i].addEventListener('click', function(){ go(this.dataset.go); });
+  }
+})();
+</script>
+</body>
+</html>

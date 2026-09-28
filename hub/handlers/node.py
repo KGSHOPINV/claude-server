@@ -104,11 +104,73 @@ def _ntfy_health():
     }
 
 
+# 20204319  _registry_block — the half of the beat that no node ever sent
+def _registry_block():
+    """THE BUG THIS EXISTS FOR. `mesh.post_heartbeat` has read
+    body['registry'] since the day it was written, and no node has ever put one
+    there. So `_record_registry` returned (None, None) on every beat of every
+    node, central kept no ref for anything, and `_congruence('', central)`
+    answered 'unknown' forever — correctly, and uselessly.
+
+    The cost was not that the check was wrong. It is that the check could not be
+    wrong: on 2026-09-26 both servers sat on fb09de8 and /api/mesh/fleet
+    reported ref '' and congruence unknown for fks-services, exactly as it would
+    have if the two boxes had been six weeks apart. "Are both servers running
+    the same build" was answered by a human running git on each box by hand,
+    while the thing built to answer it said nothing, and said it quietly.
+
+    WHAT GOES IN, AND WHY ONLY THIS. Two fields exist to be compared, and they
+    are the only two that are MEANT to be identical fleet-wide: `ref`, and
+    `console`, the sha of the one app.html every server serves byte for byte.
+    The counts ride along because central cannot ask an unreachable node for
+    them — they are carried, never compared. See `mesh._congruence`.
+
+    NEVER RAISES, AND NEVER OMITS ITSELF SILENTLY. A node whose control database
+    is unreadable still knows its ref and its console, so it still sends them
+    and names the failure in `error`. An absent block means something else at
+    central — "this node's build predates the field" — and the two must not be
+    collapsed into one another.
+    """
+    block = {'ref': '', 'console': ''}
+    try:
+        from handlers.registry import _master, console_sha   # noqa: PLC0415
+        block['ref'] = _master()
+        block['console'] = console_sha()
+    except Exception as e:
+        # Nothing below this line can be answered either, and a beat is worth
+        # more than a crash: the emitter would swallow the exception and the
+        # node would drop off the fleet view entirely rather than appear with a
+        # reason.
+        block['error'] = 'ref/console unavailable: %s' % e
+        return block
+    try:
+        from kernel import control as _ctl                   # noqa: PLC0415
+        projects = [{'name':   p.get('name', ''),
+                     'status': p.get('status', ''),
+                     'stale':  bool(p.get('stale'))}
+                    for p in _ctl.registry(block['ref'])['projects']]
+    except Exception as e:
+        # No counts at all rather than zeroes. A zero project count from a node
+        # whose database would not open is indistinguishable from a node that
+        # genuinely runs nothing, and the fleet total would quietly shrink.
+        block['error'] = 'control db unreadable: %s' % e
+        return block
+    block['project_count'] = len(projects)
+    block['stale_count'] = sum(1 for p in projects if p['stale'])
+    block['projects'] = projects
+    return block
+
+
 # 20204317  node_payload — the self-description, as data
 def node_payload():
     """Shared by GET /api/node and the heartbeat emitter, so what a node
     reports to central is byte-identical to what it reports to a browser.
-    Two builders would drift; one cannot."""
+    Two builders would drift; one cannot.
+
+    Which is also why the `registry` block is added HERE rather than in
+    kernel.heartbeat: an emitter that enriched the payload on its way out would
+    make the beat and /api/node two different shapes, and the thing central is
+    comparing would be the one thing a browser could not check."""
     si = _srv.get_server_info()
     projects = _projects()
     enrolled = _enrollment()
@@ -143,6 +205,14 @@ def node_payload():
 
         # ── what runs here ──────────────────────────────────────────────────
         'projects': sorted(projects.values(), key=lambda p: p['project']),
+
+        # ── what CODE runs here ─────────────────────────────────────────────
+        # The only block in this payload that exists to be compared against
+        # another machine's. Everything above is this box describing itself and
+        # is expected to differ; this is the ref and the console sha, which are
+        # expected not to. Rides the beat because the two servers sit on
+        # different tailnets and cannot reach each other at all.
+        'registry': _registry_block(),
 
         # ── things that need a human ────────────────────────────────────────
         # Not errors. Facts an authority should be able to see without asking.
@@ -233,6 +303,27 @@ def get_admit(handler, path, params):
     dr = land['data_root']
     data_dir = ('%s/<project>' % dr['path'].rstrip('/')) if dr['dedicated']                else '/srv/docker/<project>/data'
 
+    # The same derivation, one level further down. data_dir above is one
+    # string; a project that saves documents, PDFs, images, audio and video
+    # needs to know which of those gets backed up nightly, which is
+    # regenerable, and which single directory a serving layer may expose
+    # without a session. kernel.storage owns all of it — this handler asks.
+    # Both halves come off the cached landscape, so /api/admit does not shell
+    # out to findmnt again just to answer a question landscape() already has.
+    data = _store.project_data(wanted, ms=land['mounts'],
+                               pr=land['project_root'])
+
+    # The forbidden list said "do not write outside /srv/docker/<project>" on
+    # every node. On a node WITH a dedicated data disk the contract hands the
+    # project /srv/data/<project> and this line then forbade writing there —
+    # the front door contradicting itself, live on ksgcohub, since the day the
+    # data path started being derived and this line did not.
+    proj_dir = '/srv/docker/%s' % data['project']
+    write_rule = ('do not write outside %s' % proj_dir
+                  if data['root'].startswith(proj_dir + '/')
+                  else 'do not write outside %s (code and compose) or %s (data)'
+                       % (proj_dir, data['root']))
+
     # WHICH SERVER, AND WHAT IS COMING. THE-PLAN step 6, verbatim: "YOUR GOING
     # TO ALSO PROVIDE THEM WITH THERE SERVER REIPET AND THERE SERVER ID ... AND
     # ALSO ALL THE PAENDINDING SHIT THAT IS GOING TO GO DOWN STREAM LATER".
@@ -280,6 +371,20 @@ def get_admit(handler, path, params):
             'findings':  land['findings'],
         },
 
+        # THE PER-PROJECT DATA CONTRACT. Added because `storage.data_root` and
+        # one `contract.data` string answered "which disk" and nothing answered
+        # "what goes where, and which of it survives me". A project storing
+        # user uploads had to invent that, and two projects inventing it
+        # separately is the drift this endpoint exists to remove.
+        #
+        # Isolation is by DIRECTORY, not by device. Commingling on one disk is
+        # fine and expected — six projects under one data root are still six
+        # addressable, separately-tarrable, separately-restorable trees, and
+        # `du -sh <root>/*` names the one that grew. What is refused is
+        # indistinguishability: data inside a container, or in a named volume
+        # with a name only Docker knows.
+        'data': data,
+
         # The contract. Same words every project, so the fleet stays queryable.
         'contract': {
             'directory': '/srv/docker/<project>',
@@ -289,9 +394,19 @@ def get_admit(handler, path, params):
                 'com.ksg.project': '<project>',
                 'com.ksg.owner':   '<owner>',
                 'com.ksg.role':    '<api|ui|db|worker>',
-                'com.ksg.data':    '/srv/docker/<project>/data',
+                # Was the literal '/srv/docker/<project>/data'. On ksgcohub the
+                # contract told a project to keep data at /srv/data/<project>
+                # and then labelled it /srv/docker/<project>/data, so the one
+                # label a human greps to find a project's data pointed at a
+                # directory that does not exist there. Derived now, like the
+                # path it is supposed to describe.
+                'com.ksg.data':    data['root'],
             },
-            'data':      data_dir + '  — one bind mount, the only thing needing backup',
+            # Was "one bind mount, the only thing needing backup". Both halves
+            # were wrong: it is one bind mount PER BUCKET, and cache/ and
+            # releases/ are explicitly not backed up. See the `data` block.
+            'data':      data['root'] + '  — six bind mounts, one per bucket; '
+                         'see `data.buckets` for which are backed up',
             'secrets':   '.env, gitignored, generated fresh. Never copied between projects.',
             'git':       'its own repo. The server is never the source of truth.',
         },
@@ -302,14 +417,36 @@ def get_admit(handler, path, params):
                 'do not bind outside the assigned band',
                 "do not join the docker network of another project",
                 "do not open the database of another project — cross-project data moves over HTTP",
-                'do not write outside /srv/docker/<project>',
+                # Was the flat string '/srv/docker/<project>'. On ksgcohub the
+                # contract above hands the project /srv/data/<project> and this
+                # line then forbade writing there — the front door contradicted
+                # itself on one of the two boxes, and had since the data path
+                # was first derived.
+                write_rule,
+                # Data inside the container, or in a volume with a name only
+                # Docker knows, is not isolated — it is a copy that happens to
+                # still be running. `docker compose down -v` takes a named
+                # volume with it and asks nothing.
+                'no named volumes for anything you would mourn — bind mount a '
+                'bucket under %s instead' % data['root'],
+                'nothing outside %s may be served without a session'
+                % data['buckets']['public']['path'],
+                'do not back up %s or %s — regenerable, and copying them nightly '
+                'is how the set that matters gets crowded out'
+                % (data['buckets']['cache']['path'],
+                   data['buckets']['releases']['path']),
                 "do not reuse secrets belonging to another project",
                 'no docker run — every container comes from a compose file in the project directory',
             ],
         },
 
         # The test. If deleting the project disturbs anything else, it was not isolated.
-        'acceptance': "docker ps --filter label=com.ksg.project=<project> returns "
-                      "every container you own and nothing else; deleting your "
-                      "directory and those containers disturbs nothing else on the host",
+        # Two halves, and the second one is new. The first proves nothing of
+        # yours leaks into anyone else. The second proves nothing of yours dies
+        # with your containers — which is the half a project passes by accident
+        # right up until the day it does not.
+        'acceptance': ("docker ps --filter label=com.ksg.project=<project> returns "
+                       "every container you own and nothing else; deleting your "
+                       "directory and those containers disturbs nothing else on "
+                       "the host. Then: " + data['acceptance']),
     })

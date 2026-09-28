@@ -1,6 +1,34 @@
-# AUDIT — `C:/Dropbox/Files PC Warehouse/claude-server`, branch `fix/project-port-band`
+# AUDIT — built vs asked, 2026-09-24
 
-Read: `hub/INTAKE.md`, `hub/intake/*`, `hub/kernel/control.py`, `hub/handlers/registry.py`, `hub/handlers/mesh.py`, `hub/kernel/router.py`, `hub/server.py`, `hub/FABRIC.md`, `hub/CONSTITUTION.md`, `hub/BOM.md`, `hub/CAPABILITIES.md`, `hub/ui-next/`, `hub/tools/`, `bootstrap.sh`, `enroll.sh`, `docs/flareshub-blueprint.md`, `git log -40`, plus the 1,965-line uncommitted diff.
+**This is HISTORY: a one-day audit of the tree as it stood on 2026-09-24, on
+branch `fix/project-port-band`. Every status claim in it is dated to that day
+and several have since been closed** — sessions now survive a restart, logins
+are recorded and pushed, enrolment has been run against the live Cloudflare API,
+and the fleet page exists. Read no line of this as a present-tense fact.
+
+What does not expire is the **shape** of each finding: what was asked for, what
+was built instead, and what was built that nobody asked for. That is why it is
+kept.
+
+For anything current:
+
+```bash
+python3 hub/tools/step.py      the current step of the build order
+python3 hub/tools/atlas.py     what exists, and what was typed rather than installed
+python3 hub/tools/matrix.py    every checklist row, asserted against the machines
+python3 hub/tools/tracks.py    which track is next, and what gates it
+```
+
+Sources read for the audit: `hub/INTAKE.md`, `hub/intake/*`,
+`hub/kernel/control.py`, `hub/handlers/registry.py`, `hub/handlers/mesh.py`,
+`hub/kernel/router.py`, `hub/server.py`, `hub/FABRIC.md`, `hub/CONSTITUTION.md`,
+`hub/BOM.md`, `hub/CAPABILITIES.md`, `hub/ui-next/`, `hub/tools/`,
+`bootstrap.sh`, `enroll.sh`, `docs/flareshub-blueprint.md`, `git log -40`, plus
+the uncommitted diff of that day.
+
+> Two of the documents this audit read have since been drained to doctrine
+> (`hub/BOM.md`) or deleted (`hub/CAPABILITIES.md`) — acting on the VERDICT at
+> the foot of this page.
 
 ---
 
@@ -48,7 +76,7 @@ The markdown one (`INTAKE.md`, `MANIFEST.md`, `projects/`, `claims/`, `verified/
 
 **6. The telescope-code namespace reservation block** in `router.py` (modules 00–49 carved up across ServerHub/FlareVault/Metaforge/local, `/api/vault/*` "RESERVED AND DELIBERATELY UNIMPLEMENTED"). Reserving URL space on behalf of two projects that have not asked for it.
 
-**7. `_pending()` is hardcoded.** `registry.py:180` returns one literal dict about the 10020→7100 band move, gated on `if band[0] == 7100`. The PENDING block — the thing you specifically demanded in Step 6 — is a constant in a Python file. It will report that one change forever and will never report the next one.
+**7. `_pending()` was hardcoded. FIXED.** It returned one literal dict about the 10020→7100 band move, gated on `if band[0] == 7100` — so when the band moved to 12000–18999 the gate stopped matching and the field went to `[]`: "nothing is coming", reported at the moment everything changed. It now subtracts `control.promoted_band()` from `control.served_band()`, with no record reported as UNKNOWN rather than as empty. The step-2 check that scored this done was matching the word "control" inside the docstring sentence saying the function did *not* read the record; it walks the AST now, so prose cannot pass it.
 
 **8. 1,965 lines uncommitted on six files.** Your memory rule is *"every code change must be committed and pushed immediately, no batching."* `bootstrap.sh` +509, `registry.py` +705, `control.py` +313, `mesh.py` +292, `backup.sh`, `fleet-status.py`. Batched.
 

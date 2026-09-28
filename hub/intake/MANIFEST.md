@@ -16,24 +16,31 @@ A claim is never trusted. `claimed → verified` is me running `docker ps`, read
 the disk and the compose on that project's home server and writing what actually
 is. The gap is the deliverable.
 
-## Board
+## The board is not here
 
-Server masters right now — **the two servers are NOT on the same code**:
+A table stood here: one row per project, with its home server, its state, the
+master it had acknowledged, whether it was stale, and how many diffs were open.
+Beside it sat a box giving each server's current code ref.
 
+**That is `control.db`'s job, and having both is two sources of truth for one
+fact** — the precise disease this system exists to remove. The markdown board
+and the SQLite `projects` table were built four days apart and both were live.
+
+```bash
+curl -s <hub>/api/registry              every project on THIS server
+curl -s <hub>/api/registry/<project>    one project's standing record
+curl -s <hub>/api/mesh/registry         what runs where, and whether it is the same build
+python3 hub/tools/step.py               whether any intake has started at all
 ```
-ksgcohub      5ca90f6    PR #18
-fks-services  ab02c2f    PR #10      eight commits behind, no identity.py at all
-```
 
-Every project is `stale` against its own server's master until it acknowledges
-it. All four are stale, because none has ever acknowledged one.
+**Scoped to one server by construction.** The rules a project is given are
+derived from THIS host's disks and THIS host's bound ports, so the same project
+on the other machine is a different record with different values — which is
+correct, not duplication.
 
-| Project | Home | State | Ack'd master | Stale | Open diffs |
-|---|---|---|---|---|---|
-| fksinv | ksgcohub | `awaiting` | none | **yes** | — |
-| metaforge | fks-services | `awaiting` | none | **yes** | 4 SQL migrations missing |
-| babyhelp | ksgcohub | `awaiting` | none | **yes** | **4 open**, 0 disposed → `projects/babyhelp.md` |
-| flarevault | fks-services | `awaiting` | none | **yes** | volume unbacked since 2026-07-27 |
+**Staleness is a marker, never a gate.** It means *"has not been told"*, so
+nothing may assume the project knows. It is information for the operator, not
+an enforcement.
 
 ## Layout
 
@@ -129,12 +136,11 @@ reconciled. An undeclared deviation is the only failure state.
 
 ## Sequence
 
-```
-1  fksinv      ksgcohub      most of its blueprint is already in hand
-2  metaforge   fks-services  4 missing SQL migrations — urgent
-3  babyhelp    ksgcohub      4 known deviations
-4  flarevault  fks-services  volume unbacked since 2026-07-27
-```
-
-One at a time, each fully reconciled before the next starts. Four half-done
+**One at a time, each fully reconciled before the next starts.** Four half-done
 intakes tell you less than one finished one.
+
+Which project goes first is an **operator decision**, not a task — nothing
+proceeds on it by itself, and the order is not written down here because it
+changes with what the operator learns. `python3 hub/tools/atlas.py` lists it
+among the operator decisions; `python3 hub/tools/step.py` says whether the
+first one has started.

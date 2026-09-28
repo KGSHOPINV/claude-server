@@ -90,10 +90,21 @@ ROUTES = [
     {"code": "20313703", "method": "POST", "path": "/api/registry/",              "prefix": True,  "gate": 1, "handler": "post_registry_project","module": "registry"},
     {"code": "20313704", "method": "POST", "path": "/api/ack/",                   "prefix": True,  "gate": 1, "handler": "post_ack",             "module": "registry"},
 
-    # ── Mesh (module 12) — hub-and-spoke: nodes report UP, never laterally ──
+    # ── Mesh (module 12) — beats ENRICH the register; the zone IS the register
+    # Corrected 2026-09-26. This said "hub-and-spoke: nodes report UP, never
+    # laterally". Who exists is answered by the zone's flareshub-* records
+    # (kernel/fleet.discover), so no box has to be up for the fleet to be
+    # visible. These two POSTs still only ever go one way, and a node still
+    # never writes another node's state -- that part was the useful half.
     {"code": "20312701", "method": "POST", "path": "/api/heartbeat",              "prefix": False, "gate": 0, "handler": "post_heartbeat",       "module": "mesh"},
     {"code": "20312702", "method": "POST", "path": "/api/mesh/register",          "prefix": False, "gate": 0, "handler": "post_mesh_register",   "module": "mesh"},
     {"code": "20312703", "method": "GET",  "path": "/api/mesh/fleet",             "prefix": False, "gate": 1, "handler": "get_mesh_fleet",       "module": "mesh"},
+    # A handler with no route is not a feature, it is a 404 with a telescope
+    # code. get_mesh_registry was written, coded 20312709 and documented, and
+    # this line was never added -- so the one address that answers "what runs
+    # where, and is it the same build" answered 404 on both servers. Verified
+    # against ksgcohub on 2026-09-26 before this entry existed.
+    {"code": "20312709", "method": "GET",  "path": "/api/mesh/registry",          "prefix": False, "gate": 1, "handler": "get_mesh_registry",    "module": "mesh"},
 
     # ── The lobby (module 16) — dashboard.<zone>, central mode ───────────────
     # Gate 1 here is a DECLARATION, not the control. A gate level cannot say
@@ -195,15 +206,23 @@ ROUTES = [
     #
     # Gate 1 for reading and answering: a project holds a session already.
     # Gate 2 to PUBLISH -- that speaks for the server to every project at once.
+    # GET /api/bulletins is gate 1 and POST is gate 2, on the same path. That
+    # is not an inconsistency: listing is reading, publishing speaks for the
+    # server to every project at once. resolve() keys the exact table on
+    # (method, path), so the two never see each other.
+    {"code": "20315715", "method": "GET",  "path": "/api/bulletins",              "prefix": False, "gate": 1, "handler": "get_all_bulletins",     "module": "exchange"},
     {"code": "20315701", "method": "GET",  "path": "/api/bulletins/",             "prefix": True,  "gate": 1, "handler": "get_bulletins",         "module": "exchange"},
     {"code": "20315704", "method": "POST", "path": "/api/bulletins",              "prefix": False, "gate": 2, "handler": "post_bulletins",        "module": "exchange"},
     # Longest-prefix first: /read and /readers must be tested before the bare
-    # /api/bulletin/<n>, or the bare route swallows them.
+    # /api/bulletin/<n>, or the bare route swallows them. -trail is its own
+    # prefix for the same reason -readers is: it does not hang off /bulletin/.
     {"code": "20315703", "method": "POST", "path": "/api/bulletin/",              "prefix": True,  "gate": 1, "handler": "post_bulletin_read",    "module": "exchange"},
     {"code": "20315705", "method": "GET",  "path": "/api/bulletin-readers/",      "prefix": True,  "gate": 1, "handler": "get_bulletin_readers",  "module": "exchange"},
+    {"code": "20315717", "method": "GET",  "path": "/api/bulletin-trail/",        "prefix": True,  "gate": 1, "handler": "get_bulletin_trail",    "module": "exchange"},
     {"code": "20315702", "method": "GET",  "path": "/api/bulletin/",              "prefix": True,  "gate": 1, "handler": "get_bulletin",          "module": "exchange"},
 
     {"code": "20315706", "method": "GET",  "path": "/api/tickets",                "prefix": False, "gate": 1, "handler": "get_tickets",           "module": "exchange"},
+    {"code": "20315716", "method": "GET",  "path": "/api/tickets/",               "prefix": True,  "gate": 1, "handler": "get_ticket",            "module": "exchange"},
     {"code": "20315707", "method": "POST", "path": "/api/tickets",                "prefix": False, "gate": 1, "handler": "post_tickets",          "module": "exchange"},
 
     {"code": "20315708", "method": "GET",  "path": "/api/project-log/",           "prefix": True,  "gate": 1, "handler": "get_project_log",       "module": "exchange"},
@@ -277,7 +296,9 @@ import os
 import threading
 
 # Gate enforcement is OFF by default. The route table declares the target
-# posture (52 of 65 routes gated) but the current UI only sends a token on a
+# posture (most routes gated; the count is derived, never typed -- it was
+# written down in SEVEN places and every one of them was wrong) but the
+# current UI only sends a token on a
 # handful of calls, so enforcing here would lock out the app. Shadow mode
 # records what WOULD have been denied; flip HUB_ENFORCE_GATES=1 once the UI
 # sends X-Hub-Token / X-Gate-Token on every gated call.
@@ -339,15 +360,45 @@ def _load(module):
 
 
 def _gate_allows(handler, route, db_conn_fn):
-    """Evaluate the route's declared gate. Returns (allowed, reason)."""
+    """Evaluate the route's declared gate. Returns (allowed, reason).
+
+    LEVEL 2 AND LEVEL 3 ARE DIFFERENT QUESTIONS, and asking gate_check both of
+    them conflated them. Per the FlareVault login-flow spec the layers are:
+
+        1  read the fleet          a session
+        2  console / containers    an ADMIN ROLE -- what logging in earns you
+        3  destructive             a STEP-UP, proved at the moment of use
+        4  vault / kill switch     FlareVault's
+
+    Level 2 was being answered by gate_check, which only knows about TOTP. That
+    is the wrong instrument: TOTP is the step-up for 3, and requiring it at 2
+    would put the whole console behind an authenticator while ALSO -- because
+    gate_check returns True when TOTP is unconfigured -- leaving 2 and 3 both
+    wide open in exactly the state both live boxes are in. One call answering
+    two questions got both wrong at once.
+
+    So 2 asks the session's role and 3 asks for the step-up. This makes
+    shadow_report() tell the truth about WHICH gate a route would have failed
+    and why, which matters because that report is what anyone reads before
+    flipping HUB_ENFORCE_GATES on.
+
+    A caveat this cannot fix from here: the role is only as good as the
+    allowlist behind it. check_auth grants CF_ROLE to any identity Cloudflare
+    Access approved, and on a box where HUB_CF_EMAILS is unset the test
+    short-circuits on the empty list and admits everyone. Level 2 is then
+    'anyone Access let in', which is not the same as 'an admin'.
+    """
     level = route.get('gate', 0)
     if level <= 0:
         return True, ''
     from kernel.auth import check_auth, gate_check
-    if level >= 1 and check_auth(handler) is None:
+    sess = check_auth(handler)
+    if level >= 1 and sess is None:
         return False, 'no_session'
-    if level >= 2 and not gate_check(handler.headers, level, db_conn_fn):
-        return False, 'gate_required'
+    if level >= 2 and (sess or {}).get('role') != 'admin':
+        return False, 'admin_required'
+    if level >= 3 and not gate_check(handler.headers, level, db_conn_fn):
+        return False, 'step_up_required'
     return True, ''
 
 
@@ -386,7 +437,11 @@ SPLASH_BEHIND_LOGIN = ('/fleet', '/flareshub', '/s/', '/api/lobby', '/api/door',
                        '/ui/', '/api/auth/check', '/api/node')
 
 
-# 20200325  _splash_only — the apex must never reach the API
+# MOVED, 2026-09-27: 202003 25-26 -> 38-39. These two were duplicates of
+# kernel/identity.py's `mode` and `issue`, which own a contiguous run at
+# 202003 21-27. Two answers to "go to 20200325" is exactly what the address
+# space exists to rule out. Reallocated with `hub/tools/atlas.py --codes`.
+# 20200338  _splash_only — the apex must never reach the API
 def _splash_only(handler, path):
     """Door 1 is a PUBLIC page, so it cannot sit behind Access. That means the
     hostname serving it reaches this origin with no gate in front of it at all.
@@ -419,7 +474,7 @@ def _splash_only(handler, path):
     return True
 
 
-# 20200326  _alias_redirect — an alias answers 301 and serves nothing
+# 20200339  _alias_redirect — an alias answers 301 and serves nothing
 def _alias_redirect(handler, path):
     """True if this request was answered with a redirect to the canonical host.
 

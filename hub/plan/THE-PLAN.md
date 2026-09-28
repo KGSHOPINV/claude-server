@@ -1,4 +1,26 @@
-# THE PLAN — as you stated it
+# THE PLAN — as the operator stated it
+
+**Compiled 2026-09-24 from 303 operator turns. This is a record of what was
+asked for, in the operator's own words, and it does not expire** — a
+requirement stated is a requirement stated, whether or not it has since been
+built.
+
+**Nothing here is a status claim.** Where this document says a thing was never
+built, read that as *"as of the day this was compiled"* and check:
+
+```bash
+python3 hub/tools/step.py      the current step
+python3 hub/tools/atlas.py     what exists, and what was typed rather than installed
+python3 hub/tools/tracks.py    which track is next
+```
+
+§7, DECISIONS STILL YOURS, is the live part: those are operator decisions and
+nothing proceeds on them by itself. `atlas.py` lists the same class of item at
+its own foot.
+
+---
+
+## Preamble
 
 *Source: 303 of your turns, in order, across 4 files. Everything below is yours. Where two turns conflict, both are shown and the later one is marked.*
 

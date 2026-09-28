@@ -2,8 +2,23 @@ notes/secrets.env
 *.env
 *.env.local
 *.env.*.local
-db/server.db
 .netlify/
+
+# THE RUNNING SYSTEM WRITES THESE. Tracking a file the system rewrites makes
+# the checkout permanently dirty and every `git pull` a conflict -- which is
+# exactly what fks-services has been in: `.maintenance-baseline.json` is
+# rewritten nightly by maintenance.py (new `ts`, new `disk_pct`), so `git
+# status` there has shown ` M .maintenance-baseline.json` since August and a
+# pull would have collided on it forever.
+.maintenance-baseline.json
+
+# db/ is STATE, all of it, not just server.db. This said `db/server.db` and
+# nothing else, so control.db, fleet.json and changewatch.json all showed as
+# untracked on both boxes -- and, worse, bank.db was one `git add .` away from
+# being committed. kernel/bank.py holds secrets in that file and its own
+# docstring says it is missed by backup rather than refused; it must be missed
+# by git by RULE, not by nobody having typed the wrong command yet.
+db/
 
 # CLAUDE.md is your personal workspace config (real IPs, SSH user, etc.)
 # Copy CLAUDE.example.md → CLAUDE.md and fill in your values.

@@ -1,4 +1,15 @@
-# Verdict
+# Verdict — a session audit, 2026-09-24
+
+**This is HISTORY and stays exactly as written.** It is a record of one
+session's failures, with the turn numbers, and it is true forever. Nothing in it
+is a current status: every "still undone" below describes that day, and several
+have since been closed. Do not read a line of it as a present-tense claim —
+run `python3 hub/tools/step.py` and `python3 hub/tools/matrix.py` for that.
+
+The part that does not expire is **§5, the rules with a one-turn test.** Those
+are binding.
+
+---
 
 ## 1. The pattern
 

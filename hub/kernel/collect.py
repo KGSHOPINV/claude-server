@@ -50,11 +50,17 @@ HTTPS_PORTS = {9443, 9090}
 # node receipt advertises what is free inside them, so a project is never told
 # two different things about where it may bind.
 #
-# 7100-7899 because it is the only wide stretch no PORT_LANE claims. It must
-# stay that way: anything above 10000 collides with the Supabase stack lane.
-# Moved off 7100-7899 (800 ports, 16 projects) on 2026-09-24. 12000-18999 is
-# 7000 unclaimed ports -- nothing between the Supabase lane and Monitoring --
-# which is 70 projects at 100 each with room to widen rather than shrink.
+# THE RULE, and it is about lanes rather than a number: the band must be a
+# wide stretch no PORT_LANE claims. That is what 10020-10990 broke -- it sat
+# inside the Supabase stack lane at 10000-10999, so admit handed out ports
+# another service owns. "Anything above 10000 collides" was the shorthand for
+# it, and the shorthand is false: 11000-11999 is the AI lane and 19000-19999 is
+# Monitoring, while everything between them is unclaimed.
+#
+# 7100-7899 satisfied the rule and was too small -- 800 ports, 16 projects.
+# Moved off it on 2026-09-24. 12000-18999 is 7000 unclaimed ports, nothing
+# between the Supabase lane and Monitoring, which is 70 projects at 100 each
+# with room to widen rather than shrink.
 #
 # MIGRATION, not a cutover. Existing projects keep their ports until they choose
 # to move; only new ones are held to this. fksinv sits at 10100/10101 and
@@ -792,6 +798,30 @@ def get_setup_status():
     def svc_running(name):
         return cmd_ok(f"systemctl is-active {name} --quiet 2>/dev/null || systemctl --user is-active {name} --quiet 2>/dev/null")
 
+    # Step 09 is the one row here whose label names an ongoing ACTIVITY rather
+    # than an installed thing, so `command -v` cannot carry it. It used to:
+    #
+    #     {'id': '09', 'label': 'Backup', 'done': cmd_ok('command -v server-backup')}
+    #
+    # server-backup ships with server-kit. On fks-services it is on PATH, no
+    # schedule invokes it, hub-backup.timer is not-found, and the newest set is
+    # days old — yet this row ticked, and app.html drew the tick. The same
+    # mistake was fixed in hub/tools/install-preflight.py (2e71992); the
+    # derivation now lives in kernel.storage so the tool and this row cannot
+    # disagree about whether this machine is backed up.
+    #
+    # `running` means a schedule is ACTIVE and a dated set carrying this
+    # machine's id is RECENT. Imported inside the function, matching how this
+    # module already reaches kernel.storage for /api/status, and degrading to
+    # False if storage is unavailable — an untickable row is the safe direction
+    # for this one.
+    def backups_running():
+        try:
+            from kernel import storage as _st
+            return bool(_st.backup_state()['running'])
+        except Exception:
+            return False
+
     steps = [
         {'id': '01', 'label': 'System packages',   'done': cmd_ok('command -v git && command -v curl && command -v ufw')},
         {'id': '02', 'label': 'Docker',             'done': cmd_ok('docker info >/dev/null 2>&1')},
@@ -801,7 +831,7 @@ def get_setup_status():
         {'id': '06', 'label': 'Monitoring',         'done': cmd_ok('docker ps --filter name=uptime-kuma --format "{{.Names}}" | grep -q uptime-kuma')},
         {'id': '07', 'label': 'Claude CLI',         'done': cmd_ok('command -v claude')},
         {'id': '08', 'label': 'Optional services',  'done': os.path.isfile(os.path.join(home, '.server-kit-extras-done'))},
-        {'id': '09', 'label': 'Backup',             'done': cmd_ok('command -v server-backup')},
+        {'id': '09', 'label': 'Backup',             'done': backups_running()},
         {'id': '10', 'label': 'CLI helpers',        'done': cmd_ok('command -v health-check')},
         {'id': '11', 'label': 'Hardware monitor',   'done': cmd_ok('command -v hw-monitor')},
         {'id': '12', 'label': 'Security tools',     'done': cmd_ok('command -v rkhunter')},

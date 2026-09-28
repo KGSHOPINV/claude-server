@@ -104,7 +104,7 @@ print("%d %d" % (len(ps), sum(1 for p in ps if p.get("stale"))) if d is not None
     return d
 
 
-# 20404712  _registry_cells — two numbers, or "n/a" and no pretending
+# 20404724  _registry_cells — two numbers, or "n/a" and no pretending
 def _registry_cells(raw):
     """"n/a" and "0" are different answers and only one of them is information.
     A node whose hub predates /api/registry, whose hub is down, or whose curl
