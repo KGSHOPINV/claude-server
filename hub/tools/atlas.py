@@ -337,7 +337,19 @@ def show_config():
 #
 # So a new comment style anywhere in this repo must be added here on the same
 # day, or this section starts lying again.
-CODE_RE = re.compile(r'^\s*(?:#|//|/\*|\*)\s+(\d{8})\s', re.M)
+# A DECLARATION, NOT A MENTION. The `\s{2,}\S` is load-bearing.
+#
+# An agent hit a duplicate, wrote a comment explaining it -- "# 20200359 in
+# this same file ..." -- and the comment DECLARED the number a second time.
+# Writing about a collision created one. That is the funniest available
+# failure for an allocator and it is entirely this regex's fault.
+#
+# The house pattern is `# NNNNNNNN  name -- description`: code, TWO spaces,
+# then an identifier. Prose citing a code writes one space and a word.
+# Measured across the whole repo: 472 declarations match either form and the
+# stricter one drops NONE of them, so requiring two spaces separates
+# declaring from mentioning at zero cost.
+CODE_RE = re.compile(r'^\s*(?:#|//|/\*|\*)\s+(\d{8})\s{2,}\S', re.M)
 CODE_EXT = ('.py', '.sh', '.html', '.js', '.css')
 
 
