@@ -208,19 +208,77 @@ _SHIM = """<script data-flare-lobby-shim="1">
     });
   } catch (e) { /* no serviceWorker here at all is the same outcome */ }
 
+  // WHY THIS IS A PILL AND NOT A PARAGRAPH.
+  //
+  // It used to be a 300px box pinned bottom-right carrying the full
+  // explanation -- service tokens, the layer-3 seam, remote_path_unsupported,
+  // the unbridged login gate -- on EVERY drill-in, with an orange border that
+  // reads as an error, and no way to close it. All of that is true and worth
+  // saying ONCE. Said every time, in the corner, over the UI, it stops being
+  // information and becomes furniture you learn to look past -- which is also
+  // how you stop noticing the word READ-ONLY, the one part that changes what
+  // you can do.
+  //
+  // So: the state is always visible and small, the reasoning is one click
+  // away, and dismissing it lasts for the tab. Per tab and not forever,
+  // because "am I on the remote box or my own?" must never be a thing you
+  // answered last week.
   function banner() {
+    var KEY = "flare_drillin_hidden";
+    try { if (sessionStorage.getItem(KEY) === "1") return; } catch (e) {}
+
     var d = document.createElement("div");
     d.setAttribute("role", "status");
     d.style.cssText = "position:fixed;right:10px;bottom:10px;z-index:2147483647;" +
-      "max-width:300px;padding:8px 11px;border-radius:8px;border:1px solid #f78166;" +
-      "background:#161b22;color:#e6edf3;font:11px/1.5 ui-sans-serif,system-ui," +
-      "sans-serif;box-shadow:0 2px 10px rgba(0,0,0,.4)";
-    d.innerHTML = '<b>Routed into ' + NAME + '</b><br>' +
-      'Through the lobby, over a service token. Read-only: writes are the ' +
-      'layer-3 seam FlareVault owns, views this hub does not proxy report ' +
-      '<code>remote_path_unsupported</code>, and this node\\'s own login gate ' +
-      'is not bridged &mdash; the lobby holds the credential, you do not.' +
-      '<br><a href="/" style="color:#f78166">Back to the fleet</a>';
+      "max-width:min(320px,calc(100vw - 20px));border-radius:8px;" +
+      "border:1px solid #30363d;background:#161b22;color:#e6edf3;" +
+      "font:11px/1.5 ui-sans-serif,system-ui,sans-serif;" +
+      "box-shadow:0 2px 10px rgba(0,0,0,.4)";
+
+    var bar = document.createElement("div");
+    bar.style.cssText = "display:flex;align-items:center;gap:8px;padding:6px 9px";
+    bar.innerHTML =
+      '<span style="width:6px;height:6px;border-radius:50%;background:#f78166;' +
+      'flex:0 0 auto"></span>' +
+      '<span style="flex:1 1 auto;min-width:0;overflow:hidden;' +
+      'text-overflow:ellipsis;white-space:nowrap">' + NAME +
+      ' <span style="color:#8b949e">&middot; read-only</span></span>';
+
+    function btn(label, title) {
+      var b = document.createElement("button");
+      b.type = "button"; b.textContent = label; b.title = title;
+      b.style.cssText = "flex:0 0 auto;background:none;border:0;color:#8b949e;" +
+        "font:inherit;cursor:pointer;padding:0 3px;line-height:1";
+      return b;
+    }
+    var why = btn("why?", "what read-only means here");
+    var hide = btn("\\u00d7", "hide until this tab is closed");
+    var exit = document.createElement("a");
+    exit.href = "/"; exit.textContent = "fleet"; exit.title = "back to the fleet";
+    exit.style.cssText = "flex:0 0 auto;color:#f78166;text-decoration:none;padding:0 3px";
+    bar.appendChild(why); bar.appendChild(exit); bar.appendChild(hide);
+
+    var more = document.createElement("div");
+    more.hidden = true;
+    more.style.cssText = "padding:0 9px 8px;color:#8b949e;border-top:1px solid #30363d;" +
+      "margin-top:2px;padding-top:7px";
+    more.innerHTML =
+      'You reached ' + NAME + ' through the lobby, over a service token. ' +
+      'Writes are the layer-3 seam FlareVault owns. Views this hub does not ' +
+      'proxy report <code>remote_path_unsupported</code>. This node\\'s own ' +
+      'login gate is not bridged &mdash; the lobby holds the credential, ' +
+      'you do not.';
+
+    why.onclick = function () {
+      more.hidden = !more.hidden;
+      why.textContent = more.hidden ? "why?" : "less";
+    };
+    hide.onclick = function () {
+      try { sessionStorage.setItem(KEY, "1"); } catch (e) {}
+      d.remove();
+    };
+
+    d.appendChild(bar); d.appendChild(more);
     document.body.appendChild(d);
   }
   if (document.readyState === "loading") {
