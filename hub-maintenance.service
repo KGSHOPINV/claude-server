@@ -1,4 +1,9 @@
 [Unit]
+# Nightly maintenance. ExecStart below points at /home/admin1/hub/maintenance.py,
+# and /home/admin1/hub is a checkout of this repo's ROOT -- so the file this unit
+# runs is maintenance.py at the repo root, NOT hub/maintenance.py. The two are
+# kept byte-identical for that reason. The same trap sits under hub-alert.service
+# and hub-daily.service, whose "hub/scripts/..." paths mean the repo's scripts/.
 Description=Hub Nightly Maintenance
 After=hub.service
 
@@ -6,5 +11,16 @@ After=hub.service
 User=admin1
 ExecStart=/usr/bin/python3 /home/admin1/hub/maintenance.py
 Environment=HUB_API=http://localhost:8765
-Environment=NTFY_URL=http://localhost:8085
-Environment=NTFY_TOPIC=server-alerts
+
+# NTFY_URL AND NTFY_TOPIC USED TO BE SET HERE, TO http://localhost:8085 AND
+# server-alerts. Both were wrong on fks-services: ntfy listens on 7001 with the
+# topic fks-services and its ACL denies anonymous publish, so every nightly
+# report this unit sent was a POST to a closed port -- and there was no token
+# line here at all, so even the right port would have returned 403.
+#
+# They are gone rather than corrected. maintenance.py now reads
+# ~/.server-alerts.conf, the same file hub/kernel/log.py parses and
+# hub/scripts/ntfy-lib.sh sources, which already holds the true URL, topic and
+# token on each box. A unit file that restates them is a second place for the
+# answer to be wrong in, and this is what that looked like. Set HUB_NTFY_URL
+# here only to deliberately override the machine's own config.
