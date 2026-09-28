@@ -400,7 +400,7 @@ def _split(path):
 
 
 # 20318707  _remote_path — what may be fetched from a node, and nothing else
-def _remote_path(rest):
+def _remote_path(rest, mobile=False):
     """Returns (node_path, kind) or (None, reason).
 
     AN ALLOWLIST, NOT SANITISATION. This hub holds a credential that opens
@@ -429,6 +429,28 @@ def _remote_path(rest):
     if '..' in rest or '//' in rest:
         return None, 'path_traversal_refused'
     if rest in _DOC_PATHS:
+        # THE DEVICE CLASS HAS TO SURVIVE THE HOP.
+        #
+        # handlers/identity.py:serve_app decides mobile-or-desktop from the
+        # User-Agent of whoever asked. Through this prefix the asker is the
+        # lobby, and svctoken.USER_AGENT is a FIXED string ('FlareSHub-Lobby')
+        # that must NOT become the browser's -- Cloudflare's Browser Integrity
+        # Check answers an unrecognised agent with 403, which once read as
+        # Access refusing a valid token and cost an hour.
+        #
+        # So the node never sees a phone, and the result was that the SAME
+        # phone got mobile.html from the box it entered through and app.html
+        # from every other one. Two consoles, one device, decided by which
+        # server you happened to pick -- the exact opposite of one UI serving
+        # every box.
+        #
+        # The lobby already knows, so the lobby asks for the right page.
+        # '/mobile' is in _DOC_PATHS already; nothing about the allowlist
+        # widens. Only the bare root is rewritten: an explicit /desktop or
+        # /mobile is the operator overriding, and overriding it back would
+        # make that link do nothing.
+        if rest in ('', '/') and mobile:
+            return '/mobile', 'doc'
         return (rest or '/'), 'doc'
     if rest.startswith('/ui/'):
         # By EXTENSION, the same rule handlers/identity.py:serve_ui_asset uses
@@ -776,7 +798,14 @@ def route_into_server(handler, path, params):
         _serve_local(handler, rest)
         return
 
-    node_path, kind = _remote_path(rest)
+    # Read the device class off the request that actually came from a browser,
+    # here, rather than at the node -- by the time the node sees it the agent
+    # is the lobby's fixed one. Same test handlers/identity.py:serve_app uses.
+    _ua = handler.headers.get('User-Agent', '')
+    _mob = any(x in _ua for x in ('Mobile', 'Android', 'iPhone', 'iPad',
+                                  'iPod', 'BlackBerry', 'Windows Phone'))
+
+    node_path, kind = _remote_path(rest, _mob)
     if node_path is None:
         from handlers.lobby import PROXY_ALLOW   # noqa: PLC0415
         _finding(handler, 403, kind,
