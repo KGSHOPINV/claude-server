@@ -303,6 +303,27 @@ def get_admit(handler, path, params):
     dr = land['data_root']
     data_dir = ('%s/<project>' % dr['path'].rstrip('/')) if dr['dedicated']                else '/srv/docker/<project>/data'
 
+    # The same derivation, one level further down. data_dir above is one
+    # string; a project that saves documents, PDFs, images, audio and video
+    # needs to know which of those gets backed up nightly, which is
+    # regenerable, and which single directory a serving layer may expose
+    # without a session. kernel.storage owns all of it — this handler asks.
+    # Both halves come off the cached landscape, so /api/admit does not shell
+    # out to findmnt again just to answer a question landscape() already has.
+    data = _store.project_data(wanted, ms=land['mounts'],
+                               pr=land['project_root'])
+
+    # The forbidden list said "do not write outside /srv/docker/<project>" on
+    # every node. On a node WITH a dedicated data disk the contract hands the
+    # project /srv/data/<project> and this line then forbade writing there —
+    # the front door contradicting itself, live on ksgcohub, since the day the
+    # data path started being derived and this line did not.
+    proj_dir = '/srv/docker/%s' % data['project']
+    write_rule = ('do not write outside %s' % proj_dir
+                  if data['root'].startswith(proj_dir + '/')
+                  else 'do not write outside %s (code and compose) or %s (data)'
+                       % (proj_dir, data['root']))
+
     # WHICH SERVER, AND WHAT IS COMING. THE-PLAN step 6, verbatim: "YOUR GOING
     # TO ALSO PROVIDE THEM WITH THERE SERVER REIPET AND THERE SERVER ID ... AND
     # ALSO ALL THE PAENDINDING SHIT THAT IS GOING TO GO DOWN STREAM LATER".
@@ -350,6 +371,20 @@ def get_admit(handler, path, params):
             'findings':  land['findings'],
         },
 
+        # THE PER-PROJECT DATA CONTRACT. Added because `storage.data_root` and
+        # one `contract.data` string answered "which disk" and nothing answered
+        # "what goes where, and which of it survives me". A project storing
+        # user uploads had to invent that, and two projects inventing it
+        # separately is the drift this endpoint exists to remove.
+        #
+        # Isolation is by DIRECTORY, not by device. Commingling on one disk is
+        # fine and expected — six projects under one data root are still six
+        # addressable, separately-tarrable, separately-restorable trees, and
+        # `du -sh <root>/*` names the one that grew. What is refused is
+        # indistinguishability: data inside a container, or in a named volume
+        # with a name only Docker knows.
+        'data': data,
+
         # The contract. Same words every project, so the fleet stays queryable.
         'contract': {
             'directory': '/srv/docker/<project>',
@@ -359,9 +394,19 @@ def get_admit(handler, path, params):
                 'com.ksg.project': '<project>',
                 'com.ksg.owner':   '<owner>',
                 'com.ksg.role':    '<api|ui|db|worker>',
-                'com.ksg.data':    '/srv/docker/<project>/data',
+                # Was the literal '/srv/docker/<project>/data'. On ksgcohub the
+                # contract told a project to keep data at /srv/data/<project>
+                # and then labelled it /srv/docker/<project>/data, so the one
+                # label a human greps to find a project's data pointed at a
+                # directory that does not exist there. Derived now, like the
+                # path it is supposed to describe.
+                'com.ksg.data':    data['root'],
             },
-            'data':      data_dir + '  — one bind mount, the only thing needing backup',
+            # Was "one bind mount, the only thing needing backup". Both halves
+            # were wrong: it is one bind mount PER BUCKET, and cache/ and
+            # releases/ are explicitly not backed up. See the `data` block.
+            'data':      data['root'] + '  — six bind mounts, one per bucket; '
+                         'see `data.buckets` for which are backed up',
             'secrets':   '.env, gitignored, generated fresh. Never copied between projects.',
             'git':       'its own repo. The server is never the source of truth.',
         },
@@ -372,14 +417,36 @@ def get_admit(handler, path, params):
                 'do not bind outside the assigned band',
                 "do not join the docker network of another project",
                 "do not open the database of another project — cross-project data moves over HTTP",
-                'do not write outside /srv/docker/<project>',
+                # Was the flat string '/srv/docker/<project>'. On ksgcohub the
+                # contract above hands the project /srv/data/<project> and this
+                # line then forbade writing there — the front door contradicted
+                # itself on one of the two boxes, and had since the data path
+                # was first derived.
+                write_rule,
+                # Data inside the container, or in a volume with a name only
+                # Docker knows, is not isolated — it is a copy that happens to
+                # still be running. `docker compose down -v` takes a named
+                # volume with it and asks nothing.
+                'no named volumes for anything you would mourn — bind mount a '
+                'bucket under %s instead' % data['root'],
+                'nothing outside %s may be served without a session'
+                % data['buckets']['public']['path'],
+                'do not back up %s or %s — regenerable, and copying them nightly '
+                'is how the set that matters gets crowded out'
+                % (data['buckets']['cache']['path'],
+                   data['buckets']['releases']['path']),
                 "do not reuse secrets belonging to another project",
                 'no docker run — every container comes from a compose file in the project directory',
             ],
         },
 
         # The test. If deleting the project disturbs anything else, it was not isolated.
-        'acceptance': "docker ps --filter label=com.ksg.project=<project> returns "
-                      "every container you own and nothing else; deleting your "
-                      "directory and those containers disturbs nothing else on the host",
+        # Two halves, and the second one is new. The first proves nothing of
+        # yours leaks into anyone else. The second proves nothing of yours dies
+        # with your containers — which is the half a project passes by accident
+        # right up until the day it does not.
+        'acceptance': ("docker ps --filter label=com.ksg.project=<project> returns "
+                       "every container you own and nothing else; deleting your "
+                       "directory and those containers disturbs nothing else on "
+                       "the host. Then: " + data['acceptance']),
     })

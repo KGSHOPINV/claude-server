@@ -589,6 +589,238 @@ def backup_state(ms=None, refresh=False):
     return out
 
 
+# ── Per-project data ─────────────────────────────────────────────────────────
+# data_root() answers "where does data go on this machine". It does not answer
+# "where does MY data go", and until now nothing did: /api/admit handed a
+# project one string and left the shape of what goes inside it to whoever was
+# typing that day.
+#
+# The operator stated the requirement plainly: an application saves documents,
+# PDFs, images, audio and video, some internal and some public, and "it's not
+# that there IS isolation for a project's storage, but there SHOULD be, because
+# you don't want your container cluttered with the data sets it needs to
+# regionalize and allocate and distribute cleanly, so when things break or have
+# failures those file sets are saved in a different area or a different
+# partition." And: commingling on one host is fine — "on its onset it's already
+# isolated and segregated even if it's commingled."
+#
+# So the target is ADDRESSABLE, ISOLATED, SURVIVES THE CONTAINER. Sharing a
+# disk is allowed. Being indistinguishable on it is not.
+#
+# The buckets are named because the backup class has to be derivable from the
+# path alone. backup.sh already skips volumes matching *cache*; a bucket called
+# cache/ inherits that for free, and a project that puts its regenerable
+# thumbnails there is not asking anyone to remember that they are regenerable.
+# A flat list of names with one declared purpose each is the whole scheme: no
+# per-project config file, nothing to maintain, nothing to drift.
+PROJECT_BUCKETS = (
+    ('db', 'structured state a database writes',
+     'never served', 'nightly'),
+    ('media', 'files the app stores for its users — documents, PDFs, images, '
+              'audio, video',
+     'through the app, session required', 'nightly'),
+    ('public', 'the ONLY path a serving layer may expose without a session',
+     'open', 'nightly'),
+    ('private', 'files the app stores for itself — exports, reports, inbound '
+                'drops, anything that must survive but is nobody’s upload',
+     'never served', 'nightly'),
+    ('cache', 'regenerable. The NAME is load-bearing: backup.sh skips *cache*',
+     'never served', 'never'),
+    ('releases', 'build artifacts, keep N',
+     'never served', 'never'),
+)
+
+
+# 20200350  reserved_elsewhere — large devices held by a name, not by a job
+def reserved_elsewhere(ms=None):
+    """Mounts data_root() threw away for being NAMED for backups, with the one
+    fact that decides whether the name is still true: does a backup of this
+    machine actually land there.
+
+    fks-services is the case. /backup is 4.4TB on /dev/sdb1, 0% used, holding
+    nothing but lost+found. data_root() correctly refuses to put live data on a
+    mount the operator named for backups — intent beats size, see BACKUP_HINTS.
+    The result is that the box with the biggest spare disk is the box whose
+    projects are told to use the OS disk, and 4.2TB is reserved for a job that
+    has no unit, no timer and no set on it.
+
+    Reported, never acted on. A mount point is the operator's declaration and
+    the code does not get to overrule it — but a declaration nothing honours is
+    a fact they are entitled to have said out loud.
+    """
+    ms = ms if ms is not None else mounts()
+    held = [m for m in ms
+            if m['target'] not in ('/', '/boot', '/boot/efi')
+            and m['size_gb'] >= MIN_DATA_GB
+            and _named_for_backup(m['target'])]
+    if not held:
+        return []
+
+    # Which of them any dated set of THIS machine lives on. backup_sets() is
+    # the existing derivation; asking `df` here would be a second answer to a
+    # question this module already answers once.
+    devs = set()
+    try:
+        for r in backup_sets(ms=ms):
+            if r.get('dev'):
+                devs.add(r['dev'])
+    except Exception:
+        pass
+
+    out = []
+    for m in held:
+        out.append({
+            'target':     m['target'],
+            'source':     m['source'],
+            'size_gb':    m['size_gb'],
+            'avail_gb':   m['avail_gb'],
+            'used_pct':   m['used_pct'],
+            'holds_sets': m['source'] in devs,
+            'writable':   os.access(m['target'], os.W_OK),
+        })
+    return out
+
+
+# 20200397  project_root — the parent every project's data directory hangs from
+# Numbered 97 and not 59: a parallel session was landing reclaim_state on
+# ...359 in this same file on the same day. Two functions on one address is the single
+# thing the scheme exists to prevent. The band is otherwise full — ...340 is
+# the only other free code, and it is the one `atlas.py --codes` offers next,
+# so taking it would simply re-run the collision with the next agent.
+# The codes are written broken here on purpose: a full 8-digit number at the
+# head of a comment line IS a declaration to the allocator, so citing one in
+# prose declares it a second time. That is how this very comment created the
+# duplicate it was written to explain.
+def project_root(ms=None):
+    """Where per-project directories live on THIS node, and whether that is a
+    disk of its own.
+
+    Two shapes, and the difference is not cosmetic:
+
+      dedicated   <root>/<project>/<bucket>
+                  a filesystem of its own. A project filling media/ fills that
+                  disk and nothing else.
+
+      fallback    /srv/docker/<project>/data/<bucket>
+                  no qualifying mount. Data sits under the project directory so
+                  the existing rule — do not write outside /srv/docker/<project>
+                  — stays true, and so one `rm -rf` of the project directory
+                  takes the project and nothing of anyone else's.
+
+    `cost` is filled in only on the fallback, and it says what the absence
+    actually costs rather than calling it a default. A project told
+    `dedicated: false` with no further comment will read it as a formality.
+    """
+    ms = ms if ms is not None else mounts()
+    dr = data_root(ms)
+    m = dr.get('mount') or {}
+
+    if dr['dedicated']:
+        return {
+            'path':      dr['path'].rstrip('/'),
+            'suffix':    '',
+            'dedicated': True,
+            'device':    m.get('source', ''),
+            'size_gb':   m.get('size_gb', 0),
+            'avail_gb':  m.get('avail_gb', 0),
+            'why':       ('%s is a filesystem of its own on %s, so a project '
+                          'filling its buckets cannot fill the OS disk'
+                          % (dr['path'], m.get('source') or '?')),
+            'cost':      '',
+            'reserved':  reserved_elsewhere(ms),
+        }
+
+    held = reserved_elsewhere(ms)
+    why = ('no mount on this node is both large enough and free of a backup '
+           'claim, so project data shares %s with the OS, Docker’s images and '
+           'the journal' % (m.get('source') or '/'))
+    cost = ('a project that fills its buckets fills /, and a full / stops every '
+            'container on this box — not just that project. %sGB free today.'
+            % m.get('avail_gb', '?'))
+    if held:
+        h = held[0]
+        cost += (' %s is %sGB and %s%% used, and is excluded because its name '
+                 'declares it a backup target%s.'
+                 % (h['target'], h['size_gb'], h['used_pct'],
+                    '' if h['holds_sets']
+                    else ' — but no backup of this machine lands there'))
+    return {
+        'path':      '/srv/docker',
+        'suffix':    '/data',
+        'dedicated': False,
+        'device':    m.get('source', ''),
+        'size_gb':   m.get('size_gb', 0),
+        'avail_gb':  m.get('avail_gb', 0),
+        'why':       why,
+        'cost':      cost,
+        'reserved':  held,
+    }
+
+
+# 20200360  project_data — one project's whole data contract, derived
+def project_data(project=None, ms=None, pr=None):
+    """Everything a project needs to be told about where its data lives, in the
+    shape it receives it. Absolute paths, because a project that has to compose
+    its own path from a root and a convention will compose it differently on
+    the other box.
+
+    `project` may be None, in which case the literal token `<project>` is used
+    and the answer is a template rather than an allocation. /api/admit is asked
+    without a name often enough that returning nothing there would be worse
+    than returning a shape.
+
+    Nothing here creates a directory. The `create` line is text for a human,
+    the same way findings() carries a fix it will not run.
+    """
+    ms = ms if ms is not None else mounts()
+    pr = pr if pr is not None else project_root(ms)
+    name = (project or '').strip().lower() or '<project>'
+
+    base = '%s/%s%s' % (pr['path'], name, pr['suffix'])
+    buckets = {}
+    for b, holds, exposure, backup in PROJECT_BUCKETS:
+        buckets[b] = {
+            'path':     '%s/%s' % (base, b),
+            'holds':    holds,
+            'exposure': exposure,
+            'backup':   backup,
+        }
+    names = [b[0] for b in PROJECT_BUCKETS]
+
+    return {
+        'project':   name,
+        'root':      base,
+        'dedicated': pr['dedicated'],
+        'device':    pr['device'],
+        'avail_gb':  pr['avail_gb'],
+        'why':       pr['why'],
+        'cost':      pr['cost'],
+        'buckets':   buckets,
+        'order':     names,
+
+        # Bind mounts, not named volumes, and the reason is the requirement
+        # itself: a bind mount is a path on the host that a container happens
+        # to see, so removing the container removes nothing. A named volume
+        # lives under /var/lib/docker/volumes on the OS disk, is invisible to
+        # `du` on the data root, needs root or the docker group to read, and
+        # `docker compose down -v` deletes it without asking twice.
+        'mounts':    'bind',
+        'create':    'mkdir -p %s/{%s}' % (base, ','.join(names)),
+        'compose':   ['- %s:/data/%s' % (buckets[b]['path'], b) for b in names],
+        'label':     base,
+
+        'survives': ('every bucket is a host directory that exists before the '
+                     'container starts. `docker compose down`, `docker rm -f` '
+                     'and `docker system prune -a` do not touch it. The data '
+                     'is readable, tarrable and rsyncable from the host with '
+                     'no container running and no docker group.'),
+        'acceptance': ('stop and remove every container you own, then `ls %s/db` '
+                       '— if it is empty or gone, your data was inside the '
+                       'container and you do not have isolation, you have a '
+                       'copy that happens to still be running.' % base),
+    }
+
+
 # 20200354  findings — what an operator should be told, with the fix
 def findings(ms=None, dk=None):
     """Each finding carries the command that would fix it. This module never
@@ -641,6 +873,43 @@ def findings(ms=None, dk=None):
                 'fix': ('set data-root to %s/docker in /etc/docker/daemon.json '
                         '(requires a docker restart)' % m['target']),
             })
+
+    # The asymmetry, named. On a node with NO dedicated data disk, a large
+    # mount excluded purely because its name says "backup" is only a correct
+    # exclusion while a backup actually lands there. fks-services: /backup is
+    # 4.4TB, 0% used, holds nothing but lost+found, has no hub-backup unit in
+    # either scope, and is not writable by the user the hub runs as — while the
+    # sets that do exist sit in /srv/backups on the SAME device as the data.
+    #
+    # The fix is a mount point, not a code change, and it is deliberately
+    # phrased that way: data_root() reads the operator's declaration and must
+    # not overrule it. Rename the declaration and every derivation follows on
+    # the next poll, with nothing in this repo edited.
+    if not dr['dedicated']:
+        for h in reserved_elsewhere(ms):
+            if h['holds_sets']:
+                continue
+            out.append({
+                'id': 'spare_disk_idle_behind_a_name',
+                'severity': 'warn',
+                'detail': ('%s is %sGB and %s%% used, excluded from project data '
+                           'because its name declares it a backup target — but '
+                           'no backup of this machine lands there%s. Projects '
+                           'are being told to use the OS disk instead.'
+                           % (h['target'], h['size_gb'], h['used_pct'],
+                              ', and it is not writable by this user'
+                              if not h['writable'] else '')),
+                'fix': ('decide what %s is. To make it the data root: remount it '
+                        'at /srv/data (edit /etc/fstab, `umount %s && mkdir -p '
+                        '/srv/data && mount /srv/data`) — data_root() then '
+                        'derives it and backup_target() falls to %s, which is a '
+                        'different device, which is the whole point. To keep it '
+                        'as the backup target: install the hub-backup timer and '
+                        'make it writable, because an empty reservation is not '
+                        'a backup.'
+                        % (h['target'], h['target'],
+                           (root or {}).get('source') or '/')),
+            })
     return out
 
 
@@ -660,6 +929,10 @@ def landscape(refresh=False):
         'mounts':     ms,
         'docker':     dk,
         'data_root':  data_root(ms),
+        # Additive. data_root stays exactly as it was — five callers read it,
+        # one of them another agent's file — and project_root sits beside it
+        # carrying the shape per project rather than replacing the path.
+        'project_root': project_root(ms),
         'backup':     backup_target(ms),
         'findings':   findings(ms, dk),
         'derived_at': int(now),
