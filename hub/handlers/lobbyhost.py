@@ -208,110 +208,100 @@ _SHIM = """<script data-flare-lobby-shim="1">
     });
   } catch (e) { /* no serviceWorker here at all is the same outcome */ }
 
-  // WHY THIS IS A PILL AND NOT A PARAGRAPH.
+  // WHY THIS IS A DOCKED STRIP AND NOT A FLOATING BADGE.
   //
-  // It used to be a 300px box pinned bottom-right carrying the full
-  // explanation -- service tokens, the layer-3 seam, remote_path_unsupported,
-  // the unbridged login gate -- on EVERY drill-in, with an orange border that
-  // reads as an error, and no way to close it. All of that is true and worth
-  // saying ONCE. Said every time, in the corner, over the UI, it stops being
-  // information and becomes furniture you learn to look past -- which is also
-  // how you stop noticing the word READ-ONLY, the one part that changes what
-  // you can do.
+  // It has been wrong twice. First a 300px paragraph pinned bottom-right on
+  // every drill-in, with an orange border that reads as an error and no way
+  // to close it. Then a pill in the same corner -- which landed squarely on
+  // mobile.html's footer tabs, so the thing telling you where you are sat on
+  // the thing that gets you out.
   //
-  // So: the state is always visible and small, the reasoning is one click
-  // away, and dismissing it lasts for the tab. Per tab and not forever,
-  // because "am I on the remote box or my own?" must never be a thing you
-  // answered last week.
+  // Both failures are the same failure: anything FLOATING is covering
+  // something. A strip docked to the top cannot be, because it moves the page
+  // down instead of sitting over it. It costs about 26 vertical pixels and
+  // buys the guarantee that it never hides a control.
+  //
+  // It carries two facts and one exit. "Which box am I on" and "this is
+  // read-only" are what change what you can do; the reasoning behind
+  // read-only is true, long, and needed once, so it is behind `why?`. There
+  // is no dismiss button on purpose -- a bar that hides nothing has no reason
+  // to be hidden, and "am I on the remote box or my own?" must never be a
+  // question you answered last week.
   function banner() {
-    var KEY = "flare_drillin_hidden";
-    try { if (sessionStorage.getItem(KEY) === "1") return; } catch (e) {}
-
-    var d = document.createElement("div");
-    d.setAttribute("role", "status");
-    d.style.cssText = "position:fixed;right:10px;bottom:10px;z-index:2147483647;" +
-      "max-width:min(320px,calc(100vw - 20px));border-radius:8px;" +
-      "border:1px solid #30363d;background:#161b22;color:#e6edf3;" +
-      "font:11px/1.5 ui-sans-serif,system-ui,sans-serif;" +
-      "box-shadow:0 2px 10px rgba(0,0,0,.4)";
-
-    // SIT ABOVE WHATEVER OWNS THE BOTTOM OF THE PAGE, MEASURED NOT GUESSED.
-    //
-    // Pinned at bottom:10px this landed squarely on mobile.html's footer tab
-    // bar and covered the navigation. Hardcoding that bar's height would be
-    // wrong the day it changes and wrong on every page that has no bar, so
-    // this finds any VISIBLE fixed element already touching the bottom edge
-    // and clears it. It also re-measures on resize, because a phone rotating
-    // changes the answer.
-    function lift() {
-      var gap = 10;
-      try {
-        var vh = window.innerHeight || 0;
-        var all = document.body ? document.body.children : [];
-        for (var i = 0; i < all.length; i++) {
-          var el = all[i];
-          if (el === d) continue;
-          var cs = window.getComputedStyle(el);
-          if (cs.position !== "fixed" || cs.display === "none" ||
-              cs.visibility === "hidden") continue;
-          var r = el.getBoundingClientRect();
-          if (!r.height || r.width < 40) continue;
-          // touching the bottom edge, and not a full-screen overlay
-          if (r.bottom >= vh - 2 && r.height < vh * 0.5) {
-            gap = Math.max(gap, Math.round(r.height) + 10);
-          }
-        }
-      } catch (e) { /* a guess of 10px is the old behaviour, not a new bug */ }
-      d.style.bottom = "calc(" + gap + "px + env(safe-area-inset-bottom, 0px))";
-    }
-    setTimeout(lift, 0);
-    window.addEventListener("resize", lift);
-
     var bar = document.createElement("div");
-    bar.style.cssText = "display:flex;align-items:center;gap:8px;padding:6px 9px";
-    bar.innerHTML =
+    bar.setAttribute("role", "status");
+    bar.style.cssText = "position:fixed;top:0;left:0;right:0;z-index:2147483647;" +
+      "box-sizing:border-box;background:#161b22;color:#e6edf3;" +
+      "border-bottom:1px solid #30363d;" +
+      "font:11px/1.4 ui-sans-serif,system-ui,sans-serif;" +
+      "padding-top:env(safe-area-inset-top, 0px)";
+
+    var row = document.createElement("div");
+    row.style.cssText = "display:flex;align-items:center;gap:8px;padding:6px 10px";
+    row.innerHTML =
       '<span style="width:6px;height:6px;border-radius:50%;background:#f78166;' +
       'flex:0 0 auto"></span>' +
       '<span style="flex:1 1 auto;min-width:0;overflow:hidden;' +
-      'text-overflow:ellipsis;white-space:nowrap">' + NAME +
-      ' <span style="color:#8b949e">&middot; read-only</span></span>';
+      'text-overflow:ellipsis;white-space:nowrap"><b>' + NAME + '</b>' +
+      '<span style="color:#8b949e"> &middot; read-only</span></span>';
 
-    function btn(label, title) {
-      var b = document.createElement("button");
-      b.type = "button"; b.textContent = label; b.title = title;
-      b.style.cssText = "flex:0 0 auto;background:none;border:0;color:#8b949e;" +
-        "font:inherit;cursor:pointer;padding:0 3px;line-height:1";
-      return b;
-    }
-    var why = btn("why?", "what read-only means here");
-    var hide = btn("\\u00d7", "hide until this tab is closed");
+    var why = document.createElement("button");
+    why.type = "button"; why.textContent = "why?";
+    why.style.cssText = "flex:0 0 auto;background:none;border:0;color:#8b949e;" +
+      "font:inherit;cursor:pointer;padding:2px 4px";
     var exit = document.createElement("a");
-    exit.href = "/"; exit.textContent = "fleet"; exit.title = "back to the fleet";
-    exit.style.cssText = "flex:0 0 auto;color:#f78166;text-decoration:none;padding:0 3px";
-    bar.appendChild(why); bar.appendChild(exit); bar.appendChild(hide);
+    exit.href = "/"; exit.textContent = "leave";
+    exit.style.cssText = "flex:0 0 auto;color:#f78166;text-decoration:none;padding:2px 4px";
+    row.appendChild(why); row.appendChild(exit);
 
     var more = document.createElement("div");
     more.hidden = true;
-    more.style.cssText = "padding:0 9px 8px;color:#8b949e;border-top:1px solid #30363d;" +
-      "margin-top:2px;padding-top:7px";
+    more.style.cssText = "padding:0 10px 8px;color:#8b949e;border-top:1px solid #30363d";
     more.innerHTML =
       'You reached ' + NAME + ' through the lobby, over a service token. ' +
       'Writes are the layer-3 seam FlareVault owns. Views this hub does not ' +
-      'proxy report <code>remote_path_unsupported</code>. This node\\'s own ' +
-      'login gate is not bridged &mdash; the lobby holds the credential, ' +
-      'you do not.';
+      'proxy report <code>remote_path_unsupported</code>. The login gate ' +
+      'on this node is not bridged &mdash; the lobby holds the ' +
+      'credential, you do not.';
 
+    bar.appendChild(row); bar.appendChild(more);
+    document.body.appendChild(bar);
+
+    // MAKE ROOM, MEASURED NOT GUESSED. The page keeps its own layout; this
+    // only shifts it down by however tall the strip actually is. Anything the
+    // page already pinned to top:0 -- app.html's #top, mobile.html's header --
+    // is moved down by the same amount, or it would sit underneath.
+    var moved = [];
+    function fit() {
+      var h = bar.getBoundingClientRect().height || 0;
+      try {
+        document.documentElement.style.scrollPaddingTop = h + "px";
+        if (!document.body.dataset.flarePad) {
+          var cur = parseFloat(window.getComputedStyle(document.body).paddingTop) || 0;
+          document.body.dataset.flarePad = String(cur);
+        }
+        document.body.style.paddingTop =
+          (parseFloat(document.body.dataset.flarePad) + h) + "px";
+        var all = document.body.children;
+        for (var i = 0; i < all.length; i++) {
+          var el = all[i];
+          if (el === bar) continue;
+          var cs = window.getComputedStyle(el);
+          if (cs.position !== "fixed") continue;
+          var r = el.getBoundingClientRect();
+          if (r.top > 2 || r.height > window.innerHeight * 0.5) continue;
+          if (moved.indexOf(el) < 0) { moved.push(el); }
+          el.style.top = h + "px";
+        }
+      } catch (e) { /* the strip still shows; the page may overlap it */ }
+    }
+    setTimeout(fit, 0);
+    window.addEventListener("resize", fit);
     why.onclick = function () {
       more.hidden = !more.hidden;
       why.textContent = more.hidden ? "why?" : "less";
+      fit();
     };
-    hide.onclick = function () {
-      try { sessionStorage.setItem(KEY, "1"); } catch (e) {}
-      d.remove();
-    };
-
-    d.appendChild(bar); d.appendChild(more);
-    document.body.appendChild(d);
   }
   if (document.readyState === "loading") {
     document.addEventListener("DOMContentLoaded", banner);
