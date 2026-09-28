@@ -95,6 +95,17 @@ def ensure_tables():
         at TEXT,
         PRIMARY KEY (ref, state, at)
     )""")
+    # band: the project port band the build this row describes SERVES, as
+    # floor-ceiling/size. Not derivable after the fact -- a process can read
+    # the band it serves itself and nothing else, so what the build before it
+    # served is recorded here or it is lost. That is what makes a band move
+    # a difference the hub can compute instead of a sentence somebody types.
+    #
+    # ALTER, not a rewrite: the release ladder is the one table that must
+    # survive a schema change, because it is what a rollback reads.
+    cols = {r[1] for r in c.execute('PRAGMA table_info(releases)')}
+    if 'band' not in cols:
+        c.execute('ALTER TABLE releases ADD COLUMN band TEXT')
     # Differences found at verification. Stored because a DISPOSITION is a
     # decision and decisions are not re-derivable; the difference itself is,
     # and is re-checked every verify.
@@ -223,17 +234,74 @@ def fleet_stale(current_ref):
     return out
 
 
+# 20200320  served_band — the project port band THIS build serves, as one string
+def served_band():
+    """floor-ceiling/size, e.g. "12000-18999/100".
+
+    ONE FORMATTER ON PURPOSE. The bulletin kernel/changewatch publishes and the
+    pending item /api/admit carries are read by the same project, and two
+    formatters for one fact eventually disagree by a slash -- which reads, to
+    the project, as two different bands.
+
+    Returns '' when the constants cannot be read, and '' is NOT a band. A
+    caller must not compare it to anything or hand it out; an unknown band is
+    the thing _pending() has to report, not paper over.
+    """
+    try:
+        from kernel import collect as _collect          # noqa: PLC0415
+        return '%d-%d/%d' % (_collect.PROJECT_BAND_FLOOR,
+                             _collect.PROJECT_BAND_CEIL,
+                             _collect.PROJECT_BAND_SIZE)
+    except Exception:
+        return ''
+
+
+# 20200335  promoted_band — the band the DEPLOYED build serves, read off the record
+def promoted_band():
+    """{'ref','at','band'} for the most recent promote that recorded a band, or
+    None.
+
+    None is an answer callers must HANDLE, never skip. A running process cannot
+    introspect what the process before it was serving, so if no promote recorded
+    a band then the previous band is unknown -- and unknown is not "the same".
+    Treating None as "no change" is how a band move ships with every project
+    told nothing is coming.
+
+    Rows written before the band column existed read back NULL and are skipped
+    here for the same reason: an absent band is not an empty band.
+    """
+    ensure_tables()
+    c = _conn()
+    r = c.execute("SELECT ref, at, band FROM releases WHERE state='promoted' "
+                  "AND band IS NOT NULL AND band != '' "
+                  "ORDER BY at DESC, rowid DESC LIMIT 1").fetchone()
+    c.close()
+    return dict(r) if r else None
+
+
 # 20200365  release — record a stage, check, promote or rollback
-def release(ref, state, preflight='', note=''):
+def release(ref, state, preflight='', note='', band=None):
     """The one writer into releases. stage/routes_diffed/promote are named doors
     onto this, so every row in the ladder is written in one format by one
-    function and weight() never has to guess at prose it did not produce."""
+    function and weight() never has to guess at prose it did not produce.
+
+    `band` is the project port band the build being recorded serves. It is
+    DEFAULTED from the running constants rather than demanded of every caller,
+    because it is only ever true of the process writing the row -- a caller
+    that had to supply it would be retyping a number it had just read, which is
+    how the band came to be written in four places and disagree in two of them.
+
+    Passing band='' records a row that deliberately claims nothing, which
+    promoted_band() then skips. Silence and a band are different things.
+    """
     if state not in ('staged', 'checked', 'promoted', 'rolled_back'):
         return None, 'state must be staged|checked|promoted|rolled_back'
     ensure_tables()
     c = _conn()
-    c.execute('INSERT OR REPLACE INTO releases (ref,state,preflight,note,at) '
-              'VALUES (?,?,?,?,?)', (ref, state, preflight, note, _now()))
+    c.execute('INSERT OR REPLACE INTO releases (ref,state,preflight,note,at,band) '
+              'VALUES (?,?,?,?,?,?)',
+              (ref, state, preflight, note, _now(),
+               served_band() if band is None else band))
     c.commit()
     c.close()
     return ref, state

@@ -50,11 +50,17 @@ HTTPS_PORTS = {9443, 9090}
 # node receipt advertises what is free inside them, so a project is never told
 # two different things about where it may bind.
 #
-# 7100-7899 because it is the only wide stretch no PORT_LANE claims. It must
-# stay that way: anything above 10000 collides with the Supabase stack lane.
-# Moved off 7100-7899 (800 ports, 16 projects) on 2026-09-24. 12000-18999 is
-# 7000 unclaimed ports -- nothing between the Supabase lane and Monitoring --
-# which is 70 projects at 100 each with room to widen rather than shrink.
+# THE RULE, and it is about lanes rather than a number: the band must be a
+# wide stretch no PORT_LANE claims. That is what 10020-10990 broke -- it sat
+# inside the Supabase stack lane at 10000-10999, so admit handed out ports
+# another service owns. "Anything above 10000 collides" was the shorthand for
+# it, and the shorthand is false: 11000-11999 is the AI lane and 19000-19999 is
+# Monitoring, while everything between them is unclaimed.
+#
+# 7100-7899 satisfied the rule and was too small -- 800 ports, 16 projects.
+# Moved off it on 2026-09-24. 12000-18999 is 7000 unclaimed ports, nothing
+# between the Supabase lane and Monitoring, which is 70 projects at 100 each
+# with room to widen rather than shrink.
 #
 # MIGRATION, not a cutover. Existing projects keep their ports until they choose
 # to move; only new ones are held to this. fksinv sits at 10100/10101 and

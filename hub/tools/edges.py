@@ -397,8 +397,10 @@ EDGES = [
         'pair': None,
         'breaks': [
             'no `ss`: _ports_in_use returns [], so GET /api/admit hands out '
-            'the FIRST band in the range regardless of what is bound — a '
-            'project told 7100-7899 binds on top of whatever is already there',
+            'the FIRST block in kernel.collect.PROJECT_BAND_FLOOR..CEIL '
+            'regardless of what is bound — the project binds on top of '
+            'whatever is already there. Live today: babyhelp holds 12080, '
+            'inside the first block of the current band',
             'no `df`: GET /api/storage and the storage findings inside '
             'GET /api/node go blank, which reads as a healthy disk',
             'no `git`: every tool\'s build ref reads NONE, so the congruence '

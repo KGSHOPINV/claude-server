@@ -237,32 +237,122 @@ def post_ack(handler, path, params, body):
                        'note': note, 'who': _who()})
 
 
+# 20313714  _band_parts — floor, ceiling and size out of "12000-18999/100"
+def _band_parts(band):
+    """(floor, ceil, size) or None. Parses, never guesses: a band string this
+    cannot read is reported as unreadable rather than half-understood, because
+    the arithmetic below decides what a project is told to do about its ports.
+    """
+    try:
+        span, _, size = str(band).partition('/')
+        lo, _, hi = span.partition('-')
+        return int(lo), int(hi), int(size)
+    except (TypeError, ValueError):
+        return None
+
+
 # 20313705  _pending — what is about to move underneath every project here
 def _pending():
-    """Hardcoded for now and deliberately so: this is the list of KNOWN staged
-    changes, and there is exactly one. When kernel/control.releases is driving
-    stage/promote it comes from there instead.
+    """Derived from the release record, which is the only place the answer can
+    come from.
+
+    A pending item is the difference between the band THIS build serves and the
+    band the DEPLOYED build serves. The first is introspectable -- the running
+    constants. The second is not: a process cannot see what the process before
+    it was serving, so it is recorded at stage and promote by kernel/control and
+    read back here. That is the whole reason releases carries a band column.
+
+    THREE ANSWERS, and the third is the one that used to be missing:
+
+        the two agree      []  -- nothing is coming, and we can say so
+        the two differ     the move, with all four fields
+        no record at all   the UNKNOWN, in the same shape as a pending item
 
     Empty must be reported as "none" rather than omitted -- silence and
-    nothing-pending are different, and only one of them is information.
+    nothing-pending are different, and only one of them is information. A
+    hardcoded [] was silence wearing the costume of nothing-pending, which is
+    worse than either: this function's entire job is honesty about the future,
+    and it reported "nothing coming" loudest at the moment everything changed.
+
+    An absent record is NOT an agreement. "A blind spot is not a pass" --
+    docs/flareshub-doctrine.md -- so it returns an item saying what is unknown,
+    because a project acting on [] believes something nobody has established.
     """
-    band = []
+    served = _ctl.served_band()
     try:
-        from kernel import collect as _srv
-        band = [_srv.PROJECT_BAND_FLOOR, _srv.PROJECT_BAND_CEIL]
+        rec = _ctl.promoted_band()
     except Exception:
-        pass
-    if band and band[0] == 7100:
+        rec = None
+
+    # NO RECORD. Not "no change" -- no evidence in either direction.
+    if not rec or not rec.get('band'):
+        where = served or 'not readable from this build'
         return [{
-            'change': 'project port band moves 10020-10990 -> 7100-7899',
-            'why': '10000-10999 is the Supabase stack reserved lane; admit was '
-                   'handing out ports another service owns',
-            'when': 'on the next deploy of this server',
-            'what_you_must_do': 'rebind before you publish, or acknowledge with '
-                                'answer="accept" to record that you are '
-                                'knowingly inside a reserved lane',
+            'change': 'project port band is %s on this build; whether that is a '
+                      'MOVE is UNKNOWN' % where,
+            'why': 'pending is the difference between the band this build serves '
+                   'and the band the last promoted build served. The second is '
+                   'recorded, never introspectable -- a running process cannot '
+                   'see what the process before it was handing out. This server '
+                   'has no promoted release carrying a band, so there is nothing '
+                   'to subtract. Reporting that as "nothing pending" would be a '
+                   'claim nobody here is in a position to make.',
+            'when': 'unknown, and it stays unknown until this server records a '
+                    'promote. The band above is in force for anything admitted '
+                    'right now regardless.',
+            'what_you_must_do': 'bind inside %s and treat it as provisional: '
+                                're-read /api/admit after the next deploy rather '
+                                'than assuming this band survived it. If a band '
+                                'move would cost you more than a rebind, say so '
+                                'now with answer="accept", so it is on record '
+                                'before it happens instead of after.' % where,
         }]
-    return []
+
+    was = rec['band']
+    if was == served:
+        return []
+
+    # THE MOVE. Every number below is read off the two strings, so this text is
+    # correct for the next move as well as this one.
+    ref = (rec.get('ref') or '')[:7] or 'an unrecorded ref'
+    at = rec.get('at') or 'an unrecorded time'
+    old_p, new_p = _band_parts(was), _band_parts(served)
+
+    size = ''
+    if old_p and new_p and old_p[2] != new_p[2]:
+        size = (' Block size goes %d -> %d ports per project, so a band assigned '
+                'under the old rule is %d ports wide, not %d.'
+                % (old_p[2], new_p[2], old_p[2], new_p[2]))
+
+    overlap = ''
+    if old_p and new_p:
+        if new_p[1] < old_p[0] or new_p[0] > old_p[1]:
+            overlap = (' The two ranges do not overlap at all: a port inside %s '
+                       'is outside %s by definition.'
+                       % (was.split('/')[0], served.split('/')[0]))
+        else:
+            overlap = (' The ranges overlap, so a port being inside the new band '
+                       'is not evidence you were moved onto it.')
+
+    return [{
+        'change': 'project port band moves %s -> %s' % (was, served),
+        'why': 'read it as floor-ceiling/size. The band this build hands out is '
+               '%s. The last build this server recorded as promoted (%s, %s) '
+               'served %s.%s%s Until this build is promoted the record and the '
+               'door disagree, and a rollback to %s puts this server back on the '
+               'old band.' % (served, ref, at, was, size, overlap, ref),
+        'when': 'now, for every band this server hands out -- /api/admit is '
+                'already cutting from %s. The record catches up when this build '
+                'is promoted; until then the move is in force here and not yet '
+                'true of the fleet.' % served,
+        'what_you_must_do': 'take your next port from %s. If you are already '
+                            'bound inside %s nothing is being taken off you -- '
+                            'this is a migration, not a cutover -- but do not add '
+                            'to it. Rebind before you publish, or acknowledge '
+                            'with answer="accept" to record that you are '
+                            'knowingly outside the band this server now hands '
+                            'out.' % (served, was.split('/')[0]),
+    }]
 
 
 # ── VERIFY ───────────────────────────────────────────────────────────────────
@@ -452,15 +542,15 @@ def _as_list(v):
 
 
 def _claimed_ports(claim):
-    """Accepts 7100, "7100", "7100:3000", "127.0.0.1:7100:3000" and
-    "0.0.0.0:7100->3000/tcp" -- the shapes projects actually file. Anything
+    """Accepts 12100, "12100", "12100:3000", "127.0.0.1:12100:3000" and
+    "0.0.0.0:12100->3000/tcp" -- the shapes projects actually file. Anything
     else comes back as unparsed rather than silently becoming zero ports
     claimed.
 
     The HOST port is what this compares, and the two syntaxes put it on
     opposite ends: compose writes HOST:CONTAINER, `docker ps` writes
-    IP:HOST->CONTAINER. Taking the last number of both reads "7100:3000" as
-    port 3000 -- a claim of 7100 that verifies against nothing.
+    IP:HOST->CONTAINER. Taking the last number of both reads "12100:3000" as
+    port 3000 -- a claim of 12100 that verifies against nothing.
     """
     out, bad = set(), []
     for v in _as_list(claim.get('ports')) + _as_list(claim.get('port')):
@@ -729,7 +819,7 @@ def _compare(project, claim, m):
             'why': 'an unreadable claim field is never checked against '
                    'anything, so it can never be wrong. That is the failure '
                    'this exchange exists to end.',
-            'fix': 'refile with ports as numbers, e.g. {"ports": [7100]}',
+            'fix': 'refile with ports as numbers, e.g. {"ports": [12100]}',
         })
 
     return d

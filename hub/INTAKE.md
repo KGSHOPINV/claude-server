@@ -140,12 +140,21 @@ PENDING — what changes underneath you, and when
   <the answers above are true TODAY. Anything staged but not yet deployed
    goes here, so you are not building against a number that is about to move.>
 
-  Example of a real one, live right now:
-    band moves 10020-10990 -> 7100-7899 on the next deploy
-    why: 10000-10999 is the Supabase stack's reserved lane; admit was handing
-         out ports another service owns
-    what you must do: rebind before you publish, or declare `accept` and I
-         record that you are knowingly inside a reserved lane
+  Not written by hand. Every item is the difference between the band THIS
+  build serves and the band the last PROMOTED build served, which is why the
+  release record carries a band at all — a running process cannot see what the
+  process before it was handing out.
+
+  Example of the shape:
+    band moves 7100-7899/20 -> 12000-18999/100
+    why: read it as floor-ceiling/size. 7100-7899 was 800 ports, 16 projects.
+         The two ranges do not overlap, and the block size goes 20 -> 100.
+    what you must do: take your next port from the new band, or declare
+         `accept` and I record that you are knowingly outside it
+
+  And when there is no promoted build on record, PENDING says so in the same
+  four fields rather than going quiet. An unknown previous band is not
+  "nothing is coming" — a blind spot is not a pass.
 
   If PENDING is empty, say "none" — silence and "nothing pending" are
   different, and only one of them is information.
