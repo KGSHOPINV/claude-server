@@ -24,12 +24,14 @@ READS ONLY. Nothing here writes, installs, schedules or configures anything.
 The strongest verb in the file is one HTTPS GET against this node's own public
 hostname, which --offline removes.
 
-Three checks used to over-report, and all three failed the same way: they
+Four checks used to over-report, and all four failed the same way: they
 asserted something ADJACENT to the row instead of the row. Presence of a binary
 instead of a backup running; availability of a disk instead of a copy landing on
-it; a local record instead of a public name. Each one is now the question the
-row actually asks, and each one carries the wrong verdict it replaces so nobody
-re-derives it. See check_backups_running, check_backup_target, check_enrolled.
+it; a local record instead of a public name; a word in some unit's name instead
+of a reclamation that has fired. Each one is now the question the row actually
+asks, and each one carries the wrong verdict it replaces so nobody re-derives
+it. See check_backups_running, check_backup_target, check_enrolled,
+check_reclamation.
 """
 import os
 import socket
@@ -66,6 +68,13 @@ BACKUP_STALE_DAYS = st.BACKUP_STALE_DAYS   # a daily timer: yesterday normal, th
 HUB_BACKUP_UNIT = st.HUB_BACKUP_UNIT       # named, never word-matched (cf. dpkg-db-backup.timer)
 HUB_BACKUP_CMDS = st.HUB_BACKUP_CMDS       # an invocation of THIS hub's backup, by path
 BACKUP_TOOLS = st.BACKUP_TOOLS             # installed tools: a note, never a verdict
+
+# The step-8 equivalents, derived in the same place for the same reason. The
+# reclamation row had the identical shape of defect and it is fixed the
+# identical way: name the unit, attribute the cron line by path, and require
+# evidence that it has FIRED. See check_reclamation.
+HUB_RECLAIM_UNIT = st.HUB_RECLAIM_UNIT
+RECLAIM_STALE_DAYS = st.RECLAIM_STALE_DAYS
 
 # Cloudflare answers urllib's default Python-urllib/3.x with 403 "error code:
 # 1010" on every flareshub-* hostname, so a probe without a browser UA reports
@@ -177,6 +186,17 @@ def check_backup_target():
         return MISSING, ('no second device — every mount shares a disk with the '
                          '%s, so a copy here survives a bad rm and nothing '
                          'else%s' % (where, '. ' + bt['note'] if bt.get('note') else ''))
+    # Asked BEFORE the device comparison below, because it outranks it. A
+    # target on a perfect second disk that this user cannot write to takes
+    # exactly as many backups as no target at all, and the old row passed fks
+    # on free space while /backup was root:root and held nothing.
+    if not bt.get('writable', True):
+        return MISSING, ('the derived target %s is on %s, a different device '
+                         'from the %s — and %s is not writable by this user '
+                         '(%s). Every scheduled run dies on its first mkdir. '
+                         'Fix: sudo chown $(id -un):$(id -gn) %s'
+                         % (tgt, tgt_dev, where, bt.get('write_probe') or tgt,
+                            bt.get('owner') or 'ownership unreadable', tgt))
     if tgt_dev == data_dev:
         return MISSING, ('the derived target %s shares device %s with the %s — '
                          'one disk failure takes both'
@@ -254,26 +274,55 @@ def check_backups_running():
 
 
 def check_reclamation():
-    """Checks BOTH scopes. The first version of this looked only at system
-    timers and matched only "prune" -- so it reported missing while a user
-    timer named hub-reclaim was installed and scheduled. The assertion was
-    wrong, not the machine, which is the failure mode assertions are supposed
-    to remove. Hence: both scopes, and match the words actually used."""
-    pat = 'prune|reclaim|docker-clean'
-    for scope in ('--user ', ''):
-        rc, out = sh('systemctl %slist-timers --all --no-pager 2>/dev/null | '
-                     'grep -ciE "%s"' % (scope, pat))
-        if out.isdigit() and int(out) > 0:
-            where = 'user' if scope else 'system'
-            return OK, 'a reclamation timer is registered (%s scope)' % where
-    rc, out = sh('crontab -l 2>/dev/null | grep -ciE "%s|docker system"' % pat)
-    if out.isdigit() and int(out) > 0:
-        return OK, 'a reclamation cron entry exists'
-    cache = st.docker_storage()['build_cache']
-    detail = 'nothing reclaims Docker build cache'
-    if cache['reclaimable_gb'] >= st.CACHE_BLOAT_GB:
-        detail += ' — %sGB is reclaimable right now' % cache['reclaimable_gb']
-    return MISSING, detail
+    """Evidence of a RUN, which is what "reclamation" means.
+
+    Two wrong verdicts preceded this, and the second is the one that matters.
+
+    The first looked only at system timers and matched only "prune", so it
+    reported missing while a user timer named hub-reclaim was installed and
+    scheduled. That was fixed by checking both scopes and widening the pattern.
+
+    The fix carried the defect the rest of this file was written to remove. It
+    ticked the row on the WORDS prune|reclaim|docker-clean appearing anywhere in
+    `systemctl list-timers --all`, which passes on two things that reclaim
+    nothing for this hub:
+
+        another project's timer   metaforge-prune.timer, keynox-reclaim.timer,
+                                  a vendor cache-clean job — any of them
+                                  satisfies the row on a box where
+                                  hub-reclaim.timer was never installed. The
+                                  same error as counting
+                                  /srv/backups/metaforge/backup.sh as evidence
+                                  this hub was backed up.
+
+        a timer that never fired  `--all` lists units whose LastTriggerUSec is
+                                  zero. An enabled timer that has not run has
+                                  reclaimed nothing, and the disk filling up
+                                  does not care that a unit file exists.
+
+    So the row now needs both halves, exactly as `backups running` does: a
+    schedule attributed to THIS hub by unit name and command path, and systemd's
+    own record that it has actually fired. kernel.storage.reclaim_state() is the
+    derivation, in the kernel beside backup_state() so a tool and a panel cannot
+    answer this differently.
+    """
+    r = st.reclaim_state()
+    tail = ('. ' + '. '.join(r['notes'])) if r['notes'] else ''
+
+    if r['state'] == 'running':
+        return OK, '%s; %s%s' % (r['schedule'], r['last'], tail)
+    if r['state'] == 'stale':
+        why = ('a timer that has never fired has reclaimed nothing'
+               if not r['fired'] else
+               'a schedule that produces no run is not reclamation')
+        return WARN, ('%s, but %s (stale after %d days). %s%s'
+                      % (r['schedule'], r['last'], r['stale_after'], why, tail))
+    if r['state'] == 'unscheduled':
+        return WARN, ('it ran (%s) but there is no active schedule: %s. '
+                      'Nothing will do it again%s'
+                      % (r['last'], r['schedule'], tail))
+    return MISSING, ('nothing reclaims Docker build cache: %s and %s%s'
+                     % (r['schedule'], r['last'], tail))
 
 
 def check_storage_sound():

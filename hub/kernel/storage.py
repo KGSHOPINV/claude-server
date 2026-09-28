@@ -215,10 +215,44 @@ def backup_target(ms=None):
                         'losing the disk'}
     named = [m for m in usable if _named_for_backup(m['target'])]
     best = max(named or usable, key=lambda m: m['avail_gb'])
-    return {'path': best['target'].rstrip('/') + '/backups' if not _named_for_backup(best['target'])
-                    else best['target'],
-            'mount': best, 'dedicated': True,
-            'declared': bool(named)}
+    path = (best['target'] if _named_for_backup(best['target'])
+            else best['target'].rstrip('/') + '/backups')
+    # CAN THIS USER ACTUALLY WRITE THERE. A derived target the hub cannot
+    # create a directory in is not a target, and the difference is invisible
+    # until 03:00 on the first night.
+    #
+    # fks-services is the live case and it is not a corner: /backup is
+    # /dev/sdb1, 4.4TB, 0% used, and owned root:root 0755, so `test -w /backup`
+    # is false for admin1. Everything the row used to look at — a second
+    # device, free space, a sensible name — passes. Install the timer there and
+    # the backup dies on its first mkdir every night, silently, and the box
+    # reports a backup it has never once taken.
+    #
+    # So the fact is derived here, beside the target itself, rather than
+    # discovered by the script that fails.
+    probe = path if os.path.isdir(path) else os.path.dirname(path.rstrip('/'))
+    writable = os.access(probe, os.W_OK) if os.path.isdir(probe) else False
+    return {'path': path, 'mount': best, 'dedicated': True,
+            'declared': bool(named),
+            'writable': writable, 'write_probe': probe,
+            'owner': _owner(probe)}
+
+
+def _owner(path):
+    """user:group mode of a path, for saying WHY a target is not writable.
+
+    A refusal that does not carry the reason gets read as "backups are hard"
+    rather than "one chown".
+    """
+    try:
+        import grp
+        import pwd
+        s = os.stat(path)
+        return '%s:%s %o' % (pwd.getpwuid(s.st_uid).pw_name,
+                             grp.getgrgid(s.st_gid).gr_name,
+                             s.st_mode & 0o777)
+    except Exception:
+        return ''
 
 
 # ── is anything actually being backed up? ────────────────────────────────────
@@ -819,6 +853,235 @@ def project_data(project=None, ms=None, pr=None):
                        'container and you do not have isolation, you have a '
                        'copy that happens to still be running.' % base),
     }
+
+
+# ── is anything actually reclaiming? ─────────────────────────────────────────
+# The same question as backup_state, asked about step 8, and it was carrying
+# the same defect on the day this was written.
+#
+# install-preflight's check_reclamation matched the WORDS prune|reclaim|
+# docker-clean against every timer in both scopes and against any crontab line
+# containing them. So it ticked on a unit name, in exactly the way the backup
+# row ticked on a binary name. Two things follow from that, and neither is
+# hypothetical:
+#
+#   - ANY project's timer passes it. A unit called metaforge-prune.timer,
+#     keynox-reclaim.timer or a vendor's cache-clean job satisfies the row for
+#     this hub, on a box where hub-reclaim.timer was never installed. The word
+#     is not an attribution; the unit name and the command path are. This is
+#     the identical error as counting /srv/backups/metaforge/backup.sh as
+#     evidence that the hub was being backed up, which it did on fks-services
+#     until _cron_backup_lines was written.
+#
+#   - A timer that exists and has NEVER FIRED passes it. `list-timers --all`
+#     lists units whose LastTriggerUSec is zero; the old grep could not tell
+#     the difference. An installed timer that has not run has reclaimed
+#     nothing, and the disk that fills up does not care that a unit file
+#     exists.
+#
+# The cost of the second one in plain terms: the incident this whole module was
+# written for was 40GB of dead build cache on a 98GB disk, found by looking.
+# A row that says "a reclamation timer is registered" while nothing has fired
+# is the report telling you not to look.
+#
+# So: the unit is named, the cron line is attributed by PATH, and the row needs
+# evidence of a RUN. Unlike a backup there is no artifact on disk to point at —
+# reclaim.sh writes to the journal and leaves nothing behind — so the evidence
+# is systemd's own record of the last trigger, which is a fact about what
+# happened rather than about what is installed.
+
+# The unit bootstrap.sh writes at step 8. Named, never word-matched.
+HUB_RECLAIM_UNIT = 'hub-reclaim.timer'
+HUB_RECLAIM_SERVICE = 'hub-reclaim.service'
+
+# bootstrap.sh installs hub/tools/reclaim.sh as ~/.local/bin/hub-reclaim.sh, so
+# an invocation of THIS hub's reclamation is knowable by path. `docker builder
+# prune` is included because an operator's own crontab line doing the job by
+# hand is still this box reclaiming — it is the *word* prune in someone else's
+# unit name that proves nothing.
+HUB_RECLAIM_CMDS = ('hub-reclaim.sh', 'hub/tools/reclaim.sh', 'docker builder prune')
+
+# Weekly (bootstrap.sh step 8: OnCalendar Sun 04:00, 30min jitter). Seven days
+# is a normal gap, so it takes ten before a run has been missed.
+RECLAIM_STALE_DAYS = 10
+
+_reclaim_cache = {'at': 0.0, 'value': None}
+
+
+def _unit_prop(unit, prop):
+    """One systemd property, from whichever scope knows the unit.
+
+    Returns (value, scope). `systemctl show` exits 0 and prints the property
+    with an empty value for a unit it has never heard of, so "not-found" is
+    established by is-active, not by an empty string here.
+    """
+    for scope, label in (('--user ', 'user'), ('', 'system')):
+        state = _say('systemctl %sis-active %s 2>/dev/null' % (scope, unit))
+        if state in ('', 'not-found'):
+            continue
+        out = _say('systemctl %sshow %s -p %s --value 2>/dev/null'
+                   % (scope, unit, prop))
+        return out.strip(), label
+    return '', ''
+
+
+def _last_trigger_days(unit):
+    """Days since this timer last fired, or None if it never has.
+
+    LastTriggerUSec is systemd's own record. It is 0, empty, or the literal
+    'n/a' for a timer that has been enabled and has not yet run — which is
+    precisely the state the old word-grep could not distinguish from a timer
+    doing its job every week.
+    """
+    val, _scope = _unit_prop(unit, 'LastTriggerUSec')
+    if not val or val in ('n/a', '0'):
+        return None
+    # systemd prints either a human date ("Sun 2026-09-27 04:02:13 PDT") or,
+    # with --property on older builds, microseconds since the epoch. Accept
+    # both rather than assuming the format of whichever box was tested.
+    if val.isdigit():
+        try:
+            then = dt.datetime.fromtimestamp(int(val) / 1e6)
+        except Exception:
+            return None
+    else:
+        stamp = ' '.join(val.split()[1:3]) if len(val.split()) >= 3 else ''
+        try:
+            then = dt.datetime.strptime(stamp, '%Y-%m-%d %H:%M:%S')
+        except Exception:
+            return None
+    return max(0, (dt.datetime.now() - then).days)
+
+
+def _cron_reclaim_lines():
+    """Crontab lines that reclaim, split into this hub's and everyone else's.
+
+    Attribution by command path, for the same reason _cron_backup_lines does
+    it: a grep for the word cannot tell ~/.local/bin/hub-reclaim.sh from
+    another project's nightly prune, and on a box carrying both it would report
+    the second as evidence of the first.
+    """
+    out = _say('crontab -l 2>/dev/null')
+    mine, foreign = [], []
+    for raw in out.splitlines():
+        line = raw.strip()
+        if not line or line.startswith('#'):
+            continue
+        low = line.lower()
+        if not any(w in low for w in ('prune', 'reclaim', 'docker-clean',
+                                      'docker system')):
+            continue
+        (mine if any(c in line for c in HUB_RECLAIM_CMDS) else foreign).append(line)
+    return mine, foreign
+
+
+def _foreign_reclaim_timers():
+    """Timers belonging to something else that LOOK like this row's evidence.
+
+    Reported so the verdict can say why a plausible-looking signal was refused,
+    the same way backup_state reports another project's cron line. Not counted
+    toward anything.
+    """
+    out = _say('systemctl --user list-timers --all --no-pager 2>/dev/null')
+    out += '\n' + _say('systemctl list-timers --all --no-pager 2>/dev/null')
+    hits = []
+    for line in out.splitlines():
+        low = line.lower()
+        if not any(w in low for w in ('prune', 'reclaim', 'docker-clean')):
+            continue
+        for tok in line.split():
+            if tok.endswith('.timer') and tok != HUB_RECLAIM_UNIT:
+                hits.append(tok)
+    return sorted(set(hits))
+
+
+# 20200359  reclaim_state — is this machine's cache actually being reclaimed?
+def reclaim_state(refresh=False):
+    """Scheduled AND has fired, derived once, in the four states backup_state
+    uses so the two rows read the same way:
+
+        scheduled + fired recently   running — the row is true
+        scheduled, never/long ago    a timer that has not fired reclaimed nothing
+        fired, unscheduled           it happened once; nothing will do it again
+        neither                      nothing reclaims Docker build cache
+
+    `notes` carries every fact that LOOKS like evidence and is not, so no
+    caller has to re-derive why another project's prune timer was refused.
+    """
+    now = time.time()
+    with _lock:
+        if (not refresh and _reclaim_cache['value'] is not None
+                and (now - _reclaim_cache['at']) < CACHE_TTL):
+            return _reclaim_cache['value']
+
+    timer, scope = '', ''
+    for sc, label in (('--user ', 'user'), ('', 'system')):
+        st_ = _say('systemctl %sis-active %s 2>/dev/null'
+                   % (sc, HUB_RECLAIM_UNIT))
+        if st_ == 'active':
+            timer, scope = 'active', label
+            break
+        if st_ and st_ != 'inactive':
+            timer, scope = st_, label
+    timer = timer or 'not-found'
+
+    cron_mine, cron_foreign = _cron_reclaim_lines()
+    scheduled = timer == 'active' or bool(cron_mine)
+
+    age = _last_trigger_days(HUB_RECLAIM_UNIT)
+    fired = age is not None
+    fresh = fired and age <= RECLAIM_STALE_DAYS
+
+    schedule = ('%s is active (%s scope)' % (HUB_RECLAIM_UNIT, scope)
+                if timer == 'active' else '%s is %s' % (HUB_RECLAIM_UNIT, timer))
+    if cron_mine:
+        schedule += "; cron runs this hub's reclamation (%s)" % cron_mine[0]
+
+    last = ('last fired %d day(s) ago' % age if fired else
+            'it has never fired' if timer != 'not-found' else
+            'nothing has ever fired')
+
+    notes = []
+    if cron_foreign:
+        notes.append('%d crontab line(s) prune something and belong to another '
+                     'project, read the path not the word: %s'
+                     % (len(cron_foreign), '; '.join(cron_foreign)))
+    foreign_timers = _foreign_reclaim_timers()
+    if foreign_timers:
+        notes.append('timers matching prune/reclaim that are NOT this hub\'s: '
+                     '%s — a word in a unit name is not an attribution'
+                     % ', '.join(foreign_timers))
+    cache = docker_storage()['build_cache']
+    if cache['reclaimable_gb'] >= CACHE_BLOAT_GB:
+        notes.append('%sGB of build cache is reclaimable right now'
+                     % cache['reclaimable_gb'])
+
+    state = ('running'     if scheduled and fresh else
+             'stale'       if scheduled else
+             'unscheduled' if fresh else
+             'none')
+
+    out = {
+        'running':      scheduled and fresh,
+        'state':        state,
+        'scheduled':    scheduled,
+        'fired':        fired,
+        'fresh':        fresh,
+        'timer':        timer,
+        'timer_scope':  scope,
+        'schedule':     schedule,
+        'age_days':     age,
+        'stale_after':  RECLAIM_STALE_DAYS,
+        'last':         last,
+        'cron_mine':    cron_mine,
+        'cron_foreign': cron_foreign,
+        'reclaimable_gb': cache['reclaimable_gb'],
+        'notes':        notes,
+        'derived_at':   int(now),
+    }
+    with _lock:
+        _reclaim_cache.update({'at': now, 'value': out})
+    return out
 
 
 # 20200354  findings — what an operator should be told, with the fix

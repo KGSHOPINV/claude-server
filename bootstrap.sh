@@ -570,6 +570,20 @@ PY
   echo -e "  ${BOLD}DOING IT${RESET}"
   echo "  ------------------------------------------------------------------------"
   RELOAD=0; HUB_UNIT_CHANGED=0; FAILED=0
+  # Timers whose script did NOT land, so they must not be switched on.
+  #
+  # The install path has guarded this since _install_tool was written: step 7
+  # holds BACKUP_OK / RECLAIM_OK and refuses to enable a timer whose script is
+  # missing, because "a timer pointing at a script that is not there fails
+  # silently every night" and the operator is told they have a backup they do
+  # not have. Converge repairs the same two rows and had no such link: a
+  # failed `script` action set FAILED=1 and the `timer` action three lines
+  # later enabled the unit anyway. The defect the installer fixed was back, by
+  # the other door, on exactly the boxes converge exists for.
+  #
+  # The rows are independent by design — converge only ever does what --check
+  # asked for — so the dependency between them has to be carried here.
+  SKIP_TIMER=""
   while IFS="$(printf '\t')" read -r kind verb a b why; do
     [ "$kind" = "PLAN" ] || continue
     case "$verb" in
@@ -589,9 +603,24 @@ PY
         ;;
       script)
         info "installing $b"
-        _install_tool "$a" "$b" || FAILED=1
+        if _install_tool "$a" "$b"; then :; else
+          FAILED=1
+          case "$(basename "$b")" in
+            hub-backup.sh)  SKIP_TIMER="$SKIP_TIMER hub-backup.timer" ;;
+            hub-reclaim.sh) SKIP_TIMER="$SKIP_TIMER hub-reclaim.timer" ;;
+          esac
+        fi
         ;;
       timer)
+        case " $SKIP_TIMER " in
+          *" $a "*)
+            warn "$a NOT enabled — its script did not install (above)."
+            warn "  Scheduling it anyway would give this node a nightly job that"
+            warn "  fails silently forever, and a report saying the step is done."
+            FAILED=1
+            continue
+            ;;
+        esac
         info "systemctl --user enable --now $a"
         # daemon-reload first: the unit may have been written seconds ago by the
         # line above, and systemd will not enable a unit it has not read.

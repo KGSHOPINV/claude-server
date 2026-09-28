@@ -10,10 +10,27 @@
 # one holding the data. A copy on the same disk survives a bad rm and nothing
 # else.
 #
-# What it skips, and why that matters: volumes whose name contains "cache".
-# On ksgcohub that is netdata_netdata-cache at 1.6GB -- versus babyhelp-data at
-# 1.0MB. A naive "back up every volume" job copies 1.6GB of regenerable cache
-# nightly and 1MB of the thing you would actually mourn.
+# WHAT IT COPIES
+#   docker named volumes     minus any whose name contains "cache"
+#   docker bind mounts       every bind a running container declares, minus
+#                            /proc /sys /dev /etc /run /usr /lib /bin /sbin
+#   /srv/docker              compose files and configs, minus */data and .env
+#   db/server.db             via the sqlite3 backup API, never cp
+#   db/control.db            likewise — the registry, bulletins, acks, releases
+#
+# WHAT IT REFUSES, and each of these is a decision written down rather than an
+# omission discovered later:
+#   volumes named *cache*    regenerable. On ksgcohub netdata_netdata-cache is
+#                            1.6GB versus babyhelp-data at 1.0MB — a naive
+#                            "every volume" job copies the 1.6GB nightly and
+#                            the 1MB you would actually mourn once.
+#   db/bank.db               SECRETS. See the BANK_DB block below for the
+#                            ruling and its reasons. Never add a db/*.db sweep.
+#   ~/.flare/svctoken.json   the Access service token, same class.
+#   */.env                   already excluded from the configs tar.
+# The refusals are printed on every run and recorded in the set's MANIFEST.txt,
+# because a set that silently omits something reads exactly like a set that
+# lost it.
 #
 #   ./backup.sh              run a backup
 #   ./backup.sh --dry-run    list what would be backed up, touch nothing
@@ -63,6 +80,78 @@ HUB_DB="${HUB_DB:-$HOME/hub/db/server.db}"
 CONTROL_DB="${HUB_CONTROL_DB:-$HOME/hub/db/control.db}"
 DOCKER_ROOT="${HUB_DOCKER_ROOT:-/srv/docker}"
 VOL_ROOT=/var/lib/docker/volumes
+
+# ── db/bank.db — NAMED HERE SO THAT REFUSING IT IS A DECISION ────────────────
+# Read kernel/bank.py before changing anything below it. Its header says, of
+# "never backed up":
+#
+#     BY ACCIDENT OF SCOPE, NOT BY AN EXCLUSION. [...] Add a db/*.db sweep to
+#     backup.sh and the secrets start being copied, silently.
+#
+# That accident is closed here. bank.db is named, and named in order to be
+# refused, so the next person who wants "just back up db/" has to read why not
+# instead of discovering it afterwards.
+#
+# THE RULING: bank.db is NOT copied. Four reasons, in the order they matter.
+#
+#   1. Everything in it is designed to be gone within a day. Project-scope
+#      slots are deleted the moment they are collected; every slot carries a
+#      24h TTL. KEEP is 14, so a nightly sweep of db/ would hold fourteen
+#      copies of a secret whose entire safety argument is that it expires. The
+#      backup would outlive the thing it copied by two weeks, every night.
+#
+#   2. Losing it costs one paste. bank.db holds a handoff IN TRANSIT — a token
+#      on its way from the operator's desktop to a project. If the disk dies
+#      mid-handoff the operator re-deposits it; they still have it, that is
+#      what a handoff means. Compare control.db above, which holds what nothing
+#      can re-derive. That asymmetry is the whole argument: this file copies
+#      what cannot be got back, and a secret you can simply paste again is not
+#      that.
+#
+#   3. The encryption is not a licence to copy it. kernel/bank.py's _key() is
+#      sha256(db/.bank-salt + /etc/machine-id), and .bank-salt sits in the same
+#      directory as bank.db. Tar that directory and the archive carries both
+#      halves of the key for anyone who can also read /etc/machine-id — which
+#      is every process on the box. bank.py says this plainly: the encryption
+#      protects a copy that LEAVES the machine, it does not make a local copy
+#      safe. A backup set is a local copy, fourteen of them, on a second disk.
+#
+#   4. The exception is only tolerable while it is loud. exception_open() fails
+#      install-preflight for as long as the bank holds anything, so the
+#      operator is pushed to empty it. A backup quietly re-creating the
+#      contents on restore turns a 24h exception into an indefinite one.
+#
+# HOW IT IS ANNOUNCED. Silence would leave the same hole pointing the other
+# way: an operator restoring a set could believe the secrets came back. So the
+# run SAYS bank.db was refused, says whether it was holding anything at the
+# time, and the MANIFEST records the exclusion — a restorer reads what is NOT
+# in a set from the set itself, not from this file.
+#
+# The count is read through sqlite in read-only mode and is a COUNT. No slot
+# name, no note, and certainly no blob is read, logged or written anywhere.
+BANK_DB="${HUB_BANK_DB:-$HOME/hub/db/bank.db}"
+
+# ~/.flare/svctoken.json is the other credential on this box, and it is not
+# here for the same reason by a different route: kernel/svctoken.py keeps it
+# 0600 outside db/ deliberately, and nothing in this script walks ~/.flare. It
+# is named in the manifest so the gap is stated rather than assumed.
+SVCTOKEN="${HUB_SVCTOKEN:-$HOME/.flare/svctoken.json}"
+
+# 20404739  _bank_holding — how many slots, and nothing else about them
+_bank_holding() {
+  [ -f "$BANK_DB" ] || { echo "absent"; return; }
+  python3 - "$BANK_DB" <<'PY' 2>/dev/null || echo "present, contents unreadable"
+import sqlite3, sys
+try:
+    c = sqlite3.connect('file:%s?mode=ro' % sys.argv[1], uri=True)
+    n = c.execute('SELECT COUNT(*) FROM secrets').fetchone()[0]
+    c.close()
+except Exception:
+    print('present, contents unreadable')
+else:
+    print('present, holding %d slot(s)' % n)
+PY
+}
 
 DRY=0
 [ "${1:-}" = "--dry-run" ] && DRY=1
@@ -129,10 +218,29 @@ read_dir() {
   if [ "$CAN_SUDO" = "1" ]; then sudo -n test -d "$1" 2>/dev/null
   else test -r "$1" -a -d "$1" 2>/dev/null; fi
 }
+# NEVER_TAR — the secrets, refused at every route into an archive.
+#
+# The BANK_DB block above refuses to copy bank.db as a named source. That is
+# only one of the ways it could get into a set. Bind-mount ~/hub/db into any
+# container and the bind loop below tars the whole directory — bank.db AND the
+# .bank-salt that is half its key, in one archive, with no line anywhere saying
+# it happened. Nothing does that today. "Nothing does that today" is how
+# bank.py came to describe its own protection as an accident of scope.
+#
+# So the refusal is a property of tarring, not of one call site. GNU tar
+# matches a bare --exclude name at any depth, so this holds for a directory
+# three levels above them as well as for their own.
+NEVER_TAR="--exclude=bank.db --exclude=.bank-salt --exclude=svctoken.json"
+
 # tar_dir — same call either way, so the callers below do not branch
 tar_dir() {
-  if [ "$CAN_SUDO" = "1" ]; then sudo -n tar czf "$1" -C "$2" . 2>"${3:-/dev/null}" </dev/null
-  else tar czf "$1" -C "$2" . 2>"${3:-/dev/null}" </dev/null; fi
+  if [ "$CAN_SUDO" = "1" ]; then
+    # shellcheck disable=SC2086  # NEVER_TAR is a word list on purpose
+    sudo -n tar czf "$1" $NEVER_TAR -C "$2" . 2>"${3:-/dev/null}" </dev/null
+  else
+    # shellcheck disable=SC2086
+    tar czf "$1" $NEVER_TAR -C "$2" . 2>"${3:-/dev/null}" </dev/null
+  fi
 }
 # sqlite_copy — sqlite3's backup API rather than cp or tar. The hub is running
 # and writing while this runs, and a database file copied mid-write is corrupt
@@ -160,11 +268,62 @@ EXPOSED=0
 
 say() { echo "$(date +%T) $*" | tee -a "$LOG" 2>/dev/null || echo "$(date +%T) $*"; }
 
+# 20404740  _assert_dest — the destination is checked in BOTH modes, before anything
+#
+# WHAT THIS COSTS WHEN IT IS MISSING. On fks-services the derived target is
+# /backup on /dev/sdb1 — 4.4TB, 0% used — and it is owned root:root 0755, so
+# the hub user cannot create a directory in it. Verified 2026-09-28: `test -w
+# /backup` is false for admin1. Install the timer on that box as it stands and
+# every night at 03:00 the run dies on `mkdir -p`, writes nothing, and the
+# operator finds out the day they need a restore.
+#
+# The old code checked this with `mkdir -p "$DEST" || echo "cannot write $DEST"`
+# inside the non-dry branch, which was wrong twice: --dry-run — the one mode
+# you would use to look before scheduling — never asked the question at all, and
+# the message named a directory without saying who owns the one above it or
+# what single command fixes it. A refusal that does not carry its own fix gets
+# read as "backups are hard" rather than "run this line".
+_assert_dest() {
+  if [ ! -d "$DEST_ROOT" ]; then
+    PARENT=$(dirname "$DEST_ROOT")
+    # --dry-run must not create it. A dry run that quietly makes a directory is
+    # a dry run you cannot trust about anything else it claims not to do, so
+    # the question is ASKED rather than answered by trying.
+    if [ "$DRY" = "1" ]; then
+      [ -w "$PARENT" ] && { echo "  dest  $DEST_ROOT (would be created)"; return 0; }
+      echo "backup.sh: $DEST_ROOT does not exist and $PARENT is not writable" >&2
+      echo "  by $(id -un). Nothing would be backed up." >&2
+      echo "  Fix:  sudo install -d -o $(id -un) -g $(id -gn) -m 755 $DEST_ROOT" >&2
+      return 1
+    fi
+    # The parent may itself be unwritable, in which case mkdir -p on DEST_ROOT
+    # is the failure, not the symptom. Say which.
+    mkdir -p "$DEST_ROOT" 2>/dev/null || {
+      echo "backup.sh: $DEST_ROOT does not exist and cannot be created." >&2
+      echo "  Owner of $PARENT: $(stat -c '%U:%G %a' "$PARENT" 2>/dev/null || echo unknown)" >&2
+      echo "  Fix:  sudo install -d -o $(id -un) -g $(id -gn) -m 755 $DEST_ROOT" >&2
+      return 1
+    }
+  fi
+  [ -w "$DEST_ROOT" ] || {
+    echo "backup.sh: $DEST_ROOT is not writable by $(id -un)." >&2
+    echo "  It is $(stat -c 'owned %U:%G mode %a' "$DEST_ROOT" 2>/dev/null || echo 'of unknown ownership')," >&2
+    echo "  on device $(findmnt -no SOURCE --target "$DEST_ROOT" 2>/dev/null || echo unknown)." >&2
+    echo "  Nothing has been written. This is the whole backup, not one source." >&2
+    echo "  Fix:  sudo chown $(id -un):$(id -gn) $DEST_ROOT" >&2
+    return 1
+  }
+  return 0
+}
+
+_assert_dest || exit 1
+
 if [ "$DRY" = "0" ]; then
   mkdir -p "$DEST" || { echo "cannot write $DEST"; exit 1; }
   say "=== backup start -> $DEST"
 else
   echo "DRY RUN — nothing will be written"
+  echo "  dest  $DEST_ROOT (writable)"
 fi
 
 # ── Docker volumes ───────────────────────────────────────────────────────────
@@ -196,7 +355,7 @@ for vol in $(docker volume ls -q 2>/dev/null); do
     # container is --rm and lives for the length of one tar.
     if [ "$CAN_SUDO" = "0" ] && [ "$CAN_DOCKER_READ" = "1" ]; then
       if docker run --rm -v "$vol":/src:ro -v "$DEST":/dst "$HELPER_IMAGE" \
-           tar czf "/dst/vol-$vol.tar.gz" -C /src . 2>/dev/null; then
+           tar czf "/dst/vol-$vol.tar.gz" $NEVER_TAR -C /src . 2>/dev/null; then
         say "  ok   vol $vol (via container)"; WROTE=$((WROTE + 1)); continue
       fi
       say "  FAIL vol $vol — container read failed"; FAILED=1; continue
@@ -275,7 +434,7 @@ if [ -d "$DOCKER_ROOT" ]; then
   if [ "$DRY" = "1" ]; then
     echo "  back  $DOCKER_ROOT (compose files, .env excluded)"
   elif sudo -n tar czf "$DEST/docker-configs.tar.gz" \
-        --exclude='*/data' --exclude='.env' -C "$DOCKER_ROOT" . 2>/dev/null; then
+        --exclude='*/data' --exclude='.env' $NEVER_TAR -C "$DOCKER_ROOT" . 2>/dev/null; then
     say "  ok   $DOCKER_ROOT"
   else
     say "  FAIL $DOCKER_ROOT"; FAILED=1
@@ -318,14 +477,41 @@ if [ -f "$CONTROL_DB" ]; then
   fi
 fi
 
+# ── Secrets: refused out loud ────────────────────────────────────────────────
+# See the BANK_DB block at the top for the ruling and its four reasons. This is
+# the half that makes the ruling visible on the night it applies: a set that
+# silently omits something is indistinguishable from a set that lost it.
+BANK_STATE=$(_bank_holding)
+SVCTOKEN_STATE="absent"
+[ -f "$SVCTOKEN" ] && SVCTOKEN_STATE="present"
+if [ "$DRY" = "1" ]; then
+  echo "  SKIP  $BANK_DB — secrets, deliberately not copied ($BANK_STATE)"
+  echo "  SKIP  $SVCTOKEN — Access service token, deliberately not copied ($SVCTOKEN_STATE)"
+else
+  say "  SKIP secrets: bank.db $BANK_STATE — deliberately NOT copied (kernel/bank.py)"
+  case "$BANK_STATE" in
+    present,*holding\ 0\ slot*|absent) : ;;
+    present*)
+      say "       the bank is holding something. It expires on its own; a"
+      say "       restore of this set will NOT bring it back. Collect it."
+      ;;
+  esac
+fi
+
 [ "$DRY" = "1" ] && exit 0
 
 # ── Manifest ─────────────────────────────────────────────────────────────────
+# `excluded` is a first-class line, not a footnote. The person reading this
+# file is restoring, and the one thing a restore cannot discover on its own is
+# what was never in the box.
 {
   echo "backup      $STAMP"
   echo "host        $(hostname)"
   echo "machine_id  $(cat /etc/machine-id 2>/dev/null)"
   echo "skipped     volumes matching *cache* (regenerable)"
+  echo "excluded    db/bank.db — secrets, refused by design ($BANK_STATE)"
+  echo "excluded    ~/.flare/svctoken.json — Access service token ($SVCTOKEN_STATE)"
+  echo "excluded    $DOCKER_ROOT/**/.env — refused by the configs tar"
   echo ""
   ls -lh "$DEST" | tail -n +2
 } > "$DEST/MANIFEST.txt" 2>/dev/null
