@@ -6,13 +6,50 @@ diffs against baseline, sends AI-narrated report to ntfy.
 
 Cron: 0 3 * * * /usr/bin/python3 /home/admin1/hub/maintenance.py
 """
-import json, os, subprocess, time, urllib.request, urllib.error
+import base64, json, os, subprocess, time, urllib.request, urllib.error
 from datetime import datetime
 
 # ── Config ─────────────────────────────────────────────────────────────────────
+def _alerts_conf(path=None):
+    """Parse ~/.server-alerts.conf into a dict.
+
+    This is the same file hub/kernel/log.py reads and hub/scripts/ntfy-lib.sh
+    sources -- the machine's own answer to "where do the alerts go". It is why
+    maintenance.py no longer trusts the unit file: hub-maintenance.service sets
+    Environment=NTFY_URL=http://localhost:8085 and NTFY_TOPIC=server-alerts, and
+    on fks-services both are wrong. ntfy there listens on 7001 with the topic
+    fks-services and its ACL denies anonymous publish, so every nightly report
+    was a POST to a closed port -- and ntfy() swallowed the error.
+    """
+    if path is None:
+        path = (os.environ.get('SERVER_ALERTS_CONF')
+                or os.path.expanduser('~/.server-alerts.conf'))
+    conf = {}
+    try:
+        with open(path) as f:
+            for line in f:
+                line = line.strip()
+                if not line or line.startswith('#') or '=' not in line:
+                    continue
+                k, v = line.split('=', 1)
+                conf[k.strip()] = v.strip().strip('"').strip("'")
+    except OSError:
+        pass
+    return conf
+
+
+_CONF = _alerts_conf()
+
+# Precedence is the same as hub/scripts/ntfy-lib.sh, on purpose: an explicitly
+# exported HUB_NTFY_* wins (someone redirecting a single run), then the conf
+# file (the machine), then a plain NTFY_* out of the unit, then a default. The
+# unit's values deliberately lose to the conf -- that is the whole repair.
 HUB_API      = os.environ.get('HUB_API',     'http://localhost:8765')
-NTFY_URL     = os.environ.get('NTFY_URL',    'http://localhost:8085')
-NTFY_TOPIC   = os.environ.get('NTFY_TOPIC',  'server-alerts')
+NTFY_URL     = (os.environ.get('HUB_NTFY_URL') or _CONF.get('NTFY_URL')
+                or os.environ.get('NTFY_URL') or 'http://localhost:7001')
+NTFY_TOPIC   = (os.environ.get('HUB_NTFY_TOPIC') or _CONF.get('NTFY_TOPIC')
+                or os.environ.get('NTFY_TOPIC') or 'fks-services')
+NTFY_TOKEN   = os.environ.get('NTFY_TOKEN') or _CONF.get('NTFY_TOKEN') or ''
 BASELINE_FILE= os.environ.get('BASELINE',    '/home/admin1/hub/.maintenance-baseline.json')
 DISK_PRUNE_THRESHOLD = int(os.environ.get('DISK_PRUNE_PCT', '75'))
 AI_API_KEY   = os.environ.get('HUB_AI_KEY',  '')
@@ -33,20 +70,55 @@ def api_get(path):
     except Exception:
         return {}
 
+def _ascii_header(value):
+    """Return value unchanged if it is ASCII, else as an RFC 2047 encoded-word.
+
+    ntfy carries Title/Priority/Tags as HTTP headers, and http.client encodes
+    header values as latin-1, so a single non-ASCII character raises
+    UnicodeEncodeError before the request ever leaves the process. That fault
+    cost ksgcohub every alert it tried to send: 24 failed, 0 sent. Same
+    function and same reason as hub/kernel/log.py's _ascii_header. ntfy accepts
+    encoded-words in any header, title included (docs.ntfy.sh/publish/#utf-8).
+    """
+    try:
+        value.encode('ascii')
+        return value
+    except (UnicodeEncodeError, AttributeError):
+        raw = value if isinstance(value, str) else str(value)
+        return '=?UTF-8?B?' + base64.b64encode(raw.encode('utf-8')).decode('ascii') + '?='
+
+
 def ntfy(title, body, priority='default', tags='wrench'):
+    """Send one notification. Returns True only if it landed.
+
+    It used to return nothing and print only when it raised, while the caller
+    printed "ntfy sent" either way -- so a closed port and a delivered report
+    read identically in the journal. Now the caller is told the truth.
+    """
+    headers = {
+        'Title': _ascii_header(title),
+        'Priority': _ascii_header(priority),
+        'Tags': _ascii_header(tags),
+        'Content-Type': 'text/plain',
+    }
+    if NTFY_TOKEN:
+        headers['Authorization'] = f'Bearer {NTFY_TOKEN}'
     try:
         req = urllib.request.Request(
             f'{NTFY_URL}/{NTFY_TOPIC}',
             data=body.encode('utf-8'),
-            headers={
-                'Title': title,
-                'Priority': priority,
-                'Tags': tags,
-                'Content-Type': 'text/plain',
-            }, method='POST')
-        urllib.request.urlopen(req, timeout=8)
+            headers=headers, method='POST')
+        with urllib.request.urlopen(req, timeout=8) as r:
+            if 200 <= r.status < 300:
+                return True
+            print(f'ntfy error: HTTP {r.status} from {NTFY_URL}/{NTFY_TOPIC}')
+    except urllib.error.HTTPError as e:
+        extra = ('  - denies anonymous publish and no NTFY_TOKEN is set'
+                 if e.code in (401, 403) and not NTFY_TOKEN else '')
+        print(f'ntfy error: HTTP {e.code} from {NTFY_URL}/{NTFY_TOPIC}{extra}')
     except Exception as e:
-        print(f'ntfy error: {e}')
+        print(f'ntfy error: {e} ({NTFY_URL}/{NTFY_TOPIC})')
+    return False
 
 def load_baseline():
     try:
@@ -211,8 +283,10 @@ def main():
         tags = 'white_check_mark'
         title = 'Server Nightly - All Good'
 
-    ntfy(title, report, priority=priority, tags=tags)
-    print(f'\n  → ntfy sent: [{priority}] {title}')
+    if ntfy(title, report, priority=priority, tags=tags):
+        print(f'\n  → ntfy sent: [{priority}] {title}')
+    else:
+        print(f'\n  → ntfy NOT sent: [{priority}] {title}')
 
 if __name__ == '__main__':
     main()

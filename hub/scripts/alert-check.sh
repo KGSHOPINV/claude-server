@@ -1,10 +1,33 @@
 #!/bin/bash
-# alert-check.sh — service health check every 15 min → ntfy
-# Systemd timer: hub-alert.timer
-# Only sends a notification when state CHANGES (down → up or up → down)
-NTFY="${HUB_NTFY_URL:-http://localhost:8085}/server-alerts"
+# 20404737  alert-check.sh — every 15 min, is anything down, and tell the phone
+#
+# THIS COPY IS NOT INVOKED BY ANYTHING. The one hub-alert.service runs is
+# scripts/alert-check.sh at the repo root — /home/admin1/hub is a checkout of
+# this repo's ROOT, so the unit's "hub/scripts/alert-check.sh" resolves there,
+# not here. See scripts/alert-check.sh for the md5 evidence and for why commit
+# 51e5030's note in this file said the opposite.
+#
+# It is kept and kept correct rather than deleted: the two directories are
+# deployed together, and a stale copy of an alert script is how this fault
+# spread in the first place.
+#
+# WHERE THE ALERTS WERE GOING: NOWHERE. This defaulted to
+# http://localhost:8085/server-alerts. ntfy on fks-services listens on 7001 with
+# the topic fks-services and denies anonymous publish. Config now comes from
+# ~/.server-alerts.conf via ntfy-lib.sh.
+#
+# Sends only when the set of down services CHANGES, so a service that stays down
+# does not push every 15 minutes forever.
+set -uo pipefail
+
+_d="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+for _l in "$_d/ntfy-lib.sh" "$_d/../hub/scripts/ntfy-lib.sh" "$_d/hub/scripts/ntfy-lib.sh"; do
+  [ -f "$_l" ] && { . "$_l"; break; }
+done
+command -v ntfy_push >/dev/null || { echo "[alert-check] ntfy-lib.sh not found — cannot send" >&2; exit 1; }
+
 HOST="${HUB_SERVER_IP:-localhost}"
-STATE_FILE="/tmp/.alert-state"
+STATE_FILE="${ALERT_STATE:-/tmp/.alert-state}"
 
 declare -A SERVICES=(
   [hub]="8765"
@@ -27,31 +50,19 @@ for name in "${!SERVICES[@]}"; do
   [[ "$code" =~ ^[23] ]] || down+=("$name")
 done
 
-# Load previous state
 prev_down=""
 [ -f "$STATE_FILE" ] && prev_down=$(cat "$STATE_FILE")
-curr_down="${down[*]}"
+curr_down="${down[*]-}"
 
-# Write current state
 echo "$curr_down" > "$STATE_FILE"
 
-# Alert only if state changed
 if [ "$curr_down" != "$prev_down" ]; then
   if [ ${#down[@]} -eq 0 ]; then
-    # Recovery
-    curl -s -X POST "$NTFY" \
-      -H "Title: ✅ All Services Recovered" \
-      -H "Priority: default" \
-      -H "Tags: white_check_mark,server" \
-      -d "Previously down: $prev_down — all services are now responding." > /dev/null
+    ntfy_push "All services recovered" "default" "white_check_mark,server" \
+      "Previously down: $prev_down — all services are now responding."
   else
-    # New outage
-    msg="${down[*]}"
     n=${#down[@]}
-    curl -s -X POST "$NTFY" \
-      -H "Title: 🔴 $n Service$([ $n -gt 1 ] && echo s) Down" \
-      -H "Priority: high" \
-      -H "Tags: rotating_light,server" \
-      -d "$msg" > /dev/null
+    ntfy_push "$n service$([ "$n" -gt 1 ] && echo s) down" "high" "rotating_light,server" \
+      "${down[*]}"
   fi
 fi
