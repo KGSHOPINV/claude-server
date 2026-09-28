@@ -235,6 +235,38 @@ _SHIM = """<script data-flare-lobby-shim="1">
       "font:11px/1.5 ui-sans-serif,system-ui,sans-serif;" +
       "box-shadow:0 2px 10px rgba(0,0,0,.4)";
 
+    // SIT ABOVE WHATEVER OWNS THE BOTTOM OF THE PAGE, MEASURED NOT GUESSED.
+    //
+    // Pinned at bottom:10px this landed squarely on mobile.html's footer tab
+    // bar and covered the navigation. Hardcoding that bar's height would be
+    // wrong the day it changes and wrong on every page that has no bar, so
+    // this finds any VISIBLE fixed element already touching the bottom edge
+    // and clears it. It also re-measures on resize, because a phone rotating
+    // changes the answer.
+    function lift() {
+      var gap = 10;
+      try {
+        var vh = window.innerHeight || 0;
+        var all = document.body ? document.body.children : [];
+        for (var i = 0; i < all.length; i++) {
+          var el = all[i];
+          if (el === d) continue;
+          var cs = window.getComputedStyle(el);
+          if (cs.position !== "fixed" || cs.display === "none" ||
+              cs.visibility === "hidden") continue;
+          var r = el.getBoundingClientRect();
+          if (!r.height || r.width < 40) continue;
+          // touching the bottom edge, and not a full-screen overlay
+          if (r.bottom >= vh - 2 && r.height < vh * 0.5) {
+            gap = Math.max(gap, Math.round(r.height) + 10);
+          }
+        }
+      } catch (e) { /* a guess of 10px is the old behaviour, not a new bug */ }
+      d.style.bottom = "calc(" + gap + "px + env(safe-area-inset-bottom, 0px))";
+    }
+    setTimeout(lift, 0);
+    window.addEventListener("resize", lift);
+
     var bar = document.createElement("div");
     bar.style.cssText = "display:flex;align-items:center;gap:8px;padding:6px 9px";
     bar.innerHTML =
